@@ -1,0 +1,66 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model BulkProject {
+  id             String   @id @default(uuid())
+  name           String
+  sheetName      String
+  columns        String[] // Array of column names from spreadsheet
+  createdAt      DateTime @default(now())
+  lastModifiedAt DateTime @updatedAt
+  ownerName      String?
+  customerName   String?
+  status         ProjectStatus @default(DRAFT)
+  notes          String?
+
+  rows           BulkRow[] // One-to-many relationship with BulkRow
+
+  @@index([status])
+  @@index([lastModifiedAt])
+}
+
+model BulkRow {
+  id                   String   @id @default(uuid())
+  projectId            String
+  rowNumber            Int
+  question             String   @db.Text
+  response             String   @db.Text @default("")
+  status               RowStatus @default(PENDING)
+  error                String?  @db.Text
+  conversationHistory  Json?    // Stored as JSON: { role: string; content: string }[]
+  confidence           String?
+  sources              String?  @db.Text
+  remarks              String?  @db.Text
+  usedSkills           Json?    // Stored as JSON: Skill[]
+  showRecommendation   Boolean  @default(false)
+
+  project              BulkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([status])
+}
+
+enum ProjectStatus {
+  DRAFT
+  IN_PROGRESS
+  NEEDS_REVIEW
+  APPROVED
+}
+
+enum RowStatus {
+  PENDING
+  COMPLETED
+  ERROR
+}

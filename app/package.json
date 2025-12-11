@@ -1,0 +1,36 @@
+{
+  "name": "app",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true && next dev",
+    "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true && rm -rf .next && next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@prisma/client": "^6.19.1",
+    "lucide-react": "^0.559.0",
+    "next": "16.0.8",
+    "papaparse": "^5.5.3",
+    "prisma": "^6.19.1",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.5.1",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "babel-plugin-react-compiler": "1.0.0",
+    "dotenv": "^17.2.3",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.8",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

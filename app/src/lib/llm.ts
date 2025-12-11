@@ -1,0 +1,271 @@
+import { SkillFact } from "@/types/skill";
+import { defaultSkillPrompt } from "./skillPrompt";
+import { defaultQuestionPrompt } from "./questionPrompt";
+import Anthropic from "@anthropic-ai/sdk";
+
+export type SkillDraft = {
+  title: string;
+  tags: string[];
+  content: string;
+  sourceMapping?: string[];
+};
+
+export type ConversationFeedback = {
+  role: string;
+  content: string;
+};
+
+export async function generateSkillDraftFromMessages(
+  messages: ConversationFeedback[],
+  promptText = defaultSkillPrompt,
+): Promise<SkillDraft> {
+  const sanitized = sanitizeConversationMessages(messages);
+  if (sanitized.length === 0) {
+    throw new Error("At least one conversation message is required to generate a skill draft.");
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Please configure it in .env.local.");
+  }
+
+  const anthropic = new Anthropic({
+    apiKey: apiKey,
+  });
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16000,
+      temperature: 0.1,
+      system: promptText,
+      messages: sanitized.map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text" || !content.text?.trim()) {
+      throw new Error("Claude returned an empty response.");
+    }
+
+    const parsed = parseJsonContent(content.text.trim());
+    const draft = normalizeSkillDraft(parsed);
+    return draft;
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate skill draft: ${error.message}`);
+    }
+    throw new Error("Failed to generate skill draft.");
+  }
+}
+
+export async function answerQuestionWithPrompt(
+  question: string,
+  promptText = defaultQuestionPrompt,
+  skills?: { title: string; content: string; tags: string[] }[],
+): Promise<string> {
+  const trimmedQuestion = question?.trim();
+  if (!trimmedQuestion) {
+    throw new Error("A question is required for GRC Minion to respond.");
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Please configure it in .env.local.");
+  }
+
+  const anthropic = new Anthropic({
+    apiKey: apiKey,
+  });
+
+  // Build skills context if provided
+  let skillsContext = "";
+  if (skills && skills.length > 0) {
+    const skillBlocks = skills.map((skill, index) => {
+      return [
+        `### Skill ${index + 1}: ${skill.title}`,
+        skill.tags.length > 0 ? `Tags: ${skill.tags.join(", ")}` : "",
+        "",
+        skill.content,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    });
+
+    skillsContext = [
+      "# AVAILABLE SKILLS (Reference Material)",
+      "",
+      "The following pre-verified skills are available for reference when answering this question. Use these as your primary source of truth:",
+      "",
+      ...skillBlocks,
+      "",
+      "---",
+      "",
+    ].join("\n");
+  }
+
+  // Combine skills context with the question
+  const userMessage = skillsContext ? `${skillsContext}${trimmedQuestion}` : trimmedQuestion;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 16000,
+      temperature: 0.2,
+      system: promptText,
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text" || !content.text?.trim()) {
+      throw new Error("GRC Minion returned an empty response.");
+    }
+
+    return content.text.trim();
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to fetch GRC Minion response: ${error.message}`);
+    }
+    throw new Error("Failed to fetch GRC Minion response.");
+  }
+}
+
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim();
+  const withoutFence = stripCodeFence(trimmed);
+
+  try {
+    return JSON.parse(withoutFence);
+  } catch {
+    const fallback = extractJsonObject(withoutFence);
+    if (fallback) {
+      try {
+        return JSON.parse(fallback);
+      } catch {
+        // fall through to error below
+      }
+    }
+    throw new Error("Failed to parse LLM response as JSON.");
+  }
+}
+
+function stripCodeFence(value: string): string {
+  if (!value.startsWith("```")) {
+    return value;
+  }
+
+  const lines = value.split("\n");
+  if (lines.length <= 2) {
+    return value;
+  }
+
+  const firstLine = lines[0];
+  const lastLine = lines[lines.length - 1].trim();
+
+  if (!firstLine.startsWith("```")) {
+    return value;
+  }
+
+  if (lastLine === "```") {
+    lines.pop();
+  }
+
+  lines.shift();
+  if (lines.length > 0 && lines[0].trim().length === 0) {
+    lines.shift();
+  }
+
+  return lines.join("\n").trim();
+}
+
+function extractJsonObject(value: string): string | null {
+  const start = value.indexOf("{");
+  const end = value.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) {
+    return null;
+  }
+  return value.slice(start, end + 1);
+}
+
+function normalizeSkillDraft(data: unknown): SkillDraft {
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !("title" in data) ||
+    !("tags" in data) ||
+    !("content" in data)
+  ) {
+    throw new Error("LLM response missing required fields.");
+  }
+
+  const { title, tags, content } = data as Record<string, unknown>;
+
+  if (title == null || content == null) {
+    throw new Error("Skill title and content must be strings.");
+  }
+
+  const titleValue = typeof title === "string" ? title : String(title);
+  const contentValue = typeof content === "string" ? content : String(content);
+
+  const rawSourceMapping =
+    "sourceMapping" in (data as Record<string, unknown>)
+      ? (data as Record<string, unknown>).sourceMapping
+      : undefined;
+
+  const sourceMappingFromRoot = parseStringArray(rawSourceMapping);
+
+  const tagList = Array.isArray(tags)
+    ? tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+    : [];
+
+  return {
+    title: titleValue.trim(),
+    tags: tagList,
+    content: contentValue.trim(),
+    sourceMapping: sourceMappingFromRoot.length > 0 ? sourceMappingFromRoot : undefined,
+  };
+}
+
+function parseStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry.trim();
+      }
+      if (entry == null) {
+        return "";
+      }
+      try {
+        return String(entry).trim();
+      } catch {
+        return "";
+      }
+    })
+    .filter((entry): entry is string => Boolean(entry && entry.length > 0));
+}
+
+function sanitizeConversationMessages(
+  messages?: ConversationFeedback[],
+): ConversationFeedback[] {
+  if (!Array.isArray(messages)) {
+    return [];
+  }
+  return messages
+    .map((message): ConversationFeedback => {
+      const role = message?.role === "assistant" ? "assistant" : "user";
+      const content = typeof message?.content === "string" ? message.content.trim() : "";
+      return { role, content };
+    })
+    .filter((message) => message.content.length > 0);
+}
+// Updated to use Claude (Anthropic) instead of OpenAI
