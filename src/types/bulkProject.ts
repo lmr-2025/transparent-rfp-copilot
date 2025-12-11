@@ -1,27 +1,25 @@
-import { Skill } from "./skill";
-
 export type BulkRow = {
   id: string;
   rowNumber: number;
-  cells: Record<string, string>;
   question: string;
   response: string;
   status: "pending" | "generating" | "completed" | "error";
   error?: string;
-  challengePrompt: string;
-  challengeResponse?: string;
-  challengeStatus?: "idle" | "generating" | "completed" | "error";
-  challengeError?: string;
-  conversationOpen?: boolean; // Track if conversation UI is open for this row
-  // Structured response sections
+  conversationHistory?: { role: string; content: string }[];
   confidence?: string;
   sources?: string;
+  reasoning?: string; // What skills matched and what was found directly
+  inference?: string; // What was inferred/deduced, or "None" if everything was found directly
   remarks?: string;
-  // Skill integration
-  usedSkills?: Skill[];
-  showRecommendation?: boolean; // Track if skill recommendation should be shown
-  // Selection for bulk operations
-  selected?: boolean; // Track if row should be included in bulk generation
+  usedSkills?: (string | { id: string; title: string })[]; // Can be Skill objects or string IDs
+  showRecommendation?: boolean;
+  // Legacy fields for conversational refinement
+  challengePrompt?: string;
+  challengeResponse?: string;
+  challengeStatus?: string;
+  challengeError?: string;
+  conversationOpen?: boolean;
+  selected?: boolean;
 };
 
 export type BulkProject = {
@@ -36,4 +34,9 @@ export type BulkProject = {
   customerName?: string;
   status: "draft" | "in_progress" | "needs_review" | "approved";
   notes?: string;
+  // Review workflow fields
+  reviewRequestedAt?: string;
+  reviewRequestedBy?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 };

@@ -25,8 +25,11 @@ export async function POST(request: NextRequest) {
   const skills = Array.isArray(body?.skills) ? body.skills : undefined;
 
   try {
-    const answer = await answerQuestionWithPrompt(question, promptText, skills);
-    return NextResponse.json({ answer });
+    const result = await answerQuestionWithPrompt(question, promptText, skills);
+    return NextResponse.json({
+      answer: result.answer,
+      conversationHistory: result.conversationHistory,
+    });
   } catch (error) {
     console.error("Failed to answer question:", error);
     const message =

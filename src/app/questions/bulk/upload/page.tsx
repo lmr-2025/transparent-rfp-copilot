@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { BulkProject } from "@/types/bulkProject";
@@ -243,6 +244,8 @@ export default function BulkUploadPage() {
     setPreviewRows((prev) => prev.map((row) => ({ ...row, selected: false })));
   };
 
+  // Legacy challenge prompt function - kept for future use
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const defaultChallengePrompt = (question: string) =>
     [
       "Challenge this answer for the question below.",
@@ -284,6 +287,7 @@ export default function BulkUploadPage() {
       status: "draft",
       notes: undefined,
       rows: selectedRows.map((row) => ({
+        id: crypto.randomUUID(),
         rowNumber: row.rowNumber,
         question: row.question,
         response: "",
@@ -515,9 +519,9 @@ export default function BulkUploadPage() {
       )}
 
       <div style={{ textAlign: "center", marginTop: "24px" }}>
-        <a href="/questions/bulk" style={{ color: "#2563eb", fontWeight: 600 }}>
+        <Link href="/questions/bulk/" style={{ color: "#2563eb", fontWeight: 600 }}>
           Go to response workspace →
-        </a>
+        </Link>
       </div>
     </div>
   );

@@ -162,6 +162,8 @@ function diffLines(previous: string, nextValue: string): DiffSegment[] {
   return segments;
 }
 
+// Utility functions - kept for future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const formatQuickFactsList = (facts?: SkillFact[]) =>
   (facts ?? [])
     .map(
@@ -170,6 +172,7 @@ const formatQuickFactsList = (facts?: SkillFact[]) =>
     )
     .join("\n\n");
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const formatEdgeCasesList = (entries?: string[]) =>
   (entries ?? []).map((entry) => entry.trim()).filter(Boolean).join("\n");
 

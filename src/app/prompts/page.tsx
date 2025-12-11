@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import {
@@ -236,8 +237,8 @@ export default function PromptHomePage() {
           </button>
         </div>
         <p style={{ color: "#94a3b8", marginTop: "8px" }}>
-          This prompt feeds the <a href="/questions">Question Workspace</a> and{" "}
-          <a href="/questions/bulk">Bulk Response</a> pages.
+          This prompt feeds the <Link href="/questions" style={{ color: "#0ea5e9" }}>Question Workspace</Link> and{" "}
+          <Link href="/questions/bulk/" style={{ color: "#0ea5e9" }}>Bulk Response</Link> pages.
         </p>
       </div>
     </div>

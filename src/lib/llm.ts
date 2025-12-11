@@ -1,4 +1,3 @@
-import { SkillFact } from "@/types/skill";
 import { defaultSkillPrompt } from "./skillPrompt";
 import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
@@ -61,11 +60,16 @@ export async function generateSkillDraftFromMessages(
   }
 }
 
+export type AnswerResult = {
+  answer: string;
+  conversationHistory: { role: string; content: string }[];
+};
+
 export async function answerQuestionWithPrompt(
   question: string,
   promptText = defaultQuestionPrompt,
   skills?: { title: string; content: string; tags: string[] }[],
-): Promise<string> {
+): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) {
     throw new Error("A question is required for GRC Minion to respond.");
@@ -128,7 +132,19 @@ export async function answerQuestionWithPrompt(
       throw new Error("GRC Minion returned an empty response.");
     }
 
-    return content.text.trim();
+    const answerText = content.text.trim();
+
+    // Build conversation history for transparency
+    const conversationHistory: { role: string; content: string }[] = [
+      { role: "system", content: promptText },
+      { role: "user", content: userMessage },
+      { role: "assistant", content: answerText },
+    ];
+
+    return {
+      answer: answerText,
+      conversationHistory,
+    };
   } catch (error) {
     if (error instanceof Error) {
       throw new Error(`Failed to fetch GRC Minion response: ${error.message}`);

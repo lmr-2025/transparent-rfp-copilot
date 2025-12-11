@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
@@ -13,6 +15,12 @@ import { Skill } from "@/types/skill";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 import SkillRecommendation from "@/components/SkillRecommendation";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
+import {
+  exportProjectToExcel,
+  exportCompletedOnly,
+  exportHighConfidenceOnly,
+  exportLowConfidenceOnly,
+} from "@/lib/excelExport";
 
 const styles = {
   container: {
@@ -53,12 +61,50 @@ const styles = {
     fontSize: "0.8rem",
     fontWeight: 600,
   },
+  statusBadge: {
+    padding: "4px 10px",
+    borderRadius: "4px",
+    fontSize: "0.85rem",
+    fontWeight: 600,
+    display: "inline-block",
+  },
+};
+
+const getStatusColor = (status: BulkProject["status"]) => {
+  switch (status) {
+    case "draft":
+      return { backgroundColor: "#f1f5f9", color: "#64748b" };
+    case "in_progress":
+      return { backgroundColor: "#dbeafe", color: "#1e40af" };
+    case "needs_review":
+      return { backgroundColor: "#fef3c7", color: "#92400e" };
+    case "approved":
+      return { backgroundColor: "#dcfce7", color: "#166534" };
+    default:
+      return { backgroundColor: "#f1f5f9", color: "#64748b" };
+  }
+};
+
+const getStatusLabel = (status: BulkProject["status"]) => {
+  switch (status) {
+    case "draft":
+      return "Draft";
+    case "in_progress":
+      return "In Progress";
+    case "needs_review":
+      return "Needs Review";
+    case "approved":
+      return "Approved";
+    default:
+      return status;
+  }
 };
 
 export default function BulkResponsesPage() {
   const router = useRouter();
   const params = useParams();
   const projectId = params.projectId as string;
+  const { data: session } = useSession();
 
   const [project, setProject] = useState<BulkProject | null>(null);
   const [promptText, setPromptText] = useStoredPrompt(
@@ -71,6 +117,9 @@ export default function BulkResponsesPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | "high" | "medium" | "low" | "error">("all");
   const [promptCollapsed, setPromptCollapsed] = useState(true);
   const [generateProgress, setGenerateProgress] = useState({ current: 0, total: 0 });
+  const [isRequestingReview, setIsRequestingReview] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   // Load project by ID on mount
   useEffect(() => {
@@ -201,11 +250,14 @@ export default function BulkResponsesPage() {
         response: parsed.response,
         confidence: parsed.confidence,
         sources: parsed.sources,
+        reasoning: parsed.reasoning,
+        inference: parsed.inference,
         remarks: parsed.remarks,
         usedSkills: relevantSkills,
         showRecommendation: true,
         status: "completed",
         error: undefined,
+        conversationHistory: data.conversationHistory,
       });
     } catch (error) {
       const message =
@@ -240,6 +292,7 @@ export default function BulkResponsesPage() {
       // Process this batch in parallel (all at once)
       await Promise.all(
         batch.map(async (row) => {
+          if (!row.id) return;
           await handleGenerateResponse(row.id);
           completed++;
           setGenerateProgress({ current: completed, total });
@@ -251,6 +304,7 @@ export default function BulkResponsesPage() {
     setGenerateProgress({ current: 0, total: 0 });
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleChallenge = async (rowId: string) => {
     if (!project) return;
     const row = project.rows.find((item) => item.id === rowId);
@@ -310,6 +364,72 @@ export default function BulkResponsesPage() {
     }
   };
 
+  const handleRequestReview = async () => {
+    if (!project) return;
+
+    // Use session user name, or prompt if not signed in
+    const requesterName = session?.user?.name || prompt("Your name (requesting review):");
+    if (!requesterName?.trim()) return;
+
+    setIsRequestingReview(true);
+    try {
+      const updatedProject = {
+        ...project,
+        status: "needs_review" as const,
+        reviewRequestedAt: new Date().toISOString(),
+        reviewRequestedBy: requesterName.trim(),
+      };
+      await updateProject(updatedProject);
+      setProject(updatedProject);
+
+      // Send Slack notification
+      const projectUrl = `${window.location.origin}/questions/bulk/${project.id}`;
+      await fetch("/api/slack/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectName: project.name,
+          projectUrl,
+          customerName: project.customerName,
+          requesterName: requesterName.trim(),
+        }),
+      });
+
+      alert("Review requested! A notification has been sent.");
+    } catch (error) {
+      console.error("Failed to request review:", error);
+      alert("Failed to request review. Please try again.");
+    } finally {
+      setIsRequestingReview(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!project) return;
+
+    // Use session user name, or prompt if not signed in
+    const reviewerName = session?.user?.name || prompt("Your name (reviewer):");
+    if (!reviewerName?.trim()) return;
+
+    setIsApproving(true);
+    try {
+      const updatedProject = {
+        ...project,
+        status: "approved" as const,
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewerName.trim(),
+      };
+      await updateProject(updatedProject);
+      setProject(updatedProject);
+      alert("Project approved!");
+    } catch (error) {
+      console.error("Failed to approve project:", error);
+      alert("Failed to approve project. Please try again.");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
   const renderStatus = (status: string) => {
     switch (status) {
       case "pending":
@@ -336,9 +456,9 @@ export default function BulkResponsesPage() {
   return (
     <div style={styles.container}>
       <div style={{ marginBottom: "16px" }}>
-        <a href="/questions/bulk/projects" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
+        <Link href="/questions/bulk/projects/" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
           ← Back to Projects
-        </a>
+        </Link>
       </div>
       <h1>GRC Minion – Bulk Response Workspace</h1>
       <p style={{ color: "#475569" }}>
@@ -351,11 +471,28 @@ export default function BulkResponsesPage() {
 
       <div style={{ ...styles.card, display: "flex", flexWrap: "wrap", gap: "12px", justifyContent: "space-between" }}>
         <div>
+          <div style={{ marginBottom: "8px" }}>
+            <span style={{ ...styles.statusBadge, ...getStatusColor(project.status) }}>
+              {getStatusLabel(project.status)}
+            </span>
+          </div>
           <strong>Project:</strong> {project.name}
           <br />
           <strong>Worksheet:</strong> {project.sheetName}
           <br />
           <strong>Created:</strong> {new Date(project.createdAt).toLocaleString()}
+          {project.reviewRequestedBy && (
+            <>
+              <br />
+              <strong>Review requested by:</strong> {project.reviewRequestedBy}
+            </>
+          )}
+          {project.reviewedBy && (
+            <>
+              <br />
+              <strong>Approved by:</strong> {project.reviewedBy}
+            </>
+          )}
         </div>
         <div>
           <strong>Total:</strong> {stats.total} · <strong>High:</strong> {stats.high} ·{" "}
@@ -363,6 +500,154 @@ export default function BulkResponsesPage() {
           <strong>Errors:</strong> {stats.errors}
         </div>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+          {(project.status === "draft" || project.status === "in_progress") && (
+            <button
+              type="button"
+              onClick={handleRequestReview}
+              disabled={isRequestingReview}
+              style={{
+                ...styles.button,
+                backgroundColor: isRequestingReview ? "#94a3b8" : "#f59e0b",
+                color: "#fff",
+                cursor: isRequestingReview ? "not-allowed" : "pointer",
+              }}
+            >
+              {isRequestingReview ? "Requesting..." : "Request Review"}
+            </button>
+          )}
+          {project.status === "needs_review" && (
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={isApproving}
+              style={{
+                ...styles.button,
+                backgroundColor: isApproving ? "#94a3b8" : "#22c55e",
+                color: "#fff",
+                cursor: isApproving ? "not-allowed" : "pointer",
+              }}
+            >
+              {isApproving ? "Approving..." : "Approve"}
+            </button>
+          )}
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              onClick={() => setShowExportMenu(!showExportMenu)}
+              style={{ ...styles.button, backgroundColor: "#10b981", color: "#fff", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              Export to Excel
+              <span style={{ fontSize: "10px" }}>▼</span>
+            </button>
+            {showExportMenu && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "100%",
+                  left: 0,
+                  marginTop: "4px",
+                  backgroundColor: "#fff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "6px",
+                  boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  zIndex: 100,
+                  minWidth: "200px",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportProjectToExcel(project);
+                    setShowExportMenu(false);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    borderBottom: "1px solid #f1f5f9",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <strong>Full Export</strong>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>All questions with summary</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportCompletedOnly(project);
+                    setShowExportMenu(false);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    borderBottom: "1px solid #f1f5f9",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <strong>Completed Only</strong>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>Questions with responses</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportHighConfidenceOnly(project);
+                    setShowExportMenu(false);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                    borderBottom: "1px solid #f1f5f9",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <strong>High Confidence</strong>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>High confidence responses only</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    exportLowConfidenceOnly(project);
+                    setShowExportMenu(false);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    padding: "10px 14px",
+                    textAlign: "left",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: "14px",
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
+                >
+                  <strong>Needs Review</strong>
+                  <div style={{ fontSize: "12px", color: "#64748b" }}>Low confidence for manual review</div>
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             onClick={() => router.push("/questions/bulk/upload")}
@@ -553,6 +838,54 @@ export default function BulkResponsesPage() {
                     }}
                   />
 
+                  {/* Reasoning section */}
+                  {row.reasoning && (
+                    <div style={{
+                      marginTop: "12px",
+                      padding: "10px 12px",
+                      backgroundColor: "#eff6ff",
+                      borderRadius: "6px",
+                      borderLeft: "3px solid #3b82f6"
+                    }}>
+                      <strong style={{ fontSize: "0.85rem", color: "#1e40af" }}>
+                        Reasoning
+                      </strong>
+                      <div style={{
+                        fontSize: "0.85rem",
+                        color: "#1e3a8a",
+                        marginTop: "6px",
+                        whiteSpace: "pre-wrap",
+                        lineHeight: "1.5"
+                      }}>
+                        {row.reasoning}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Inference section - always show when reasoning exists */}
+                  {row.reasoning && (
+                    <div style={{
+                      marginTop: "8px",
+                      padding: "10px 12px",
+                      backgroundColor: row.inference && row.inference.toLowerCase() !== "none" ? "#fef3c7" : "#f0fdf4",
+                      borderRadius: "6px",
+                      borderLeft: `3px solid ${row.inference && row.inference.toLowerCase() !== "none" ? "#f59e0b" : "#22c55e"}`
+                    }}>
+                      <strong style={{ fontSize: "0.85rem", color: row.inference && row.inference.toLowerCase() !== "none" ? "#92400e" : "#166534" }}>
+                        Inference
+                      </strong>
+                      <div style={{
+                        fontSize: "0.85rem",
+                        color: row.inference && row.inference.toLowerCase() !== "none" ? "#78350f" : "#14532d",
+                        marginTop: "6px",
+                        whiteSpace: "pre-wrap",
+                        lineHeight: "1.5"
+                      }}>
+                        {row.inference || "None"}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Structured sections - Compact display */}
                   {(row.sources || row.remarks) && (
                     <div style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
@@ -569,7 +902,7 @@ export default function BulkResponsesPage() {
                           </div>
                         </div>
                       )}
-                      {row.remarks && (
+                      {row.remarks && row.remarks.toLowerCase() !== "none" && (
                         <div>
                           <strong style={{ fontSize: "0.85rem", color: "#475569" }}>Remarks:</strong>
                           <div style={{
@@ -621,18 +954,21 @@ export default function BulkResponsesPage() {
                   ) : (
                     <ConversationalRefinement
                       originalQuestion={row.question}
-                      currentResponse={`${row.response}\n\nConfidence: ${row.confidence || 'N/A'}\nSources: ${row.sources || 'N/A'}\nRemarks: ${row.remarks || 'N/A'}`}
+                      currentResponse={`${row.response}\n\nConfidence: ${row.confidence || 'N/A'}\nSources: ${row.sources || 'N/A'}\nReasoning: ${row.reasoning || 'N/A'}\nInference: ${row.inference || 'None'}\nRemarks: ${row.remarks || 'N/A'}`}
                       onResponseUpdate={(newResponse) => {
                         const parsed = parseAnswerSections(newResponse);
                         updateRow(row.id, {
                           response: parsed.response,
                           confidence: parsed.confidence,
                           sources: parsed.sources,
+                          reasoning: parsed.reasoning,
+                          inference: parsed.inference,
                           remarks: parsed.remarks
                         });
                       }}
                       onClose={() => updateRow(row.id, { conversationOpen: false })}
                       promptText={promptText}
+                      originalConversationHistory={row.conversationHistory}
                     />
                   )}
                 </div>

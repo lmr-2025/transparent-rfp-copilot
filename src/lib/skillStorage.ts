@@ -2,6 +2,12 @@ import { Skill } from "@/types/skill";
 
 export const SKILLS_STORAGE_KEY = "grc-minion-skills";
 
+// Legacy fields that may exist in old stored data
+interface LegacySkillFields {
+  responseTemplate?: string;
+  sourceMapping?: string[];
+}
+
 export function loadSkillsFromStorage(): Skill[] {
   if (typeof window === "undefined") {
     return [];
@@ -49,10 +55,11 @@ export function loadSkillsFromStorage(): Skill[] {
           };
         }
 
+        const legacyItem = item as Partial<Skill> & LegacySkillFields;
         const legacyResponseTemplate =
-          typeof (item as any).responseTemplate === "string" ? (item as any).responseTemplate : undefined;
-        const legacySources = Array.isArray((item as any).sourceMapping)
-          ? ((item as any).sourceMapping as string[])
+          typeof legacyItem.responseTemplate === "string" ? legacyItem.responseTemplate : undefined;
+        const legacySources = Array.isArray(legacyItem.sourceMapping)
+          ? legacyItem.sourceMapping
               .map((entry) => entry?.toString() ?? "")
               .filter(Boolean)
           : [];

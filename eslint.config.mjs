@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Ignore old app folder
+    "_old_app/**",
   ]),
 ]);
 

@@ -4,22 +4,26 @@ export type ParsedAnswerSections = {
   response: string;
   confidence: string;
   sources: string;
+  reasoning: string;
+  inference: string;
   remarks: string;
 };
 
 /**
- * Parses an LLM answer into structured sections: response, confidence, sources, and remarks.
- * Looks for section headers like "Confidence:", "Sources:", "Remarks:" and separates content accordingly.
+ * Parses an LLM answer into structured sections: response, confidence, sources, reasoning, inference, and remarks.
+ * Looks for section headers like "Confidence:", "Sources:", "Reasoning:", "Inference:", "Remarks:" and separates content accordingly.
  */
 export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
   const lines = answer.split("\n");
   const sectionBuckets: Record<string, string[]> = {
     confidence: [],
     sources: [],
+    reasoning: [],
+    inference: [],
     remarks: [],
   };
 
-  let currentSection: "confidence" | "sources" | "remarks" | null = null;
+  let currentSection: "confidence" | "sources" | "reasoning" | "inference" | "remarks" | null = null;
   let responseBody = "";
   const responseLinesBeforeFirstSection: string[] = [];
 
@@ -62,6 +66,40 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     }
 
     if (
+      lineLower.startsWith("reasoning:") ||
+      lineLower.startsWith("**reasoning:**") ||
+      lineLower === "reasoning" ||
+      lineLower === "**reasoning**"
+    ) {
+      currentSection = "reasoning";
+      const colonIndex = line.indexOf(":");
+      if (colonIndex !== -1) {
+        const rest = line.substring(colonIndex + 1).trim();
+        if (rest.length > 0) {
+          sectionBuckets.reasoning.push(rest);
+        }
+      }
+      continue;
+    }
+
+    if (
+      lineLower.startsWith("inference:") ||
+      lineLower.startsWith("**inference:**") ||
+      lineLower === "inference" ||
+      lineLower === "**inference**"
+    ) {
+      currentSection = "inference";
+      const colonIndex = line.indexOf(":");
+      if (colonIndex !== -1) {
+        const rest = line.substring(colonIndex + 1).trim();
+        if (rest.length > 0) {
+          sectionBuckets.inference.push(rest);
+        }
+      }
+      continue;
+    }
+
+    if (
       lineLower.startsWith("remarks:") ||
       lineLower.startsWith("**remarks:**") ||
       lineLower === "remarks" ||
@@ -90,6 +128,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     response: responseBody || answer.trim(),
     confidence: sectionBuckets.confidence.join("\n"),
     sources: sectionBuckets.sources.join("\n"),
+    reasoning: sectionBuckets.reasoning.join("\n"),
+    inference: sectionBuckets.inference.join("\n"),
     remarks: sectionBuckets.remarks.join("\n"),
   };
 };

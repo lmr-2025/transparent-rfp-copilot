@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession, signIn, signOut } from "next-auth/react";
 
 const navItems = [
   {
@@ -19,6 +20,12 @@ const navItems = [
     ],
   },
   {
+    section: "Review",
+    items: [
+      { href: "/review", label: "Review Queue" },
+    ],
+  },
+  {
     section: "Configuration",
     items: [
       { href: "/prompts", label: "Prompts" },
@@ -28,6 +35,7 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
 
   return (
     <aside style={{
@@ -41,6 +49,8 @@ export default function Sidebar() {
       padding: "24px 0",
       overflowY: "auto",
       zIndex: 100,
+      display: "flex",
+      flexDirection: "column",
     }}>
       <div style={{ padding: "0 20px", marginBottom: "32px" }}>
         <Link href="/knowledge" style={{
@@ -62,7 +72,7 @@ export default function Sidebar() {
         </p>
       </div>
 
-      <nav>
+      <nav style={{ flex: 1 }}>
         {navItems.map((section) => (
           <div key={section.section} style={{ marginBottom: "24px" }}>
             <div style={{
@@ -113,6 +123,91 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* User section at bottom */}
+      <div style={{
+        padding: "16px 20px",
+        borderTop: "1px solid #334155",
+        marginTop: "auto",
+      }}>
+        {status === "loading" ? (
+          <div style={{ color: "#94a3b8", fontSize: "13px" }}>Loading...</div>
+        ) : session?.user ? (
+          <div>
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "12px",
+            }}>
+              {session.user.image && (
+                <img
+                  src={session.user.image}
+                  alt=""
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                  }}
+                />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{
+                  fontSize: "13px",
+                  fontWeight: 500,
+                  color: "#fff",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {session.user.name}
+                </div>
+                <div style={{
+                  fontSize: "11px",
+                  color: "#94a3b8",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}>
+                  {session.user.email}
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => signOut()}
+              style={{
+                width: "100%",
+                padding: "8px",
+                backgroundColor: "transparent",
+                border: "1px solid #475569",
+                borderRadius: "6px",
+                color: "#cbd5e1",
+                fontSize: "13px",
+                cursor: "pointer",
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => signIn()}
+            style={{
+              width: "100%",
+              padding: "10px",
+              backgroundColor: "#3b82f6",
+              border: "none",
+              borderRadius: "6px",
+              color: "#fff",
+              fontSize: "13px",
+              fontWeight: 500,
+              cursor: "pointer",
+            }}
+          >
+            Sign in
+          </button>
+        )}
+      </div>
     </aside>
   );
 }

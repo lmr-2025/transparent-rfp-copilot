@@ -3,25 +3,36 @@
 import Link from "next/link";
 import { Skill } from "@/types/skill";
 
+// Accept both full Skill objects and simplified skill references (from stored data)
+type SkillReference = string | { id: string; title: string } | Skill;
+
 type SkillRecommendationProps = {
-  usedSkills: Skill[];
+  usedSkills: SkillReference[];
   question: string;
-  allSkills: Skill[];
+  allSkills: Skill[]; // Reserved for future use (e.g., suggesting related skills)
   onDismiss?: () => void;
 };
+
+// Type guard to check if a skill reference is a full Skill object
+function isFullSkill(skill: SkillReference): skill is Skill {
+  return typeof skill === "object" && "createdAt" in skill;
+}
 
 export default function SkillRecommendation({
   usedSkills,
   question,
-  allSkills,
+  allSkills: _allSkills,
   onDismiss,
 }: SkillRecommendationProps) {
+  // Filter to only full Skill objects that can be evaluated for age
+  const fullSkills = usedSkills.filter(isFullSkill);
+
   // Check if no skills were used - suggest creating a new one
-  const noSkillsUsed = usedSkills.length === 0;
+  const noSkillsUsed = fullSkills.length === 0;
 
   // Find skills that were used but might be outdated (>30 days old)
   const now = new Date();
-  const outdatedUsedSkills = usedSkills.filter((skill) => {
+  const outdatedUsedSkills = fullSkills.filter((skill) => {
     const lastUpdate = skill.lastRefreshedAt
       ? new Date(skill.lastRefreshedAt)
       : new Date(skill.createdAt);

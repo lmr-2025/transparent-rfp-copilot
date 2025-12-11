@@ -6,6 +6,22 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+interface RowInput {
+  rowNumber: number;
+  question: string;
+  response?: string;
+  status?: string;
+  error?: string;
+  conversationHistory?: unknown;
+  confidence?: string;
+  sources?: string;
+  reasoning?: string;
+  inference?: string;
+  remarks?: string;
+  usedSkills?: unknown;
+  showRecommendation?: boolean;
+}
+
 // GET /api/projects/[id] - Get single project
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
@@ -47,7 +63,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { id } = params;
     const body = await request.json();
 
-    const { name, sheetName, columns, rows, ownerName, customerName, notes, status } = body;
+    const {
+      name, sheetName, columns, rows, ownerName, customerName, notes, status,
+      reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy
+    } = body;
 
     // Map status string to enum
     const projectStatus: ProjectStatus | undefined = status
@@ -65,10 +84,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         ...(customerName !== undefined && { customerName }),
         ...(notes !== undefined && { notes }),
         ...(projectStatus && { status: projectStatus }),
+        ...(reviewRequestedAt !== undefined && { reviewRequestedAt: reviewRequestedAt ? new Date(reviewRequestedAt) : null }),
+        ...(reviewRequestedBy !== undefined && { reviewRequestedBy }),
+        ...(reviewedAt !== undefined && { reviewedAt: reviewedAt ? new Date(reviewedAt) : null }),
+        ...(reviewedBy !== undefined && { reviewedBy }),
         ...(rows && {
           rows: {
             deleteMany: {}, // Delete all existing rows
-            create: rows.map((row: any) => ({
+            create: rows.map((row: RowInput) => ({
               rowNumber: row.rowNumber,
               question: row.question,
               response: row.response || "",
@@ -77,6 +100,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
               conversationHistory: row.conversationHistory || null,
               confidence: row.confidence,
               sources: row.sources,
+              reasoning: row.reasoning,
+              inference: row.inference,
               remarks: row.remarks,
               usedSkills: row.usedSkills || null,
               showRecommendation: row.showRecommendation || false,

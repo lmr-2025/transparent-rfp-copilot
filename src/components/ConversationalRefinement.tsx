@@ -9,12 +9,23 @@ interface Message {
   timestamp: Date;
 }
 
+interface ContentBlock {
+  type: string;
+  text?: string;
+}
+
+interface OriginalMessage {
+  role: string;
+  content: string;
+}
+
 interface ConversationalRefinementProps {
   originalQuestion: string;
   currentResponse: string;
   onResponseUpdate: (newResponse: string) => void;
   onClose: () => void;
   promptText: string;
+  originalConversationHistory?: OriginalMessage[];
 }
 
 const styles = {
@@ -112,6 +123,7 @@ export default function ConversationalRefinement({
   onResponseUpdate,
   onClose,
   promptText,
+  originalConversationHistory,
 }: ConversationalRefinementProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -153,6 +165,14 @@ export default function ConversationalRefinement({
         content: msg.content,
       }));
 
+      // Build original conversation context if available
+      const originalContextSection = originalConversationHistory && originalConversationHistory.length > 0
+        ? `\n\nORIGINAL GENERATION CONVERSATION:
+Below is the conversation that led to this response. This shows your reasoning process, what skills you matched, and how you arrived at your answer. Use this context to explain your thinking when asked.
+
+${originalConversationHistory.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')}`
+        : '';
+
       const systemPrompt = `${promptText}
 
 CONVERSATION CONTEXT:
@@ -160,8 +180,11 @@ You are refining a response to a security questionnaire question.
 
 Original Question: "${originalQuestion}"
 Current Response: "${currentResponse}"
+${originalContextSection}
 
-The user is asking for refinements or clarifications. Maintain the same structured format (Response, Confidence, Sources, Remarks) but adjust based on their feedback.
+The user is asking for refinements or clarifications. Maintain the same structured format (Response, Confidence, Sources, Reasoning, Inference, Remarks) but adjust based on their feedback.
+
+When the user asks "why" or asks about your reasoning, refer back to the original generation conversation above to explain your thought process.
 
 If the user asks you to generate a new/updated response, format it the same way as the original.`;
 
@@ -187,9 +210,9 @@ If the user asks you to generate a new/updated response, format it the same way 
       }
 
       const data = await response.json();
-      const assistantContent = data.content
-        .filter((block: any) => block.type === 'text')
-        .map((block: any) => block.text)
+      const assistantContent = (data.content as ContentBlock[])
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text ?? '')
         .join('\n');
 
       const assistantMessage: Message = {
@@ -210,10 +233,11 @@ If the user asks you to generate a new/updated response, format it the same way 
       ) {
         setLatestSuggestion(assistantContent);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to process your request';
       const errorMessage: Message = {
         role: 'assistant',
-        content: `Error: ${error.message || 'Failed to process your request'}`,
+        content: `Error: ${message}`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);

@@ -2,6 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { ProjectStatus } from "@prisma/client";
 
+interface RowInput {
+  rowNumber: number;
+  question: string;
+  response?: string;
+  status?: string;
+  error?: string;
+  conversationHistory?: unknown;
+  confidence?: string;
+  sources?: string;
+  reasoning?: string;
+  inference?: string;
+  remarks?: string;
+  usedSkills?: unknown;
+  showRecommendation?: boolean;
+}
+
 // GET /api/projects - Get all projects
 export async function GET() {
   try {
@@ -50,7 +66,7 @@ export async function POST(request: NextRequest) {
         notes,
         status: projectStatus,
         rows: {
-          create: rows.map((row: any) => ({
+          create: rows.map((row: RowInput) => ({
             rowNumber: row.rowNumber,
             question: row.question,
             response: row.response || "",
@@ -59,6 +75,8 @@ export async function POST(request: NextRequest) {
             conversationHistory: row.conversationHistory || null,
             confidence: row.confidence,
             sources: row.sources,
+            reasoning: row.reasoning,
+            inference: row.inference,
             remarks: row.remarks,
             usedSkills: row.usedSkills || null,
             showRecommendation: row.showRecommendation || false,
