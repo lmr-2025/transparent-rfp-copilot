@@ -63,12 +63,20 @@ export async function generateSkillDraftFromMessages(
 export type AnswerResult = {
   answer: string;
   conversationHistory: { role: string; content: string }[];
+  usedFallback: boolean;
+};
+
+export type FallbackContent = {
+  title: string;
+  url: string;
+  content: string;
 };
 
 export async function answerQuestionWithPrompt(
   question: string,
   promptText = defaultQuestionPrompt,
   skills?: { title: string; content: string; tags: string[] }[],
+  fallbackContent?: FallbackContent[],
 ): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) {
@@ -86,7 +94,9 @@ export async function answerQuestionWithPrompt(
 
   // Build skills context if provided
   let skillsContext = "";
-  if (skills && skills.length > 0) {
+  const hasSkills = skills && skills.length > 0;
+
+  if (hasSkills) {
     const skillBlocks = skills.map((skill, index) => {
       return [
         `### Skill ${index + 1}: ${skill.title}`,
@@ -110,8 +120,39 @@ export async function answerQuestionWithPrompt(
     ].join("\n");
   }
 
-  // Combine skills context with the question
-  const userMessage = skillsContext ? `${skillsContext}${trimmedQuestion}` : trimmedQuestion;
+  // Build fallback URL content if no skills matched and fallback content provided
+  let fallbackContext = "";
+  const usedFallback = !hasSkills && fallbackContent && fallbackContent.length > 0;
+
+  if (usedFallback) {
+    const fallbackBlocks = fallbackContent
+      .filter((fb) => fb.content.trim().length > 0)
+      .map((fb, index) => {
+        return [
+          `### Reference ${index + 1}: ${fb.title}`,
+          `Source: ${fb.url}`,
+          "",
+          fb.content,
+        ].join("\n");
+      });
+
+    if (fallbackBlocks.length > 0) {
+      fallbackContext = [
+        "# REFERENCE DOCUMENTS (Fallback Context)",
+        "",
+        "No pre-verified skills matched this question. The following reference documents were fetched as fallback context:",
+        "",
+        ...fallbackBlocks,
+        "",
+        "---",
+        "",
+      ].join("\n");
+    }
+  }
+
+  // Combine context with the question
+  const contextPrefix = skillsContext || fallbackContext;
+  const userMessage = contextPrefix ? `${contextPrefix}${trimmedQuestion}` : trimmedQuestion;
 
   try {
     const response = await anthropic.messages.create({
@@ -144,6 +185,7 @@ export async function answerQuestionWithPrompt(
     return {
       answer: answerText,
       conversationHistory,
+      usedFallback: usedFallback || false,
     };
   } catch (error) {
     if (error instanceof Error) {

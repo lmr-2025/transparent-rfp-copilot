@@ -6,6 +6,7 @@ type QuestionRequestBody = {
   question?: string;
   prompt?: string;
   skills?: { title: string; content: string; tags: string[] }[];
+  fallbackContent?: { title: string; url: string; content: string }[];
 };
 
 export async function POST(request: NextRequest) {
@@ -23,12 +24,14 @@ export async function POST(request: NextRequest) {
 
   const promptText = (body?.prompt ?? "").trim() || defaultQuestionPrompt;
   const skills = Array.isArray(body?.skills) ? body.skills : undefined;
+  const fallbackContent = Array.isArray(body?.fallbackContent) ? body.fallbackContent : undefined;
 
   try {
-    const result = await answerQuestionWithPrompt(question, promptText, skills);
+    const result = await answerQuestionWithPrompt(question, promptText, skills, fallbackContent);
     return NextResponse.json({
       answer: result.answer,
       conversationHistory: result.conversationHistory,
+      usedFallback: result.usedFallback,
     });
   } catch (error) {
     console.error("Failed to answer question:", error);

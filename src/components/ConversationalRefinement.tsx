@@ -223,9 +223,9 @@ If the user asks you to generate a new/updated response, format it the same way 
 
       setMessages((prev) => [...prev, assistantMessage]);
 
-      // Check if this looks like a refined response (has "Response:" or similar structure)
+      // Check if this looks like a refined response (has "Answer:" or similar structure)
       if (
-        assistantContent.includes('Response:') ||
+        assistantContent.includes('Answer:') ||
         assistantContent.includes('Confidence:') ||
         userMessage.content.toLowerCase().includes('refine') ||
         userMessage.content.toLowerCase().includes('rewrite') ||
@@ -277,7 +277,7 @@ If the user asks you to generate a new/updated response, format it the same way 
             {message.role === 'assistant' &&
               index === messages.length - 1 &&
               latestSuggestion &&
-              (message.content.includes('Response:') || message.content.includes('Confidence:')) && (
+              (message.content.includes('Answer:') || message.content.includes('Confidence:')) && (
                 <button
                   onClick={handleUseResponse}
                   style={{ ...styles.button, ...styles.useButton, marginTop: '10px' }}

@@ -44,3 +44,7 @@ next-env.d.ts
 
 # Ignore legacy app directory
 /app/
+/_old_app/
+
+# VS Code workspace files
+*.code-workspace

@@ -19,6 +19,7 @@ type PreviewRow = {
   question: string;
   cells: Record<string, string>;
   selected: boolean; // Track if row should be included in project
+  sourceTab: string; // Which tab this row came from
 };
 
 const styles = {
@@ -63,7 +64,10 @@ export default function BulkUploadPage() {
   const [ownerName, setOwnerName] = useState("");
   const [sheets, setSheets] = useState<SheetData[]>([]);
   const [selectedSheet, setSelectedSheet] = useState("");
+  const [mergeAllTabs, setMergeAllTabs] = useState(true); // Default to merging all tabs
   const [questionColumn, setQuestionColumn] = useState("");
+  const [useSameColumnForAll, setUseSameColumnForAll] = useState(true); // When merging, use same column for all tabs
+  const [perTabColumns, setPerTabColumns] = useState<Record<string, string>>({}); // Tab name -> column name mapping
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
   const [isParsing, setIsParsing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -71,14 +75,46 @@ export default function BulkUploadPage() {
 
   const activeSheet = useMemo(() => {
     if (!sheets.length) return null;
+    if (mergeAllTabs && sheets.length > 1) {
+      // When merging, return first sheet for column reference
+      return sheets[0];
+    }
     if (selectedSheet) {
       return sheets.find((sheet) => sheet.name === selectedSheet) ?? sheets[0];
     }
     return sheets[0];
-  }, [sheets, selectedSheet]);
+  }, [sheets, selectedSheet, mergeAllTabs]);
 
-  const columns = activeSheet?.columns ?? [];
-  const detectedRows = activeSheet?.rows.length ?? 0;
+  // Get common columns across all sheets when merging (only used when useSameColumnForAll is true)
+  const commonColumns = useMemo(() => {
+    if (!sheets.length || sheets.length < 2) return [];
+    const allColumnSets = sheets.map((s) => new Set(s.columns));
+    const firstSheetColumns = sheets[0].columns;
+    return firstSheetColumns.filter((col) =>
+      allColumnSets.every((set) => set.has(col))
+    );
+  }, [sheets]);
+
+  // Get columns based on current mode
+  const columns = useMemo(() => {
+    if (!sheets.length) return [];
+    if (mergeAllTabs && sheets.length > 1) {
+      if (useSameColumnForAll) {
+        return commonColumns;
+      }
+      // Per-tab mode: return empty since each tab has its own dropdown
+      return [];
+    }
+    return activeSheet?.columns ?? [];
+  }, [sheets, activeSheet, mergeAllTabs, useSameColumnForAll, commonColumns]);
+
+  const detectedRows = useMemo(() => {
+    if (!sheets.length) return 0;
+    if (mergeAllTabs && sheets.length > 1) {
+      return sheets.reduce((sum, sheet) => sum + sheet.rows.length, 0);
+    }
+    return activeSheet?.rows.length ?? 0;
+  }, [sheets, activeSheet, mergeAllTabs]);
 
   const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -92,6 +128,7 @@ export default function BulkUploadPage() {
     setSheets([]);
     setSelectedSheet("");
     setQuestionColumn("");
+    setPerTabColumns({});
     setPreviewRows([]);
 
     const isCsv = file.name.toLowerCase().endsWith(".csv");
@@ -207,31 +244,103 @@ export default function BulkUploadPage() {
   const handleQuestionColumnChange = (value: string) => {
     setQuestionColumn(value);
     setPreviewRows([]);
-    if (!activeSheet || !value) return;
+    if (!value) return;
 
-    const columnIndex = activeSheet.columns.indexOf(value);
-    if (columnIndex === -1) return;
+    const allRows: PreviewRow[] = [];
 
-    const mapped = activeSheet.rows.map((row, index) => {
-      const cells: Record<string, string> = {};
-      activeSheet.columns.forEach((col, idx) => {
-        cells[col] = row[idx]?.toString() ?? "";
+    if (mergeAllTabs && sheets.length > 1 && useSameColumnForAll) {
+      // Merge rows from all sheets using the same column
+      sheets.forEach((sheet) => {
+        const columnIndex = sheet.columns.indexOf(value);
+        if (columnIndex === -1) return; // Skip sheets without this column
+
+        sheet.rows.forEach((row, index) => {
+          const cells: Record<string, string> = {};
+          sheet.columns.forEach((col, idx) => {
+            cells[col] = row[idx]?.toString() ?? "";
+          });
+          allRows.push({
+            rowNumber: index + 2,
+            question: row[columnIndex]?.toString().trim() ?? "",
+            cells,
+            selected: true,
+            sourceTab: sheet.name,
+          });
+        });
       });
-      return {
-        rowNumber: index + 2,
-        question: row[columnIndex]?.toString().trim() ?? "",
-        cells,
-        selected: true, // Default to selected
-      };
-    });
+    } else if (activeSheet) {
+      // Single sheet mode
+      const columnIndex = activeSheet.columns.indexOf(value);
+      if (columnIndex === -1) return;
 
-    setPreviewRows(mapped);
+      activeSheet.rows.forEach((row, index) => {
+        const cells: Record<string, string> = {};
+        activeSheet.columns.forEach((col, idx) => {
+          cells[col] = row[idx]?.toString() ?? "";
+        });
+        allRows.push({
+          rowNumber: index + 2,
+          question: row[columnIndex]?.toString().trim() ?? "",
+          cells,
+          selected: true,
+          sourceTab: activeSheet.name,
+        });
+      });
+    }
+
+    setPreviewRows(allRows);
   };
 
-  const handleToggleRow = (rowNumber: number) => {
+  // Handle per-tab column selection
+  const handlePerTabColumnChange = (tabName: string, columnName: string) => {
+    const newPerTabColumns = { ...perTabColumns, [tabName]: columnName };
+    setPerTabColumns(newPerTabColumns);
+
+    // Generate preview when all tabs have a column selected
+    generatePreviewFromPerTabColumns(newPerTabColumns);
+  };
+
+  // Generate preview rows from per-tab column mappings
+  const generatePreviewFromPerTabColumns = (tabColumns: Record<string, string>) => {
+    const allRows: PreviewRow[] = [];
+
+    sheets.forEach((sheet) => {
+      const columnName = tabColumns[sheet.name];
+      if (!columnName) return; // Skip tabs without a column selected
+
+      const columnIndex = sheet.columns.indexOf(columnName);
+      if (columnIndex === -1) return;
+
+      sheet.rows.forEach((row, index) => {
+        const cells: Record<string, string> = {};
+        sheet.columns.forEach((col, idx) => {
+          cells[col] = row[idx]?.toString() ?? "";
+        });
+        allRows.push({
+          rowNumber: index + 2,
+          question: row[columnIndex]?.toString().trim() ?? "",
+          cells,
+          selected: true,
+          sourceTab: sheet.name,
+        });
+      });
+    });
+
+    setPreviewRows(allRows);
+  };
+
+  // Check if all tabs have columns selected (for per-tab mode)
+  const allTabsHaveColumns = useMemo(() => {
+    if (!mergeAllTabs || useSameColumnForAll || sheets.length < 2) return true;
+    return sheets.every((sheet) => perTabColumns[sheet.name]);
+  }, [mergeAllTabs, useSameColumnForAll, sheets, perTabColumns]);
+
+  const handleToggleRow = (rowNumber: number, sourceTab: string) => {
     setPreviewRows((prev) =>
       prev.map((row) =>
-        row.rowNumber === rowNumber ? { ...row, selected: !row.selected } : row
+        row.rowNumber === rowNumber && row.sourceTab === sourceTab
+          ? { ...row, selected: !row.selected }
+          : row
       )
     );
   };
@@ -255,10 +364,26 @@ export default function BulkUploadPage() {
     ].join("\n");
 
   const handleSaveProject = async () => {
-    if (!activeSheet || !questionColumn) {
-      setErrorMessage("Select a worksheet and question column before saving.");
-      return;
+    // Validate based on mode
+    if (mergeAllTabs && sheets.length > 1) {
+      if (useSameColumnForAll) {
+        if (!questionColumn) {
+          setErrorMessage("Select a question column before saving.");
+          return;
+        }
+      } else {
+        if (!allTabsHaveColumns) {
+          setErrorMessage("Select a question column for each tab before saving.");
+          return;
+        }
+      }
+    } else {
+      if (!activeSheet || !questionColumn) {
+        setErrorMessage("Select a worksheet and question column before saving.");
+        return;
+      }
     }
+
     if (previewRows.length === 0) {
       setErrorMessage("No question rows detected. Adjust your column selection.");
       return;
@@ -275,17 +400,30 @@ export default function BulkUploadPage() {
     const projectId = crypto.randomUUID();
     const now = new Date().toISOString();
 
+    // Determine sheet name for project
+    const sheetNameForProject = mergeAllTabs && sheets.length > 1
+      ? `Merged (${sheets.length} tabs)`
+      : activeSheet?.name || "Unknown";
+
+    // Get unique tabs that have selected rows
+    const tabsWithRows = [...new Set(selectedRows.map((r) => r.sourceTab))];
+
+    // Get columns for project - use all unique columns when in per-tab mode
+    const projectColumns = mergeAllTabs && sheets.length > 1 && !useSameColumnForAll
+      ? [...new Set(sheets.flatMap((s) => s.columns))]
+      : (columns.length > 0 ? columns : activeSheet?.columns || []);
+
     const project: BulkProject = {
       id: projectId,
       name: projectName.trim() || "Untitled Project",
       customerName: customerName.trim() || undefined,
       ownerName: ownerName.trim() || undefined,
-      sheetName: activeSheet.name,
-      columns: activeSheet.columns,
+      sheetName: sheetNameForProject,
+      columns: projectColumns,
       createdAt: now,
       lastModifiedAt: now,
       status: "draft",
-      notes: undefined,
+      notes: tabsWithRows.length > 1 ? `Source tabs: ${tabsWithRows.join(", ")}` : undefined,
       rows: selectedRows.map((row) => ({
         id: crypto.randomUUID(),
         rowNumber: row.rowNumber,
@@ -293,6 +431,7 @@ export default function BulkUploadPage() {
         response: "",
         status: "pending" as const,
         error: undefined,
+        sourceTab: row.sourceTab,
         conversationHistory: undefined,
         confidence: undefined,
         sources: undefined,
@@ -382,24 +521,154 @@ export default function BulkUploadPage() {
 
       {sheets.length > 1 && (
         <div style={styles.card}>
-          <label style={styles.label} htmlFor="sheetSelect">
-            Select worksheet
-          </label>
-          <select
-            id="sheetSelect"
-            value={selectedSheet}
-            onChange={(event) => setSelectedSheet(event.target.value)}
-            style={styles.input}
-          >
-            {sheets.map((sheet) => (
-              <option key={sheet.name} value={sheet.name}>
-                {sheet.name}
-              </option>
-            ))}
-          </select>
-          <p style={{ color: "#64748b" }}>
-            Each worksheet becomes its own project, keeping customer-specific columns isolated.
-          </p>
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={mergeAllTabs}
+                onChange={(e) => {
+                  setMergeAllTabs(e.target.checked);
+                  setQuestionColumn("");
+                  setPerTabColumns({});
+                  setPreviewRows([]);
+                }}
+                style={{ width: "18px", height: "18px", cursor: "pointer" }}
+              />
+              <span style={{ fontWeight: 600 }}>Merge all {sheets.length} tabs into one project</span>
+            </label>
+            <p style={{ color: "#64748b", marginTop: "8px", marginLeft: "28px" }}>
+              {mergeAllTabs
+                ? "Questions from all tabs will be combined. Each row will show which tab it came from."
+                : "Each tab will be processed as a separate project."}
+            </p>
+          </div>
+
+          {!mergeAllTabs && (
+            <>
+              <label style={styles.label} htmlFor="sheetSelect">
+                Select worksheet
+              </label>
+              <select
+                id="sheetSelect"
+                value={selectedSheet}
+                onChange={(event) => {
+                  setSelectedSheet(event.target.value);
+                  setQuestionColumn("");
+                  setPreviewRows([]);
+                }}
+                style={styles.input}
+              >
+                {sheets.map((sheet) => (
+                  <option key={sheet.name} value={sheet.name}>
+                    {sheet.name} ({sheet.rows.length} rows)
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
+
+          {mergeAllTabs && (
+            <>
+              <div style={{
+                backgroundColor: "#f0fdf4",
+                padding: "12px",
+                borderRadius: "6px",
+                border: "1px solid #bbf7d0",
+                marginBottom: "16px"
+              }}>
+                <p style={{ margin: 0, color: "#166534", fontSize: "0.9rem" }}>
+                  <strong>Tabs to merge:</strong>{" "}
+                  {sheets.map((s, i) => (
+                    <span key={s.name}>
+                      {s.name} ({s.rows.length})
+                      {i < sheets.length - 1 ? ", " : ""}
+                    </span>
+                  ))}
+                </p>
+              </div>
+
+              {/* Column mapping option */}
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "10px", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={useSameColumnForAll}
+                    onChange={(e) => {
+                      setUseSameColumnForAll(e.target.checked);
+                      setQuestionColumn("");
+                      setPerTabColumns({});
+                      setPreviewRows([]);
+                    }}
+                    style={{ width: "16px", height: "16px", cursor: "pointer" }}
+                  />
+                  <span style={{ fontWeight: 500 }}>All tabs have the same question column name</span>
+                </label>
+                <p style={{ color: "#64748b", marginTop: "6px", marginLeft: "26px", fontSize: "0.85rem" }}>
+                  {useSameColumnForAll
+                    ? `${commonColumns.length} common columns found across all tabs`
+                    : "Map each tab to its question column below"}
+                </p>
+              </div>
+
+              {/* Per-tab column selection */}
+              {!useSameColumnForAll && (
+                <div style={{
+                  backgroundColor: "#f8fafc",
+                  padding: "16px",
+                  borderRadius: "6px",
+                  border: "1px solid #e2e8f0"
+                }}>
+                  <p style={{ margin: "0 0 12px 0", fontWeight: 600, fontSize: "0.9rem" }}>
+                    Select question column for each tab:
+                  </p>
+                  {sheets.map((sheet) => (
+                    <div key={sheet.name} style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      marginBottom: "10px"
+                    }}>
+                      <span style={{
+                        backgroundColor: "#e0f2fe",
+                        color: "#0369a1",
+                        padding: "4px 8px",
+                        borderRadius: "4px",
+                        fontSize: "0.85rem",
+                        fontWeight: 500,
+                        minWidth: "100px"
+                      }}>
+                        {sheet.name}
+                      </span>
+                      <select
+                        value={perTabColumns[sheet.name] || ""}
+                        onChange={(e) => handlePerTabColumnChange(sheet.name, e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: "8px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "0.9rem"
+                        }}
+                      >
+                        <option value="">Select column...</option>
+                        {sheet.columns.map((col) => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                      <span style={{ color: "#64748b", fontSize: "0.8rem" }}>
+                        {sheet.rows.length} rows
+                      </span>
+                    </div>
+                  ))}
+                  {!allTabsHaveColumns && (
+                    <p style={{ margin: "12px 0 0 0", color: "#64748b", fontSize: "0.85rem" }}>
+                      Select a column for each tab to see the preview.
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
 
@@ -444,7 +713,11 @@ export default function BulkUploadPage() {
                 Preview ({previewRows.filter((r) => r.selected).length} of {previewRows.length} selected)
               </h2>
               <p style={{ color: "#475569", marginTop: "4px" }}>
-                Review and select questions from <strong>{activeSheet?.name}</strong>.
+                {mergeAllTabs && sheets.length > 1 ? (
+                  <>Review and select questions from <strong>{sheets.length} merged tabs</strong>.</>
+                ) : (
+                  <>Review and select questions from <strong>{activeSheet?.name}</strong>.</>
+                )}
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -497,7 +770,7 @@ export default function BulkUploadPage() {
                 <input
                   type="checkbox"
                   checked={row.selected}
-                  onChange={() => handleToggleRow(row.rowNumber)}
+                  onChange={() => handleToggleRow(row.rowNumber, row.sourceTab)}
                   style={{
                     width: "18px",
                     height: "18px",
@@ -507,7 +780,25 @@ export default function BulkUploadPage() {
                   }}
                 />
                 <div style={{ flex: 1 }}>
-                  <p style={{ color: "#94a3b8", margin: 0, fontSize: "0.9rem" }}>Row {row.rowNumber}</p>
+                  <p style={{ color: "#94a3b8", margin: 0, fontSize: "0.9rem" }}>
+                    {mergeAllTabs && sheets.length > 1 ? (
+                      <>
+                        <span style={{
+                          backgroundColor: "#e0f2fe",
+                          color: "#0369a1",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          fontSize: "0.8rem",
+                          marginRight: "8px"
+                        }}>
+                          {row.sourceTab}
+                        </span>
+                        Row {row.rowNumber}
+                      </>
+                    ) : (
+                      <>Row {row.rowNumber}</>
+                    )}
+                  </p>
                   <p style={{ marginTop: "4px", fontSize: "0.95rem" }}>
                     {row.question || <em>No question text found.</em>}
                   </p>

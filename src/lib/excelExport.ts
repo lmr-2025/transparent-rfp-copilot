@@ -143,42 +143,115 @@ function createSummarySheet(project: BulkProject, stats: ReturnType<typeof calcu
   return sheet;
 }
 
+// Extract URLs from text and return as array
+function extractUrls(text: string): string[] {
+  if (!text) return [];
+  const urlRegex = /https?:\/\/[^\s,\n)>\]]+/gi;
+  return text.match(urlRegex) || [];
+}
+
+// Format sources with hyperlinks for Excel
+function formatSourcesForExcel(sources: string): string {
+  if (!sources) return "";
+  const urls = extractUrls(sources);
+  if (urls.length === 0) return sources;
+
+  // Return URLs as newline-separated list for cleaner display
+  // Each URL will be made clickable via cell hyperlink
+  return urls.join("\n");
+}
+
 function createResponsesSheet(rows: BulkRow[]): XLSX.WorkSheet {
-  // Headers
-  const headers = ["Row #", "Question", "Response", "Status", "Confidence", "Reasoning", "Inference", "Sources", "Remarks"];
+  // Check if we have multiple source tabs
+  const uniqueTabs = new Set(rows.map((r) => r.sourceTab).filter(Boolean));
+  const hasMultipleTabs = uniqueTabs.size > 1;
+
+  // Headers - include Source Tab column only if there are multiple tabs
+  const headers = hasMultipleTabs
+    ? ["Source Tab", "Row #", "Question", "Answer", "Status", "Confidence", "Reasoning", "Inference", "Sources", "Remarks"]
+    : ["Row #", "Question", "Answer", "Status", "Confidence", "Reasoning", "Inference", "Sources", "Remarks"];
 
   const data = [headers];
 
   // Add rows
   rows.forEach((row) => {
     const status = row.response && row.response.trim().length > 0 ? "Completed" : "Pending";
-    data.push([
-      row.rowNumber.toString(),
-      row.question,
-      row.response || "",
-      status,
-      row.confidence || "",
-      row.reasoning || "",
-      row.inference || "None",
-      row.sources || "",
-      row.remarks || "",
-    ]);
+    const formattedSources = formatSourcesForExcel(row.sources || "");
+    const rowData = hasMultipleTabs
+      ? [
+          row.sourceTab || "",
+          row.rowNumber.toString(),
+          row.question,
+          row.response || "",
+          status,
+          row.confidence || "",
+          row.reasoning || "",
+          row.inference || "None",
+          formattedSources,
+          row.remarks || "",
+        ]
+      : [
+          row.rowNumber.toString(),
+          row.question,
+          row.response || "",
+          status,
+          row.confidence || "",
+          row.reasoning || "",
+          row.inference || "None",
+          formattedSources,
+          row.remarks || "",
+        ];
+    data.push(rowData);
   });
 
   const sheet = XLSX.utils.aoa_to_sheet(data);
 
-  // Set column widths
-  sheet["!cols"] = [
-    { wch: 8 }, // Row #
-    { wch: 50 }, // Question
-    { wch: 80 }, // Response
-    { wch: 12 }, // Status
-    { wch: 15 }, // Confidence
-    { wch: 50 }, // Reasoning
-    { wch: 50 }, // Inference
-    { wch: 40 }, // Sources
-    { wch: 40 }, // Remarks
-  ];
+  // Add hyperlinks to source URLs
+  const sourcesColIndex = hasMultipleTabs ? 8 : 7; // 0-indexed column for Sources
+  rows.forEach((row, rowIndex) => {
+    const urls = extractUrls(row.sources || "");
+    if (urls.length > 0) {
+      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: sourcesColIndex }); // +1 for header row
+      const cell = sheet[cellAddress];
+      if (cell) {
+        // For single URL, make the cell itself a hyperlink
+        if (urls.length === 1) {
+          cell.l = { Target: urls[0], Tooltip: "Click to open source" };
+        }
+        // For multiple URLs, add hyperlink to first URL (Excel limitation for cell hyperlinks)
+        // The full list is shown as text with newlines
+        else {
+          cell.l = { Target: urls[0], Tooltip: `Click to open first source (${urls.length} total)` };
+        }
+      }
+    }
+  });
+
+  // Set column widths - include Source Tab column only if there are multiple tabs
+  sheet["!cols"] = hasMultipleTabs
+    ? [
+        { wch: 15 }, // Source Tab
+        { wch: 8 }, // Row #
+        { wch: 50 }, // Question
+        { wch: 80 }, // Answer
+        { wch: 12 }, // Status
+        { wch: 15 }, // Confidence
+        { wch: 50 }, // Reasoning
+        { wch: 50 }, // Inference
+        { wch: 40 }, // Sources
+        { wch: 40 }, // Remarks
+      ]
+    : [
+        { wch: 8 }, // Row #
+        { wch: 50 }, // Question
+        { wch: 80 }, // Answer
+        { wch: 12 }, // Status
+        { wch: 15 }, // Confidence
+        { wch: 50 }, // Reasoning
+        { wch: 50 }, // Inference
+        { wch: 40 }, // Sources
+        { wch: 40 }, // Remarks
+      ];
 
   // Set row heights for better readability
   sheet["!rows"] = [{ hpt: 30 }]; // Header row height
@@ -226,9 +299,9 @@ export function exportProjectToExcel(project: BulkProject, options: ExportOption
     XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
   }
 
-  // Add responses sheet
-  const responsesSheet = createResponsesSheet(filteredRows);
-  XLSX.utils.book_append_sheet(wb, responsesSheet, "Responses");
+  // Add Q&A sheet
+  const qaSheet = createResponsesSheet(filteredRows);
+  XLSX.utils.book_append_sheet(wb, qaSheet, "Q&A");
 
   // Generate filename
   const timestamp = new Date().toISOString().split("T")[0];

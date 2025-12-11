@@ -5,6 +5,7 @@ export type BulkRow = {
   response: string;
   status: "pending" | "generating" | "completed" | "error";
   error?: string;
+  sourceTab?: string; // Which Excel tab this row came from (for multi-tab uploads)
   conversationHistory?: { role: string; content: string }[];
   confidence?: string;
   sources?: string;
@@ -12,6 +13,7 @@ export type BulkRow = {
   inference?: string; // What was inferred/deduced, or "None" if everything was found directly
   remarks?: string;
   usedSkills?: (string | { id: string; title: string })[]; // Can be Skill objects or string IDs
+  usedFallback?: boolean; // True if answer was generated from reference URLs instead of skills
   showRecommendation?: boolean;
   // Legacy fields for conversational refinement
   challengePrompt?: string;

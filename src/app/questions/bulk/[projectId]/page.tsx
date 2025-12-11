@@ -13,6 +13,9 @@ import ConversationalRefinement from "@/components/ConversationalRefinement";
 import { loadSkillsFromStorage } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
+import { loadReferenceUrls } from "@/lib/referenceUrlStorage";
+import { ReferenceUrl } from "@/types/referenceUrl";
+import { fetchMultipleUrls } from "@/lib/urlFetcher";
 import SkillRecommendation from "@/components/SkillRecommendation";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
 import {
@@ -21,6 +24,37 @@ import {
   exportHighConfidenceOnly,
   exportLowConfidenceOnly,
 } from "@/lib/excelExport";
+
+// Helper to render text with clickable URLs
+function renderTextWithLinks(text: string): React.ReactNode {
+  if (!text) return null;
+
+  const urlRegex = /(https?:\/\/[^\s,\n)>\]]+)/gi;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      // Reset regex lastIndex since we're using it multiple times
+      urlRegex.lastIndex = 0;
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: "#2563eb",
+            textDecoration: "underline",
+            wordBreak: "break-all"
+          }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
 
 const styles = {
   container: {
@@ -114,6 +148,7 @@ export default function BulkResponsesPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
+  const [referenceUrls, setReferenceUrls] = useState<ReferenceUrl[]>([]);
   const [statusFilter, setStatusFilter] = useState<"all" | "high" | "medium" | "low" | "error">("all");
   const [promptCollapsed, setPromptCollapsed] = useState(true);
   const [generateProgress, setGenerateProgress] = useState({ current: 0, total: 0 });
@@ -156,9 +191,10 @@ export default function BulkResponsesPage() {
     return () => clearTimeout(saveTimeout);
   }, [project]);
 
-  // Load skills on mount
+  // Load skills and reference URLs on mount
   useEffect(() => {
     setAvailableSkills(loadSkillsFromStorage());
+    setReferenceUrls(loadReferenceUrls());
   }, []);
 
   const stats = useMemo(() => {
@@ -229,13 +265,53 @@ export default function BulkResponsesPage() {
         tags: skill.tags,
       }));
 
+      // If no skills match, fetch reference URLs and documents as fallback
+      let fallbackContent: { title: string; url: string; content: string }[] | undefined;
+      if (relevantSkills.length === 0) {
+        const fallbackItems: { title: string; url: string; content: string }[] = [];
+
+        // Fetch reference URLs
+        if (referenceUrls.length > 0) {
+          const fetched = await fetchMultipleUrls(referenceUrls);
+          fetched
+            .filter((f) => !f.error && f.content.trim().length > 0)
+            .forEach((f) => fallbackItems.push({ title: f.title, url: f.url, content: f.content }));
+        }
+
+        // Fetch documents from database
+        try {
+          const docsResponse = await fetch("/api/documents/content");
+          if (docsResponse.ok) {
+            const docsData = await docsResponse.json();
+            if (docsData.documents && Array.isArray(docsData.documents)) {
+              docsData.documents.forEach((doc: { title: string; filename: string; content: string }) => {
+                if (doc.content?.trim()) {
+                  fallbackItems.push({
+                    title: doc.title,
+                    url: `document://${doc.filename}`,
+                    content: doc.content,
+                  });
+                }
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to fetch documents for fallback:", e);
+        }
+
+        if (fallbackItems.length > 0) {
+          fallbackContent = fallbackItems;
+        }
+      }
+
       const response = await fetch("/api/questions/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: row.question.trim(),
           prompt: promptText,
-          skills: skillsPayload
+          skills: skillsPayload,
+          fallbackContent,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -254,6 +330,7 @@ export default function BulkResponsesPage() {
         inference: parsed.inference,
         remarks: parsed.remarks,
         usedSkills: relevantSkills,
+        usedFallback: data.usedFallback || false,
         showRecommendation: true,
         status: "completed",
         error: undefined,
@@ -898,7 +975,7 @@ export default function BulkResponsesPage() {
                             marginTop: "2px",
                             whiteSpace: "pre-wrap"
                           }}>
-                            {row.sources}
+                            {renderTextWithLinks(row.sources)}
                           </div>
                         </div>
                       )}

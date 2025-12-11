@@ -91,11 +91,27 @@ const styles = {
 
 type StatusFilter = "all" | "active" | "inactive";
 
+type UpdateSuggestion = {
+  action: "add" | "modify" | "remove";
+  section: string;
+  description: string;
+  content: string;
+};
+
+type UpdateResponse = {
+  title: string;
+  tags: string[];
+  suggestions: UpdateSuggestion[];
+  summary: string;
+};
+
 type SkillRefreshState = {
   sourceLinks: string;
   isRefreshing: boolean;
   error: string | null;
   draft?: SkillDraft;
+  updates?: UpdateResponse; // New: incremental update suggestions
+  selectedSuggestions?: Set<number>; // Which suggestions are selected to apply
   isInputVisible: boolean;
 };
 
@@ -104,6 +120,8 @@ const createRefreshState = (): SkillRefreshState => ({
   isRefreshing: false,
   error: null,
   draft: undefined,
+  updates: undefined,
+  selectedSuggestions: undefined,
   isInputVisible: false,
 });
 
@@ -261,6 +279,9 @@ export default function KnowledgeLibraryPage() {
 
   const handleRefreshSkill = async (skillId: string) => {
     const state = getRefreshState(skillId);
+    const skill = skills.find((s) => s.id === skillId);
+    if (!skill) return;
+
     const urls = state.sourceLinks
       .split("\n")
       .map((entry) => entry.trim())
@@ -273,23 +294,41 @@ export default function KnowledgeLibraryPage() {
       return;
     }
 
-    mergeRefreshState(skillId, { isRefreshing: true, error: null });
+    mergeRefreshState(skillId, { isRefreshing: true, error: null, updates: undefined, draft: undefined });
 
     try {
       const response = await fetch("/api/skills/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sourceText: urls.join("\n\n"),
           sourceUrls: urls,
           prompt: promptText,
+          // Send existing skill for incremental update mode
+          existingSkill: {
+            title: skill.title,
+            content: skill.content,
+            tags: skill.tags,
+          },
         }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload?.draft) {
+      if (!response.ok) {
         throw new Error(payload?.error || "Unable to generate suggested updates.");
       }
-      mergeRefreshState(skillId, { draft: payload.draft, isRefreshing: false });
+
+      // Check if we got incremental updates or a full draft
+      if (payload.updateMode && payload.updates) {
+        const allIndices = new Set<number>(payload.updates.suggestions.map((_: UpdateSuggestion, i: number) => i));
+        mergeRefreshState(skillId, {
+          updates: payload.updates,
+          selectedSuggestions: allIndices,
+          isRefreshing: false,
+        });
+      } else if (payload.draft) {
+        mergeRefreshState(skillId, { draft: payload.draft, isRefreshing: false });
+      } else {
+        throw new Error("Unable to generate suggested updates.");
+      }
     } catch (error) {
       mergeRefreshState(skillId, {
         isRefreshing: false,
@@ -300,41 +339,51 @@ export default function KnowledgeLibraryPage() {
 
 const handleApplySuggestion = (skillId: string) => {
   const state = getRefreshState(skillId);
-  if (!state.draft) {
-    return;
-  }
-
-  const draft = state.draft; // Extract to ensure TypeScript knows it's defined
   const urls = state.sourceLinks
-      .split("\n")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
+    .split("\n")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+  // Handle incremental update mode
+  if (state.updates && state.selectedSuggestions) {
+    const selectedIndices = state.selectedSuggestions;
+    if (selectedIndices.size === 0) return;
 
     setSkills((prev) => {
       const updated = prev.map((skill) => {
-        if (skill.id !== skillId) {
-          return skill;
-        }
+        if (skill.id !== skillId) return skill;
+
         const now = new Date().toISOString();
-        const nextInformation =
-          draft.sourceMapping && draft.sourceMapping.length > 0
-            ? {
-                responseTemplate: undefined,
-                sources: draft.sourceMapping,
-              }
-            : skill.information;
+        let newContent = skill.content;
+
+        // Apply selected suggestions
+        state.updates!.suggestions.forEach((suggestion, index) => {
+          if (!selectedIndices.has(index)) return;
+
+          if (suggestion.action === "add") {
+            // Add new content at the end
+            newContent = newContent.trim() + "\n\n" + suggestion.content;
+          } else if (suggestion.action === "modify") {
+            // For modify, append the new content (user can manually merge)
+            // A more sophisticated approach would try to find and replace sections
+            newContent = newContent.trim() + "\n\n" + suggestion.content;
+          }
+          // For "remove", we'd need more sophisticated logic - skip for now
+        });
+
+        // Merge tags
+        const existingTags = new Set(skill.tags);
+        const newTags = [...skill.tags];
+        state.updates!.tags.forEach((tag) => {
+          if (!existingTags.has(tag)) {
+            newTags.push(tag);
+          }
+        });
 
         return {
           ...skill,
-          tags:
-            Array.isArray(draft.tags) && draft.tags.length > 0
-              ? draft.tags
-              : skill.tags,
-          content:
-            typeof draft.content === "string" && draft.content.trim().length > 0
-              ? draft.content
-              : skill.content,
-          information: nextInformation,
+          content: newContent,
+          tags: newTags,
           lastRefreshedAt: now,
           lastSourceLink: urls[0] ?? skill.lastSourceLink,
         };
@@ -343,16 +392,78 @@ const handleApplySuggestion = (skillId: string) => {
       return updated;
     });
 
+    mergeRefreshState(skillId, {
+      updates: undefined,
+      selectedSuggestions: undefined,
+      error: null,
+      sourceLinks: "",
+      isInputVisible: false,
+    });
+    return;
+  }
+
+  // Legacy: handle full draft mode
+  if (!state.draft) {
+    return;
+  }
+
+  const draft = state.draft;
+
+  setSkills((prev) => {
+    const updated = prev.map((skill) => {
+      if (skill.id !== skillId) {
+        return skill;
+      }
+      const now = new Date().toISOString();
+      const nextInformation =
+        draft.sourceMapping && draft.sourceMapping.length > 0
+          ? {
+              responseTemplate: undefined,
+              sources: draft.sourceMapping,
+            }
+          : skill.information;
+
+      return {
+        ...skill,
+        tags:
+          Array.isArray(draft.tags) && draft.tags.length > 0
+            ? draft.tags
+            : skill.tags,
+        content:
+          typeof draft.content === "string" && draft.content.trim().length > 0
+            ? draft.content
+            : skill.content,
+        information: nextInformation,
+        lastRefreshedAt: now,
+        lastSourceLink: urls[0] ?? skill.lastSourceLink,
+      };
+    });
+    saveSkillsToStorage(updated);
+    return updated;
+  });
+
   mergeRefreshState(skillId, {
     draft: undefined,
     error: null,
     sourceLinks: "",
     isInputVisible: false,
   });
-  };
+};
 
   const handleDismissSuggestion = (skillId: string) => {
-    mergeRefreshState(skillId, { draft: undefined });
+    mergeRefreshState(skillId, { draft: undefined, updates: undefined, selectedSuggestions: undefined });
+  };
+
+  const toggleSuggestionSelection = (skillId: string, suggestionIndex: number) => {
+    const state = getRefreshState(skillId);
+    const current = state.selectedSuggestions ?? new Set<number>();
+    const newSet = new Set(current);
+    if (newSet.has(suggestionIndex)) {
+      newSet.delete(suggestionIndex);
+    } else {
+      newSet.add(suggestionIndex);
+    }
+    mergeRefreshState(skillId, { selectedSuggestions: newSet });
   };
 
   const filtered = useMemo(() => {
@@ -671,6 +782,155 @@ const handleApplySuggestion = (skillId: string) => {
                   </button>
                 )}
 
+                {/* New: Incremental update suggestions (GitHub-style) */}
+                {refreshState.updates && (
+                  <div style={{ marginTop: "16px" }}>
+                    <h4 style={{ marginBottom: "4px", color: "#0369a1" }}>
+                      Suggested Changes ({refreshState.updates.suggestions.length})
+                    </h4>
+                    <p style={{ color: "#64748b", marginTop: 0, marginBottom: "12px" }}>
+                      {refreshState.updates.summary}
+                    </p>
+
+                    {refreshState.updates.tags.length > 0 && (
+                      <div style={{ marginBottom: "12px" }}>
+                        <strong style={{ fontSize: "13px" }}>New tags to add:</strong>{" "}
+                        {refreshState.updates.tags
+                          .filter((t) => !skill.tags.includes(t))
+                          .map((tag) => (
+                            <span
+                              key={tag}
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                marginLeft: "6px",
+                                backgroundColor: "#dcfce7",
+                                color: "#166534",
+                                borderRadius: "4px",
+                                fontSize: "12px",
+                              }}
+                            >
+                              + {tag}
+                            </span>
+                          ))}
+                      </div>
+                    )}
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {refreshState.updates.suggestions.map((suggestion, idx) => {
+                        const isSelected = refreshState.selectedSuggestions?.has(idx) ?? false;
+                        return (
+                          <div
+                            key={`${skill.id}-suggestion-${idx}`}
+                            style={{
+                              border: `2px solid ${isSelected ? (suggestion.action === "add" ? "#86efac" : suggestion.action === "modify" ? "#fcd34d" : "#fca5a5") : "#e2e8f0"}`,
+                              borderRadius: "8px",
+                              padding: "12px",
+                              backgroundColor: isSelected
+                                ? suggestion.action === "add"
+                                  ? "#f0fdf4"
+                                  : suggestion.action === "modify"
+                                    ? "#fefce8"
+                                    : "#fef2f2"
+                                : "#fff",
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => toggleSuggestionSelection(skill.id, idx)}
+                                style={{ width: "18px", height: "18px", marginTop: "2px", cursor: "pointer" }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                                  <span
+                                    style={{
+                                      padding: "2px 8px",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      textTransform: "uppercase",
+                                      backgroundColor:
+                                        suggestion.action === "add"
+                                          ? "#dcfce7"
+                                          : suggestion.action === "modify"
+                                            ? "#fef3c7"
+                                            : "#fee2e2",
+                                      color:
+                                        suggestion.action === "add"
+                                          ? "#166534"
+                                          : suggestion.action === "modify"
+                                            ? "#92400e"
+                                            : "#991b1b",
+                                    }}
+                                  >
+                                    {suggestion.action}
+                                  </span>
+                                  <span style={{ fontWeight: 600, fontSize: "13px" }}>{suggestion.section}</span>
+                                </div>
+                                <p style={{ color: "#475569", margin: "0 0 8px 0", fontSize: "13px" }}>
+                                  {suggestion.description}
+                                </p>
+                                <pre
+                                  style={{
+                                    backgroundColor: "#f8fafc",
+                                    padding: "10px",
+                                    borderRadius: "6px",
+                                    fontSize: "12px",
+                                    whiteSpace: "pre-wrap",
+                                    margin: 0,
+                                    maxHeight: "200px",
+                                    overflowY: "auto",
+                                    border: "1px solid #e2e8f0",
+                                  }}
+                                >
+                                  {suggestion.content}
+                                </pre>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleApplySuggestion(skill.id)}
+                        disabled={(refreshState.selectedSuggestions?.size ?? 0) === 0}
+                        style={{
+                          padding: "10px 16px",
+                          borderRadius: "6px",
+                          border: "none",
+                          backgroundColor: (refreshState.selectedSuggestions?.size ?? 0) === 0 ? "#cbd5e1" : "#22c55e",
+                          color: "#fff",
+                          fontWeight: 600,
+                          cursor: (refreshState.selectedSuggestions?.size ?? 0) === 0 ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Apply {refreshState.selectedSuggestions?.size ?? 0} selected
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDismissSuggestion(skill.id)}
+                        style={{
+                          padding: "10px 16px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5f5",
+                          backgroundColor: "#fff",
+                          color: "#0f172a",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Legacy: Full draft mode (fallback) */}
                 {refreshState.draft && (
                   <div style={{ marginTop: "16px" }}>
                     <h4 style={{ marginBottom: "4px" }}>Review suggested updates</h4>

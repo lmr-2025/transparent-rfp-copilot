@@ -23,13 +23,32 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     remarks: [],
   };
 
-  let currentSection: "confidence" | "sources" | "reasoning" | "inference" | "remarks" | null = null;
+  let currentSection: "answer" | "confidence" | "sources" | "reasoning" | "inference" | "remarks" | null = null;
   let responseBody = "";
   const responseLinesBeforeFirstSection: string[] = [];
+  const answerLines: string[] = [];
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
     const lineLower = line.toLowerCase();
+
+    // Check for Answer: section header
+    if (
+      lineLower.startsWith("answer:") ||
+      lineLower.startsWith("**answer:**") ||
+      lineLower === "answer" ||
+      lineLower === "**answer**"
+    ) {
+      currentSection = "answer";
+      const colonIndex = line.indexOf(":");
+      if (colonIndex !== -1) {
+        const rest = line.substring(colonIndex + 1).trim();
+        if (rest.length > 0) {
+          answerLines.push(rest);
+        }
+      }
+      continue;
+    }
 
     if (
       lineLower.startsWith("confidence:") ||
@@ -116,14 +135,18 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       continue;
     }
 
-    if (currentSection) {
+    if (currentSection === "answer") {
+      answerLines.push(rawLine);
+    } else if (currentSection) {
       sectionBuckets[currentSection].push(rawLine);
     } else {
       responseLinesBeforeFirstSection.push(rawLine);
     }
   }
 
-  responseBody = responseLinesBeforeFirstSection.join("\n").trim();
+  // Use explicit Answer section if found, otherwise fall back to pre-section content
+  const answerContent = answerLines.join("\n").trim();
+  responseBody = answerContent || responseLinesBeforeFirstSection.join("\n").trim();
   return {
     response: responseBody || answer.trim(),
     confidence: sectionBuckets.confidence.join("\n"),

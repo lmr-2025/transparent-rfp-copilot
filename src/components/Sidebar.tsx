@@ -9,7 +9,10 @@ const navItems = [
     section: "Knowledge",
     items: [
       { href: "/knowledge", label: "Build Skills" },
+      { href: "/knowledge/import", label: "Import from RFPs" },
       { href: "/knowledge/library", label: "Knowledge Library" },
+      { href: "/knowledge/documents", label: "Documents" },
+      { href: "/knowledge/urls", label: "Reference URLs" },
     ],
   },
   {

@@ -152,6 +152,11 @@ function transformProjectToDb(project: BulkProject) {
     customerName: project.customerName,
     notes: project.notes,
     status: project.status,
+    // Review workflow fields
+    reviewRequestedAt: project.reviewRequestedAt,
+    reviewRequestedBy: project.reviewRequestedBy,
+    reviewedAt: project.reviewedAt,
+    reviewedBy: project.reviewedBy,
     rows: project.rows.map((row) => ({
       rowNumber: row.rowNumber,
       question: row.question,

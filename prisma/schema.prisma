@@ -120,3 +120,16 @@ enum RowStatus {
   COMPLETED
   ERROR
 }
+
+model KnowledgeDocument {
+  id          String   @id @default(uuid())
+  title       String
+  filename    String
+  fileType    String   // pdf, doc, docx, txt
+  content     String   @db.Text // Extracted text content
+  fileSize    Int      // bytes
+  uploadedAt  DateTime @default(now())
+  description String?  @db.Text
+
+  @@index([uploadedAt])
+}

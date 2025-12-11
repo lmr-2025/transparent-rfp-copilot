@@ -11,6 +11,36 @@ import SkillUpdateBanner from "@/components/SkillUpdateBanner";
 import SkillRecommendation from "@/components/SkillRecommendation";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 
+// Helper to render text with clickable URLs
+function renderTextWithLinks(text: string): React.ReactNode {
+  if (!text) return null;
+
+  const urlRegex = /(https?:\/\/[^\s,\n)>\]]+)/gi;
+  const parts = text.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      urlRegex.lastIndex = 0;
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            color: "#2563eb",
+            textDecoration: "underline",
+            wordBreak: "break-all"
+          }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return part;
+  });
+}
+
 const styles = {
   container: {
     maxWidth: "860px",
@@ -193,13 +223,19 @@ export default function QuestionsPage() {
                 <label style={styles.label} htmlFor="questionSources">
                   Sources
                 </label>
-                <textarea
+                <div
                   id="questionSources"
-                  value={questionSources}
-                  readOnly
-                  style={{ ...styles.input, minHeight: "90px", resize: "vertical" }}
-                  placeholder="Source links or citations will appear here..."
-                />
+                  style={{
+                    ...styles.input,
+                    minHeight: "90px",
+                    backgroundColor: "#fff",
+                    whiteSpace: "pre-wrap",
+                    overflowY: "auto",
+                    color: questionSources ? "#0f172a" : "#9ca3af"
+                  }}
+                >
+                  {questionSources ? renderTextWithLinks(questionSources) : "Source links or citations will appear here..."}
+                </div>
               </div>
               <div>
                 <label style={styles.label} htmlFor="questionRemarks">
