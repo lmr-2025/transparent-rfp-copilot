@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
+import { SkillCategory } from "@/types/skill";
+import { getCategoryNames } from "@/lib/categoryStorage";
 
 type ExistingSkillInfo = {
   id: string;
   title: string;
+  category?: SkillCategory;
   tags: string[];
   contentPreview: string; // First ~500 chars to keep prompt small
   sourceUrls?: string[]; // URLs already used to build this skill
@@ -22,10 +25,12 @@ type SkillSuggestion = {
   existingSkillTitle?: string;
   // For create_new or split_topics
   suggestedTitle?: string;
+  suggestedCategory?: SkillCategory;
   suggestedTags?: string[];
   // For split_topics - multiple skills to create
   splitSuggestions?: {
     title: string;
+    category: SkillCategory;
     description: string;
     relevantUrls: string[];
   }[];
@@ -170,7 +175,7 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 async function analyzeContent(
   sourceContent: string,
   sourceUrls: string[],
-  existingSkills: { id: string; title: string; tags: string[]; contentPreview: string }[]
+  existingSkills: { id: string; title: string; category?: SkillCategory; tags: string[]; contentPreview: string }[]
 ): Promise<AnalyzeResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -180,23 +185,37 @@ async function analyzeContent(
   const anthropic = new Anthropic({ apiKey });
 
   const skillsSummary = existingSkills.length > 0
-    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
+    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || "Uncategorized"}\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
     : "No existing skills in the knowledge base.";
 
-  const systemPrompt = `You are a knowledge management expert helping organize security documentation into focused, topic-specific skills.
+  const categoriesList = getCategoryNames().join(", ");
 
-Your task is to analyze new source material and decide how it should be organized:
+  const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
+
+Your task is to analyze new source material and decide how it should be organized.
+
+GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.
 
 PRINCIPLES:
-1. Skills should be FOCUSED on a single topic area (like "Data Encryption", "Access Control", "Incident Response")
-2. Avoid creating overly broad skills that cover multiple unrelated topics
-3. If content matches an existing skill's topic, UPDATE that skill rather than creating duplicates
-4. If content covers multiple distinct topics, suggest SPLITTING into separate skills
+1. Skills should cover BROAD CAPABILITY AREAS (like "Security & Compliance", "Data Platform", "Integrations & APIs", "Monitoring & Alerting")
+2. STRONGLY PREFER updating existing skills over creating new ones
+3. Only create a new skill if the content is genuinely unrelated to ALL existing skills
+4. Think of skills like chapters in a book, not individual pages
 
 DECISION TREE:
-1. First, check if the content is clearly about ONE topic that matches an existing skill → UPDATE_EXISTING
-2. If it's ONE topic but no existing skill matches → CREATE_NEW
-3. If the content covers MULTIPLE distinct topics → SPLIT_TOPICS (suggest 2-4 focused skills)
+1. First, look for ANY existing skill that could reasonably contain this content → UPDATE_EXISTING
+2. Only if no existing skill is even remotely related → CREATE_NEW
+3. RARELY use split_topics - only if content covers 2+ completely unrelated domains
+
+CONSOLIDATION BIAS:
+- When in doubt, UPDATE an existing skill
+- A skill about "Security" can absorb content about encryption, access control, compliance, etc.
+- A skill about "Integrations" can absorb content about APIs, webhooks, SSO, authentication, etc.
+- A skill about "Data Platform" can absorb content about pipelines, warehouses, queries, etc.
+
+CATEGORIES:
+Every skill must belong to exactly one category. Available categories:
+${categoriesList}
 
 OUTPUT FORMAT:
 Return a JSON object:
@@ -209,18 +228,15 @@ Return a JSON object:
     "existingSkillTitle": "title of the skill",
 
     // For create_new:
-    "suggestedTitle": "Concise, specific title",
+    "suggestedTitle": "Broad capability area title",
+    "suggestedCategory": "One of the categories above",
     "suggestedTags": ["relevant", "tags"],
 
-    // For split_topics:
+    // For split_topics (use rarely):
     "splitSuggestions": [
       {
-        "title": "First Topic Skill",
-        "description": "What this skill would cover",
-        "relevantUrls": ["urls that relate to this topic"]
-      },
-      {
-        "title": "Second Topic Skill",
+        "title": "First Capability Area",
+        "category": "One of the categories above",
         "description": "What this skill would cover",
         "relevantUrls": ["urls that relate to this topic"]
       }
@@ -231,11 +247,10 @@ Return a JSON object:
   "sourcePreview": "2-3 sentence summary of what the source material contains"
 }
 
-GUIDELINES:
-- Be specific with titles (not "Security Policy" but "Data Classification Policy" or "Network Security Controls")
-- Consider semantic overlap, not just keyword matching
-- If updating existing, the content should genuinely expand/update that skill's topic
-- For splits, each resulting skill should be independently useful`;
+TITLE GUIDELINES:
+- Use broad titles: "Security & Compliance", "Monitoring & Observability", "Data Integration"
+- Avoid narrow titles: "Password Policy", "Alert Thresholds", "Webhook Setup"
+- Think: "What chapter of the docs would this belong in?"`;
 
   const userPrompt = `EXISTING SKILLS IN KNOWLEDGE BASE:
 ${skillsSummary}

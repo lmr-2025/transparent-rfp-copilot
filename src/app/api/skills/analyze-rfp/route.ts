@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
+import { SkillCategory } from "@/types/skill";
+import { getCategoryNames } from "@/lib/categoryStorage";
 
 type RFPEntry = {
   question: string;
@@ -10,6 +12,7 @@ type RFPEntry = {
 type ExistingSkill = {
   id: string;
   title: string;
+  category?: SkillCategory;
   tags: string[];
   content: string;
 };
@@ -18,6 +21,7 @@ type SkillSuggestion = {
   type: "update" | "new";
   skillId?: string;
   skillTitle: string;
+  category?: SkillCategory;
   currentContent?: string;
   suggestedAdditions: string;
   relevantQA: RFPEntry[];
@@ -53,8 +57,10 @@ export async function POST(request: NextRequest) {
 
     // Build the prompt
     const skillsSummary = existingSkills.length > 0
-      ? existingSkills.map((s, i) => `${i + 1}. "${s.title}" (ID: ${s.id})\n   Tags: ${s.tags.join(", ") || "none"}\n   Content preview: ${s.content.substring(0, 300)}...`).join("\n\n")
+      ? existingSkills.map((s, i) => `${i + 1}. "${s.title}" (ID: ${s.id})\n   Category: ${s.category || "Uncategorized"}\n   Tags: ${s.tags.join(", ") || "none"}\n   Content preview: ${s.content.substring(0, 300)}...`).join("\n\n")
       : "No existing skills.";
+
+    const categoriesList = getCategoryNames().join(", ");
 
     const rfpSummary = rfpEntries.map((e, i) =>
       `[${i + 1}] Q: ${e.question}\nA: ${e.answer}`
@@ -64,12 +70,24 @@ export async function POST(request: NextRequest) {
 
 Your task is to analyze Q&A pairs from completed RFPs and suggest how to incorporate this knowledge into an existing skill library.
 
-IMPORTANT PRINCIPLES:
-1. Skills should be topic-focused (e.g., "Access Management", "Encryption", "Incident Response")
-2. Avoid redundancy - consolidate related information into existing skills when possible
-3. Each skill should contain actionable, reusable knowledge
-4. New skills should only be created for genuinely new topics not covered by existing skills
+GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.
+
+PRINCIPLES:
+1. Skills should cover BROAD CAPABILITY AREAS (like "Security & Compliance", "Data Platform", "Integrations & APIs", "Monitoring & Alerting")
+2. STRONGLY PREFER updating existing skills over creating new ones
+3. Only create a new skill if the content is genuinely unrelated to ALL existing skills
+4. Think of skills like chapters in a book, not individual pages
 5. When updating skills, add NEW information only - don't duplicate what's already there
+
+CONSOLIDATION BIAS:
+- When in doubt, UPDATE an existing skill
+- A skill about "Security" can absorb content about encryption, access control, compliance, etc.
+- A skill about "Integrations" can absorb content about APIs, webhooks, SSO, authentication, etc.
+- A skill about "Data Platform" can absorb content about pipelines, warehouses, queries, etc.
+
+CATEGORIES:
+Every skill must belong to exactly one category. Available categories:
+${categoriesList}
 
 OUTPUT FORMAT:
 You MUST respond with valid JSON in this exact structure:
@@ -79,6 +97,7 @@ You MUST respond with valid JSON in this exact structure:
       "type": "update" or "new",
       "skillId": "existing skill ID if type=update, omit if type=new",
       "skillTitle": "title of skill to update or create",
+      "category": "One of the categories above (required for new skills)",
       "suggestedAdditions": "the actual content to add to the skill - should be well-formatted, factual statements extracted from the RFP answers",
       "relevantQAIndices": [array of Q&A indices that informed this suggestion],
       "tags": ["relevant", "tags"]
@@ -93,7 +112,12 @@ GUIDELINES FOR SUGGESTED ADDITIONS:
 - Use bullet points for lists
 - Include specific details (tools, timeframes, processes)
 - Remove any customer-specific context
-- Make it reusable for future questionnaires`;
+- Make it reusable for future questionnaires
+
+TITLE GUIDELINES FOR NEW SKILLS:
+- Use broad titles: "Security & Compliance", "Monitoring & Observability", "Data Integration"
+- Avoid narrow titles: "Password Policy", "Alert Thresholds", "Webhook Setup"
+- Think: "What chapter of the docs would this belong in?"`;
 
     const userPrompt = `EXISTING SKILLS:
 ${skillsSummary}

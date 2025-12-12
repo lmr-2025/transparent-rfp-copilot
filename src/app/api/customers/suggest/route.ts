@@ -10,6 +10,8 @@ import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerPr
 type SuggestRequestBody = {
   sourceUrls: string[];
   prompt?: string; // Optional custom prompt (uses default sections if not provided)
+  documentContent?: string; // Text content extracted from uploaded documents
+  documentNames?: string[]; // Names of uploaded documents
   existingProfile?: {
     name: string;
     overview: string;
@@ -26,6 +28,13 @@ type SuggestResponse = {
   updateMode?: boolean;
   hasChanges?: boolean;
   changeHighlights?: string[];
+  transparency?: {
+    systemPrompt: string;
+    userPrompt: string;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -40,15 +49,18 @@ export async function POST(request: NextRequest) {
     ? body.sourceUrls.map((url) => url.trim()).filter((url) => url.length > 0)
     : [];
 
-  if (sourceUrls.length === 0) {
+  const documentContent = body?.documentContent?.trim() || "";
+  const documentNames = body?.documentNames || [];
+
+  if (sourceUrls.length === 0 && !documentContent) {
     return NextResponse.json(
-      { error: "Provide at least one source URL." },
+      { error: "Provide at least one source URL or upload a document." },
       { status: 400 }
     );
   }
 
   try {
-    const sourceContent = await buildSourceMaterial(sourceUrls);
+    const sourceContent = await buildSourceMaterial(sourceUrls, documentContent);
 
     // Use provided prompt or build from default sections
     const promptText =
@@ -70,8 +82,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Create mode
-    const draft = await generateProfileDraft(sourceContent, sourceUrls, promptText);
-    return NextResponse.json({ draft, sourceUrls });
+    const result = await generateProfileDraft(sourceContent, sourceUrls, promptText, documentNames);
+    return NextResponse.json({ draft: result.draft, sourceUrls, transparency: result.transparency });
   } catch (error) {
     console.error("Failed to generate customer profile:", error);
     const message =
@@ -82,11 +94,23 @@ export async function POST(request: NextRequest) {
   }
 }
 
+type GenerateResult = {
+  draft: CustomerProfileDraft;
+  transparency: {
+    systemPrompt: string;
+    userPrompt: string;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  };
+};
+
 async function generateProfileDraft(
   sourceContent: string,
   sourceUrls: string[],
-  promptText: string
-): Promise<CustomerProfileDraft> {
+  promptText: string,
+  documentNames: string[] = []
+): Promise<GenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not configured");
@@ -94,10 +118,19 @@ async function generateProfileDraft(
 
   const anthropic = new Anthropic({ apiKey });
 
+  // Build source info
+  const sourceInfo = [];
+  if (sourceUrls.length > 0) {
+    sourceInfo.push(`Source URLs: ${sourceUrls.join(", ")}`);
+  }
+  if (documentNames.length > 0) {
+    sourceInfo.push(`Uploaded documents: ${documentNames.join(", ")}`);
+  }
+
   const userPrompt = `SOURCE MATERIAL:
 ${sourceContent}
 
-Source URLs: ${sourceUrls.join(", ")}
+${sourceInfo.join("\n")}
 
 ---
 
@@ -127,7 +160,16 @@ Return ONLY the JSON object.`;
     jsonText = lines.join("\n");
   }
 
-  return JSON.parse(jsonText) as CustomerProfileDraft;
+  return {
+    draft: JSON.parse(jsonText) as CustomerProfileDraft,
+    transparency: {
+      systemPrompt: promptText,
+      userPrompt,
+      model: CLAUDE_MODEL,
+      maxTokens: 4000,
+      temperature: 0.2,
+    },
+  };
 }
 
 async function generateProfileUpdate(
@@ -258,7 +300,7 @@ Return ONLY the JSON object.`;
   };
 }
 
-async function buildSourceMaterial(sourceUrls: string[]): Promise<string> {
+async function buildSourceMaterial(sourceUrls: string[], documentContent: string = ""): Promise<string> {
   const sections: string[] = [];
 
   for (const url of sourceUrls.slice(0, 10)) {
@@ -268,8 +310,13 @@ async function buildSourceMaterial(sourceUrls: string[]): Promise<string> {
     }
   }
 
+  // Add document content if provided
+  if (documentContent) {
+    sections.push(`=== UPLOADED DOCUMENTS ===\n\n${documentContent}`);
+  }
+
   if (sections.length === 0) {
-    throw new Error("Unable to load any content from the provided URLs.");
+    throw new Error("Unable to load any content from the provided URLs or documents.");
   }
 
   return sections.join("\n\n---\n\n").slice(0, 80000);

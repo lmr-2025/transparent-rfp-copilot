@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { SKILLS_STORAGE_KEY, loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
-import { Skill, SkillFact, SourceUrl, SkillOwner, SkillHistoryEntry } from "@/types/skill";
+import { Skill, SkillFact, SourceUrl, SkillOwner, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
+import { loadCategories, migrateSkillCategories } from "@/lib/categoryStorage";
 import SkillOwnerEditor from "@/components/SkillOwnerEditor";
 import SkillHistoryViewer from "@/components/SkillHistoryViewer";
 import { SkillDraft } from "@/lib/llm";
@@ -516,8 +517,10 @@ const createAnalysisState = (): LibraryAnalysisState => ({
 export default function KnowledgeLibraryPage() {
   // loadSkillsFromStorage automatically handles migration and persists changes
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
+  const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [expandedSkillId, setExpandedSkillId] = useState<string | null>(null);
@@ -906,6 +909,12 @@ const handleApplySuggestion = (skillId: string) => {
       if (statusFilter === "active" && !skill.isActive) return false;
       if (statusFilter === "inactive" && skill.isActive) return false;
 
+      // Filter by category (supports both old single category and new array)
+      if (categoryFilter !== "all") {
+        const skillCategories = migrateSkillCategories(skill);
+        if (!skillCategories.includes(categoryFilter)) return false;
+      }
+
       // Filter by owner
       if (ownerFilter !== "all") {
         if (ownerFilter === "unassigned") {
@@ -932,7 +941,7 @@ const handleApplySuggestion = (skillId: string) => {
         .toLowerCase();
       return haystack.includes(term);
     });
-  }, [skills, search, statusFilter, ownerFilter]);
+  }, [skills, search, statusFilter, categoryFilter, ownerFilter]);
 
   const stats = useMemo(() => {
     const total = skills.length;
@@ -1231,6 +1240,27 @@ const handleApplySuggestion = (skillId: string) => {
                 ))}
               </div>
             </div>
+            <div>
+              <label style={styles.label}>Filter by category</label>
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "6px",
+                  border: "1px solid #a5b4fc",
+                  backgroundColor: categoryFilter !== "all" ? "#e0e7ff" : "#fff",
+                  color: "#3730a3",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                }}
+              >
+                <option value="all">All categories</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.name}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
             {uniqueOwners.length > 0 && (
               <div>
                 <label style={styles.label}>Filter by owner</label>
@@ -1352,6 +1382,35 @@ const handleApplySuggestion = (skillId: string) => {
                   {skill.isActive ? "Active" : "Inactive"}
                 </span>
               </div>
+
+              {(() => {
+                const skillCategories = migrateSkillCategories(skill);
+                return skillCategories.length > 0 && (
+                  <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                    {skillCategories.slice(0, 2).map((cat) => (
+                      <span
+                        key={cat}
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: "4px",
+                          fontSize: "0.7rem",
+                          fontWeight: 500,
+                          backgroundColor: "#e0e7ff",
+                          color: "#3730a3",
+                        }}
+                      >
+                        {cat}
+                      </span>
+                    ))}
+                    {skillCategories.length > 2 && (
+                      <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                        +{skillCategories.length - 2}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
 
               {skill.tags.length > 0 && (
                 <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "4px" }}>

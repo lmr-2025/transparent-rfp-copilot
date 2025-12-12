@@ -10,8 +10,10 @@ const navItems = [
     section: "Knowledge Gremlin",
     items: [
       { href: "/knowledge", label: "Build Skills" },
+      { href: "/knowledge/bulk", label: "Bulk URL Import" },
       { href: "/knowledge/import", label: "Import from Docs" },
       { href: "/knowledge/library", label: "Library" },
+      { href: "/knowledge/categories", label: "Categories" },
       { href: "/knowledge/documents", label: "Documents" },
       { href: "/knowledge/urls", label: "Reference URLs" },
     ],
@@ -87,7 +89,7 @@ export default function Sidebar() {
           marginTop: "4px",
           marginBottom: 0,
         }}>
-          Knowledge-Powered AI Assistant
+          Transparent LLM Assistant
         </p>
       </div>
 

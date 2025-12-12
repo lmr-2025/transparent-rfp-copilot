@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
-import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
+import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
+import { loadCategories } from "@/lib/categoryStorage";
 import { defaultSkillSections, buildSkillPromptFromSections, EditableSkillSection } from "@/lib/promptSections";
 import { SKILL_PROMPT_SECTIONS_KEY } from "@/lib/promptStorage";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -50,6 +51,7 @@ type SkillDraft = {
 // Analysis result types
 type SplitSuggestion = {
   title: string;
+  category?: string;
   description: string;
   relevantUrls: string[];
 };
@@ -59,6 +61,7 @@ type SkillSuggestion = {
   existingSkillId?: string;
   existingSkillTitle?: string;
   suggestedTitle?: string;
+  suggestedCategory?: string;
   suggestedTags?: string[];
   splitSuggestions?: SplitSuggestion[];
   reason: string;
@@ -132,6 +135,8 @@ export default function KnowledgeUploadPage() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [generatedDraft, setGeneratedDraft] = useState<SkillDraft | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
   const [showPrompt, setShowPrompt] = useState(false);
   const [selectedSplitIndex, setSelectedSplitIndex] = useState<number | null>(null);
   // Track the URLs used for the current build (to store in skill)
@@ -188,6 +193,10 @@ export default function KnowledgeUploadPage() {
 
       const data = await response.json() as AnalysisResult;
       setAnalysisResult(data);
+      // Set suggested category if provided
+      if (data.suggestion.suggestedCategory) {
+        setSelectedCategories([data.suggestion.suggestedCategory]);
+      }
     } catch (error) {
       setBuildError(error instanceof Error ? error.message : "Failed to analyze URLs");
     } finally {
@@ -337,6 +346,7 @@ export default function KnowledgeUploadPage() {
     const newSkill: Skill = {
       id: crypto.randomUUID(),
       title: generatedDraft.title,
+      categories: selectedCategories.length > 0 ? selectedCategories : undefined,
       tags: generatedDraft.tags,
       content: generatedDraft.content,
       quickFacts: [],
@@ -349,6 +359,7 @@ export default function KnowledgeUploadPage() {
 
     setSkills((prev) => [newSkill, ...prev]);
     setGeneratedDraft(null);
+    setSelectedCategories([]);
     setUrlInput("");
     buildUrlsRef.current = [];
   };
@@ -810,6 +821,56 @@ export default function KnowledgeUploadPage() {
           <h3 style={{ marginTop: 0, color: "#15803d" }}>Generated Skill - Review & Save</h3>
           <div style={{ marginBottom: "16px" }}>
             <strong>Title:</strong> {generatedDraft.title}
+          </div>
+          <div style={{ marginBottom: "16px" }}>
+            <strong>Categories:</strong>
+            <div style={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: "8px",
+              marginTop: "8px",
+            }}>
+              {categories.map((cat) => {
+                const isSelected = selectedCategories.includes(cat.name);
+                return (
+                  <label
+                    key={cat.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "6px 12px",
+                      borderRadius: "6px",
+                      border: isSelected ? "1px solid #818cf8" : "1px solid #cbd5e1",
+                      backgroundColor: isSelected ? "#e0e7ff" : "#fff",
+                      color: isSelected ? "#3730a3" : "#475569",
+                      cursor: "pointer",
+                      fontSize: "13px",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedCategories([...selectedCategories, cat.name]);
+                        } else {
+                          setSelectedCategories(selectedCategories.filter(c => c !== cat.name));
+                        }
+                      }}
+                      style={{ margin: 0 }}
+                    />
+                    {cat.name}
+                  </label>
+                );
+              })}
+            </div>
+            {selectedCategories.length === 0 && (
+              <p style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px" }}>
+                Select at least one category (optional)
+              </p>
+            )}
           </div>
           <div style={{ marginBottom: "16px" }}>
             <strong>Tags:</strong> {generatedDraft.tags.join(", ") || "None"}

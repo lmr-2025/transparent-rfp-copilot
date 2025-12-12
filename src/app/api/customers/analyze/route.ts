@@ -13,6 +13,8 @@ type ExistingProfileInfo = {
 
 type AnalyzeRequestBody = {
   sourceUrls: string[];
+  documentContent?: string; // Text content extracted from uploaded documents
+  documentNames?: string[]; // Names of uploaded documents
 };
 
 type ProfileSuggestion = {
@@ -35,6 +37,13 @@ type AnalyzeResponse = {
     profileName: string;
     matchedUrls: string[];
   };
+  transparency?: {
+    systemPrompt: string;
+    userPrompt: string;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -49,9 +58,12 @@ export async function POST(request: NextRequest) {
     ? body.sourceUrls.map((url) => url.trim()).filter((url) => url.length > 0)
     : [];
 
-  if (sourceUrls.length === 0) {
+  const documentContent = body?.documentContent?.trim() || "";
+  const documentNames = body?.documentNames || [];
+
+  if (sourceUrls.length === 0 && !documentContent) {
     return NextResponse.json(
-      { error: "Provide at least one source URL." },
+      { error: "Provide at least one source URL or upload a document." },
       { status: 400 }
     );
   }
@@ -79,22 +91,36 @@ export async function POST(request: NextRequest) {
     }));
 
     // Check if any URLs are already used in existing profiles
-    const urlMatches = findUrlMatches(sourceUrls, profileInfos);
+    const urlMatches = sourceUrls.length > 0 ? findUrlMatches(sourceUrls, profileInfos) : null;
 
-    // Fetch URL content (limited)
-    const sourceContent = await fetchSourceContent(sourceUrls);
-    if (!sourceContent) {
+    // Fetch URL content (limited) - only if we have URLs
+    const urlContent = sourceUrls.length > 0 ? await fetchSourceContent(sourceUrls) : null;
+
+    // Combine URL content and document content
+    let combinedContent = "";
+    if (urlContent) {
+      combinedContent += urlContent;
+    }
+    if (documentContent) {
+      if (combinedContent) {
+        combinedContent += "\n\n---\n\n=== UPLOADED DOCUMENTS ===\n\n";
+      }
+      combinedContent += documentContent;
+    }
+
+    if (!combinedContent) {
       return NextResponse.json(
-        { error: "Could not fetch any content from the provided URLs." },
+        { error: "Could not fetch any content from the provided URLs or documents." },
         { status: 400 }
       );
     }
 
     // Analyze with LLM
     const analysis = await analyzeContent(
-      sourceContent,
+      combinedContent,
       sourceUrls,
-      profileInfos
+      profileInfos,
+      documentNames
     );
 
     // If we found URL matches, include that info and potentially override suggestion
@@ -187,7 +213,8 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 async function analyzeContent(
   sourceContent: string,
   sourceUrls: string[],
-  existingProfiles: ExistingProfileInfo[]
+  existingProfiles: ExistingProfileInfo[],
+  documentNames: string[] = []
 ): Promise<AnalyzeResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -240,13 +267,21 @@ MATCHING RULES:
 - Match on website domain
 - When in doubt, suggest update_existing to avoid duplicates`;
 
+  // Build source summary
+  const sourceSummary = [];
+  if (sourceUrls.length > 0) {
+    sourceSummary.push(`${sourceUrls.length} URL(s):\n${sourceUrls.join("\n")}`);
+  }
+  if (documentNames.length > 0) {
+    sourceSummary.push(`${documentNames.length} uploaded document(s):\n${documentNames.join("\n")}`);
+  }
+
   const userPrompt = `EXISTING CUSTOMER PROFILES:
 ${profilesSummary}
 
 ---
 
-NEW SOURCE MATERIAL FROM ${sourceUrls.length} URL(s):
-${sourceUrls.join("\n")}
+NEW SOURCE MATERIAL FROM ${sourceSummary.join("\n\n")}
 
 Content preview:
 ${sourceContent}
@@ -280,5 +315,17 @@ Return ONLY the JSON object.`;
     jsonText = lines.join("\n");
   }
 
-  return JSON.parse(jsonText) as AnalyzeResponse;
+  const parsed = JSON.parse(jsonText) as AnalyzeResponse;
+
+  // Add transparency data
+  return {
+    ...parsed,
+    transparency: {
+      systemPrompt,
+      userPrompt,
+      model: CLAUDE_MODEL,
+      maxTokens: 1500,
+      temperature: 0.1,
+    },
+  };
 }

@@ -109,7 +109,7 @@ async function generateDraftUpdate(
 
   const anthropic = new Anthropic({ apiKey });
 
-  const systemPrompt = `You are a knowledge management expert helping to update security documentation.
+  const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
 
 Your task is to review an existing skill document against new source material and decide if updates are needed.
 

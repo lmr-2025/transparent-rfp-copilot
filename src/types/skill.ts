@@ -8,6 +8,37 @@ export type SkillInformation = {
   sources?: string[]; // Deprecated - use sourceUrls instead
 };
 
+// Default categories - users can customize via the Categories page
+export const DEFAULT_SKILL_CATEGORIES = [
+  "Security & Compliance",
+  "Data Platform",
+  "Integrations & APIs",
+  "Monitoring & Observability",
+  "Infrastructure",
+  "Authentication & Access",
+  "Product Features",
+  "Pricing & Licensing",
+  "Support & SLAs",
+  "Company & Culture",
+  "Privacy & Data Handling",
+  "Development & DevOps",
+  "Documentation & Training",
+  "Marketing & Positioning",
+  "Other",
+] as const;
+
+// Category type for user-defined categories
+export type SkillCategoryItem = {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string; // Optional color for UI display
+  createdAt: string;
+};
+
+// Legacy type for backwards compatibility
+export type SkillCategory = string;
+
 export type SourceUrl = {
   url: string;
   addedAt: string;
@@ -29,6 +60,8 @@ export type SkillHistoryEntry = {
 export type Skill = {
   id: string;
   title: string;
+  categories?: string[]; // Broad capability areas this skill belongs to (can be multiple)
+  category?: SkillCategory; // Deprecated - use categories[] instead
   tags: string[];
   content: string;
   quickFacts: SkillFact[];

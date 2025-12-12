@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
 import { createProfile } from "@/lib/customerProfileApi";
 import {
@@ -12,6 +12,22 @@ import {
   CustomerProfileKeyFact,
   CustomerProfileSourceUrl,
 } from "@/types/customerProfile";
+import TransparencyModal from "@/components/TransparencyModal";
+import { CLAUDE_MODEL } from "@/lib/config";
+
+type UploadedDocument = {
+  name: string;
+  content: string;
+  size: number;
+};
+
+type TransparencyData = {
+  systemPrompt: string;
+  userPrompt: string;
+  model: string;
+  maxTokens: number;
+  temperature: number;
+};
 
 type AnalysisResult = {
   suggestion: {
@@ -28,6 +44,7 @@ type AnalysisResult = {
     profileName: string;
     matchedUrls: string[];
   };
+  transparency?: TransparencyData;
 };
 
 const styles = {
@@ -132,7 +149,100 @@ export default function CustomerProfileBuilderPage() {
   const [draft, setDraft] = useState<CustomerProfileDraft | null>(null);
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
 
-  // Step 1: Analyze URLs
+  // Document upload state
+  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Transparency state
+  const [analyzeTransparency, setAnalyzeTransparency] = useState<TransparencyData | null>(null);
+  const [buildTransparency, setBuildTransparency] = useState<TransparencyData | null>(null);
+  const [showTransparencyModal, setShowTransparencyModal] = useState<"analyze" | "build" | "preview" | null>(null);
+
+  // Get current prompt for preview
+  const getCurrentPrompt = () => {
+    const promptSections = loadCustomerProfileSections();
+    return buildCustomerProfilePromptFromSections(promptSections);
+  };
+
+  // Handle file upload
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setError(null);
+    setIsUploading(true);
+
+    const newDocs: UploadedDocument[] = [];
+
+    for (const file of Array.from(files)) {
+      const filename = file.name.toLowerCase();
+
+      // Check supported types
+      if (
+        !filename.endsWith(".pdf") &&
+        !filename.endsWith(".docx") &&
+        !filename.endsWith(".doc") &&
+        !filename.endsWith(".txt")
+      ) {
+        setError(`Unsupported file type: ${file.name}. Please upload PDF, DOC, DOCX, or TXT files.`);
+        continue;
+      }
+
+      try {
+        // Upload to document API to extract text
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("title", file.name);
+
+        const response = await fetch("/api/documents", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || `Failed to process ${file.name}`);
+        }
+
+        const data = await response.json();
+
+        // Fetch the full content
+        const contentResponse = await fetch(`/api/documents/${data.document.id}`);
+        if (contentResponse.ok) {
+          const contentData = await contentResponse.json();
+          newDocs.push({
+            name: file.name,
+            content: contentData.document.content,
+            size: file.size,
+          });
+
+          // Delete the temporary document from the database
+          await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
+      }
+    }
+
+    if (newDocs.length > 0) {
+      setUploadedDocs((prev) => [...prev, ...newDocs]);
+    }
+
+    setIsUploading(false);
+
+    // Clear the file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  // Remove an uploaded document
+  const removeDocument = (index: number) => {
+    setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  // Step 1: Analyze URLs and Documents
   const handleAnalyze = async () => {
     setError(null);
     setSuccessMessage(null);
@@ -144,29 +254,42 @@ export default function CustomerProfileBuilderPage() {
       .map((u) => u.trim())
       .filter((u) => u.length > 0);
 
-    if (urls.length === 0) {
-      setError("Please enter at least one URL");
+    if (urls.length === 0 && uploadedDocs.length === 0) {
+      setError("Please enter at least one URL or upload a document");
       return;
     }
 
     setIsAnalyzing(true);
     try {
+      // Combine document content for analysis
+      const documentContent = uploadedDocs.length > 0
+        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
+        : undefined;
+
       const response = await fetch("/api/customers/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrls: urls }),
+        body: JSON.stringify({
+          sourceUrls: urls,
+          documentContent,
+          documentNames: uploadedDocs.map((d) => d.name),
+        }),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Failed to analyze URLs");
+        throw new Error(data.error || "Failed to analyze sources");
       }
 
       const data = (await response.json()) as AnalysisResult;
       setAnalysisResult(data);
       setSourceUrls(urls);
+      // Store transparency data
+      if (data.transparency) {
+        setAnalyzeTransparency(data.transparency);
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to analyze URLs");
+      setError(e instanceof Error ? e.message : "Failed to analyze sources");
     } finally {
       setIsAnalyzing(false);
     }
@@ -181,12 +304,19 @@ export default function CustomerProfileBuilderPage() {
       const promptSections = loadCustomerProfileSections();
       const prompt = buildCustomerProfilePromptFromSections(promptSections);
 
+      // Combine document content for building
+      const documentContent = uploadedDocs.length > 0
+        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
+        : undefined;
+
       const response = await fetch("/api/customers/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sourceUrls,
           prompt,
+          documentContent,
+          documentNames: uploadedDocs.map((d) => d.name),
           ...(forUpdate && {
             existingProfile: {
               // Would need to fetch existing profile here for update mode
@@ -204,6 +334,10 @@ export default function CustomerProfileBuilderPage() {
       const data = await response.json();
       setDraft(data.draft);
       setAnalysisResult(null);
+      // Store transparency data
+      if (data.transparency) {
+        setBuildTransparency(data.transparency);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to build profile");
     } finally {
@@ -245,6 +379,7 @@ export default function CustomerProfileBuilderPage() {
       setDraft(null);
       setUrlInput("");
       setSourceUrls([]);
+      setUploadedDocs([]);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save profile");
     } finally {
@@ -306,36 +441,108 @@ export default function CustomerProfileBuilderPage() {
       {error && <div style={styles.error}>{error}</div>}
       {successMessage && <div style={styles.success}>{successMessage}</div>}
 
-      {/* Step 1: URL Input */}
+      {/* Step 1: URL and Document Input */}
       {!draft && (
         <div style={styles.card}>
           <h3 style={{ marginTop: 0, marginBottom: "12px" }}>
-            Enter Customer URLs
+            Add Customer Sources
           </h3>
           <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "12px" }}>
             Paste URLs to the customer&apos;s website, about page, press releases, or
             case studies. One URL per line.
           </p>
           <textarea
-            style={{ ...styles.textarea, minHeight: "120px" }}
+            style={{ ...styles.textarea, minHeight: "100px" }}
             placeholder="https://example.com/about&#10;https://example.com/press/funding-announcement&#10;https://example.com/customers/case-study"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            disabled={isAnalyzing || isBuilding}
+            disabled={isAnalyzing || isBuilding || isUploading}
           />
-          <div style={{ marginTop: "12px", display: "flex", gap: "8px" }}>
+
+          {/* Document Upload Section */}
+          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #e2e8f0" }}>
+            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "12px" }}>
+              Or upload documents (PDF, DOC, DOCX, TXT)
+            </p>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.doc,.docx,.txt"
+              multiple
+              onChange={handleFileUpload}
+              style={{ display: "none" }}
+              disabled={isAnalyzing || isBuilding || isUploading}
+            />
+
+            <button
+              style={{ ...styles.button, ...styles.secondaryButton }}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isAnalyzing || isBuilding || isUploading}
+            >
+              {isUploading ? "Processing..." : "Upload Documents"}
+            </button>
+
+            {/* Show uploaded documents */}
+            {uploadedDocs.length > 0 && (
+              <div style={{ marginTop: "12px" }}>
+                {uploadedDocs.map((doc, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "8px 12px",
+                      backgroundColor: "#f1f5f9",
+                      borderRadius: "6px",
+                      marginBottom: "6px",
+                    }}
+                  >
+                    <span style={{ fontSize: "14px", color: "#475569" }}>
+                      📄 {doc.name}{" "}
+                      <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                        ({Math.round(doc.size / 1024)} KB)
+                      </span>
+                    </span>
+                    <button
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "#94a3b8",
+                        fontSize: "16px",
+                        padding: "0 4px",
+                      }}
+                      onClick={() => removeDocument(idx)}
+                      disabled={isAnalyzing || isBuilding}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
             <button
               style={{ ...styles.button, ...styles.primaryButton }}
               onClick={handleAnalyze}
-              disabled={isAnalyzing || isBuilding || !urlInput.trim()}
+              disabled={isAnalyzing || isBuilding || isUploading || (!urlInput.trim() && uploadedDocs.length === 0)}
             >
-              {isAnalyzing ? (
-                <>
-                  Analyzing...
-                </>
-              ) : (
-                "Analyze URLs"
-              )}
+              {isAnalyzing ? "Analyzing..." : "Analyze Sources"}
+            </button>
+            <button
+              style={{
+                ...styles.button,
+                ...styles.secondaryButton,
+                fontSize: "12px",
+                padding: "6px 10px",
+              }}
+              onClick={() => setShowTransparencyModal("preview")}
+            >
+              View Prompt
             </button>
           </div>
         </div>
@@ -401,35 +608,50 @@ export default function CustomerProfileBuilderPage() {
             </p>
           </div>
 
-          <div style={{ display: "flex", gap: "8px" }}>
-            <button
-              style={{ ...styles.button, ...styles.primaryButton }}
-              onClick={() =>
-                handleBuild(
-                  analysisResult.suggestion.existingProfileId
-                    ? { profileId: analysisResult.suggestion.existingProfileId }
-                    : undefined
-                )
-              }
-              disabled={isBuilding}
-            >
-              {isBuilding ? (
-                <>
-                  Building...
-                </>
-              ) : analysisResult.suggestion.action === "create_new" ? (
-                "Build Profile"
-              ) : (
-                "Update Profile"
-              )}
-            </button>
-            <button
-              style={{ ...styles.button, ...styles.secondaryButton }}
-              onClick={() => setAnalysisResult(null)}
-              disabled={isBuilding}
-            >
-              Cancel
-            </button>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                style={{ ...styles.button, ...styles.primaryButton }}
+                onClick={() =>
+                  handleBuild(
+                    analysisResult.suggestion.existingProfileId
+                      ? { profileId: analysisResult.suggestion.existingProfileId }
+                      : undefined
+                  )
+                }
+                disabled={isBuilding}
+              >
+                {isBuilding ? (
+                  <>
+                    Building...
+                  </>
+                ) : analysisResult.suggestion.action === "create_new" ? (
+                  "Build Profile"
+                ) : (
+                  "Update Profile"
+                )}
+              </button>
+              <button
+                style={{ ...styles.button, ...styles.secondaryButton }}
+                onClick={() => setAnalysisResult(null)}
+                disabled={isBuilding}
+              >
+                Cancel
+              </button>
+            </div>
+            {analyzeTransparency && (
+              <button
+                style={{
+                  ...styles.button,
+                  ...styles.secondaryButton,
+                  fontSize: "12px",
+                  padding: "6px 10px",
+                }}
+                onClick={() => setShowTransparencyModal("analyze")}
+              >
+                View Prompt
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -437,9 +659,24 @@ export default function CustomerProfileBuilderPage() {
       {/* Step 3: Edit Draft */}
       {draft && (
         <div style={styles.card}>
-          <h3 style={{ marginTop: 0, marginBottom: "16px" }}>
-            Review & Edit Profile
-          </h3>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+            <h3 style={{ margin: 0 }}>
+              Review & Edit Profile
+            </h3>
+            {buildTransparency && (
+              <button
+                style={{
+                  ...styles.button,
+                  ...styles.secondaryButton,
+                  fontSize: "12px",
+                  padding: "6px 10px",
+                }}
+                onClick={() => setShowTransparencyModal("build")}
+              >
+                View Prompt
+              </button>
+            )}
+          </div>
 
           <label style={styles.label}>Company Name *</label>
           <input
@@ -566,6 +803,7 @@ export default function CustomerProfileBuilderPage() {
               onClick={() => {
                 setDraft(null);
                 setSourceUrls([]);
+                setUploadedDocs([]);
               }}
               disabled={isSaving}
             >
@@ -586,6 +824,65 @@ export default function CustomerProfileBuilderPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Transparency Modal */}
+      {showTransparencyModal === "analyze" && analyzeTransparency && (
+        <TransparencyModal
+          title="Analysis Prompt"
+          subtitle="The prompts used to analyze your sources and identify the customer"
+          headerColor="purple"
+          onClose={() => setShowTransparencyModal(null)}
+          configs={[
+            { label: "Model", value: analyzeTransparency.model, color: "purple" },
+            { label: "Max Tokens", value: analyzeTransparency.maxTokens, color: "blue" },
+            { label: "Temperature", value: analyzeTransparency.temperature, color: "yellow" },
+          ]}
+          systemPrompt={analyzeTransparency.systemPrompt}
+          systemPromptNote="This prompt instructs the AI on how to identify the customer and decide whether to create or update a profile."
+          userPrompt={analyzeTransparency.userPrompt}
+          userPromptLabel="User Prompt (with source content)"
+          userPromptNote="This includes your source URLs/documents and existing customer profiles for comparison."
+        />
+      )}
+
+      {showTransparencyModal === "build" && buildTransparency && (
+        <TransparencyModal
+          title="Profile Generation Prompt"
+          subtitle="The prompts used to extract and structure the customer profile"
+          headerColor="blue"
+          onClose={() => setShowTransparencyModal(null)}
+          configs={[
+            { label: "Model", value: buildTransparency.model, color: "purple" },
+            { label: "Max Tokens", value: buildTransparency.maxTokens, color: "blue" },
+            { label: "Temperature", value: buildTransparency.temperature, color: "yellow" },
+          ]}
+          systemPrompt={buildTransparency.systemPrompt}
+          systemPromptNote="This prompt defines the structure and content to extract for the customer profile."
+          userPrompt={buildTransparency.userPrompt}
+          userPromptLabel="User Prompt (with source material)"
+          userPromptNote="This includes all the source content from your URLs and documents."
+        />
+      )}
+
+      {showTransparencyModal === "preview" && (
+        <TransparencyModal
+          title="Profile Extraction Prompt"
+          subtitle="This is the system prompt that will be sent to the LLM when building a customer profile"
+          headerColor="purple"
+          onClose={() => setShowTransparencyModal(null)}
+          configs={[
+            { label: "Model", value: CLAUDE_MODEL, color: "purple" },
+            { label: "Max Tokens", value: 4000, color: "blue" },
+            { label: "Temperature", value: 0.2, color: "yellow" },
+          ]}
+          systemPrompt={getCurrentPrompt()}
+          systemPromptNote={
+            <>
+              This prompt can be customized in the <a href="/prompts" style={{ color: "#6366f1" }}>Prompts</a> page under &quot;Customer Profile Extraction&quot;.
+            </>
+          }
+        />
       )}
     </div>
   );
