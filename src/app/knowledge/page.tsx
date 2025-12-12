@@ -502,7 +502,7 @@ export default function KnowledgeUploadPage() {
                 <span style={{ fontSize: "16px" }}>⚠️</span>
                 <div>
                   <strong style={{ fontSize: "13px", color: "#854d0e" }}>
-                    URL already used in "{analysisResult.urlAlreadyUsed.skillTitle}"
+                    URL already used in &quot;{analysisResult.urlAlreadyUsed.skillTitle}&quot;
                   </strong>
                   <p style={{ margin: "4px 0 0 0", color: "#a16207", fontSize: "12px" }}>
                     {analysisResult.urlAlreadyUsed.matchedUrls.length === 1
@@ -541,7 +541,7 @@ export default function KnowledgeUploadPage() {
                   <strong style={{ color: "#92400e" }}>Suggested: Update existing skill</strong>
                 </div>
                 <p style={{ margin: "0 0 12px 0", color: "#78350f", fontSize: "14px" }}>
-                  This content looks related to <strong>"{analysisResult.suggestion.existingSkillTitle}"</strong>.
+                  This content looks related to <strong>&quot;{analysisResult.suggestion.existingSkillTitle}&quot;</strong>.
                 </p>
                 <p style={{ margin: "0 0 12px 0", color: "#92400e", fontSize: "13px" }}>
                   {analysisResult.suggestion.reason}
@@ -559,7 +559,7 @@ export default function KnowledgeUploadPage() {
                       cursor: "pointer",
                     }}
                   >
-                    Update "{analysisResult.suggestion.existingSkillTitle}"
+                    Update &quot;{analysisResult.suggestion.existingSkillTitle}&quot;
                   </button>
                   <button
                     onClick={handleSkipAnalysis}
@@ -604,7 +604,7 @@ export default function KnowledgeUploadPage() {
                   <strong style={{ color: "#166534" }}>Ready to create new skill</strong>
                 </div>
                 <p style={{ margin: "0 0 8px 0", color: "#15803d", fontSize: "14px" }}>
-                  Suggested title: <strong>"{analysisResult.suggestion.suggestedTitle}"</strong>
+                  Suggested title: <strong>&quot;{analysisResult.suggestion.suggestedTitle}&quot;</strong>
                 </p>
                 <p style={{ margin: "0 0 12px 0", color: "#166534", fontSize: "13px" }}>
                   {analysisResult.suggestion.reason}

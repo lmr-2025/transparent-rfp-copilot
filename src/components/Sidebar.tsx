@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 
@@ -152,12 +153,12 @@ export default function Sidebar() {
               marginBottom: "12px",
             }}>
               {session.user.image && (
-                <img
+                <Image
                   src={session.user.image}
                   alt=""
+                  width={32}
+                  height={32}
                   style={{
-                    width: "32px",
-                    height: "32px",
                     borderRadius: "50%",
                   }}
                 />

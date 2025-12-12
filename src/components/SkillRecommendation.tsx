@@ -9,7 +9,6 @@ type SkillReference = string | { id: string; title: string } | Skill;
 type SkillRecommendationProps = {
   usedSkills: SkillReference[];
   question: string;
-  allSkills: Skill[]; // Reserved for future use (e.g., suggesting related skills)
   onDismiss?: () => void;
 };
 
@@ -21,7 +20,6 @@ function isFullSkill(skill: SkillReference): skill is Skill {
 export default function SkillRecommendation({
   usedSkills,
   question,
-  allSkills: _allSkills,
   onDismiss,
 }: SkillRecommendationProps) {
   // Filter to only full Skill objects that can be evaluated for age

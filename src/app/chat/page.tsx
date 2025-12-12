@@ -269,7 +269,7 @@ export default function ChatPage() {
   const [showTransparency, setShowTransparency] = useState(false);
   const [selectedTransparency, setSelectedTransparency] = useState<TransparencyData | null>(null);
   const [showPreviewPrompt, setShowPreviewPrompt] = useState(false);
-  const [chatSections, setChatSections] = useState<EditableChatSection[]>(() => loadChatSections());
+  const [chatSections] = useState<EditableChatSection[]>(() => loadChatSections());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -402,14 +402,14 @@ export default function ChatPage() {
     setMessages([]);
   };
 
-  const usePrompt = (prompt: ChatPrompt) => {
+  const applyPrompt = (prompt: ChatPrompt) => {
     setInputValue(prompt.prompt);
     textareaRef.current?.focus();
   };
 
   const handleSavePrompt = () => {
     if (!newPromptTitle.trim() || !inputValue.trim()) return;
-    const newPrompt = addUserPrompt(newPromptTitle.trim(), inputValue.trim());
+    addUserPrompt(newPromptTitle.trim(), inputValue.trim());
     setPrompts(getAllPrompts());
     setNewPromptTitle("");
     setShowSavePrompt(false);
@@ -618,7 +618,7 @@ export default function ChatPage() {
                           borderLeftColor: colors.border,
                           borderLeftWidth: "3px",
                         }}
-                        onClick={() => usePrompt(prompt)}
+                        onClick={() => applyPrompt(prompt)}
                         onMouseEnter={e => {
                           e.currentTarget.style.backgroundColor = "#f8fafc";
                           e.currentTarget.style.borderColor = colors.border;
@@ -750,7 +750,7 @@ export default function ChatPage() {
                   return (
                   <button
                     key={prompt.id}
-                    onClick={() => usePrompt(prompt)}
+                    onClick={() => applyPrompt(prompt)}
                     style={{
                       padding: "8px 12px",
                       fontSize: "12px",

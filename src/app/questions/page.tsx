@@ -324,7 +324,6 @@ export default function QuestionsPage() {
           <SkillRecommendation
             usedSkills={currentUsedSkills}
             question={questionText}
-            allSkills={availableSkills}
             onDismiss={() => setShowRecommendation(false)}
           />
         )}

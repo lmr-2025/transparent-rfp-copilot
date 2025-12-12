@@ -1065,7 +1065,6 @@ export default function BulkResponsesPage() {
                 <SkillRecommendation
                   usedSkills={row.usedSkills}
                   question={row.question}
-                  allSkills={availableSkills}
                   onDismiss={() => updateRow(row.id, { showRecommendation: false })}
                 />
               )}

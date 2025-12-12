@@ -118,7 +118,6 @@ function findUrlMatches(
 ): { skillId: string; skillTitle: string; matchedUrls: string[] } | null {
   // Normalize URLs for comparison (remove trailing slashes, lowercase)
   const normalizeUrl = (url: string) => url.toLowerCase().replace(/\/+$/, "");
-  const inputUrlsNormalized = inputUrls.map(normalizeUrl);
 
   for (const skill of existingSkills) {
     if (!skill.sourceUrls || skill.sourceUrls.length === 0) continue;

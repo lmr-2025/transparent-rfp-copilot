@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ChatPrompt,
@@ -153,9 +153,9 @@ const styles = {
 };
 
 export default function PromptLibraryPage() {
-  const [userPrompts, setUserPrompts] = useState<ChatPrompt[]>([]);
-  const [builtInPrompts, setBuiltInPrompts] = useState<ChatPrompt[]>([]);
-  const [categories, setCategories] = useState<CategoryConfig[]>([]);
+  const [userPrompts, setUserPrompts] = useState<ChatPrompt[]>(() => loadUserPrompts());
+  const [builtInPrompts, setBuiltInPrompts] = useState<ChatPrompt[]>(() => getEffectiveBuiltInPrompts());
+  const [categories, setCategories] = useState<CategoryConfig[]>(() => getEffectiveCategories());
   const [activeCategory, setActiveCategory] = useState<string | "all">("all");
   const [search, setSearch] = useState("");
   const [editingPrompt, setEditingPrompt] = useState<EditingPrompt | null>(null);
@@ -171,10 +171,6 @@ export default function PromptLibraryPage() {
     setBuiltInPrompts(getEffectiveBuiltInPrompts());
     setCategories(getEffectiveCategories());
   };
-
-  useEffect(() => {
-    reloadAll();
-  }, []);
 
   // Helper to get category config by id
   const getCategoryConfig = (id: string): CategoryConfig | undefined => {

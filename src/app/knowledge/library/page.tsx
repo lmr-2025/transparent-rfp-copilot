@@ -1485,7 +1485,7 @@ const handleApplySuggestion = (skillId: string) => {
               {confirmingDeleteId === skill.id && (
                 <div style={styles.confirmBox}>
                   <p style={{ margin: "0 0 8px 0", fontWeight: 600, color: "#991b1b" }}>
-                    Delete "{skill.title}" permanently?
+                    Delete &quot;{skill.title}&quot; permanently?
                   </p>
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button type="button" onClick={() => { handleDeleteSkill(skill.id); setExpandedSkillId(null); }} style={{ padding: "8px 14px", borderRadius: "6px", border: "none", backgroundColor: "#dc2626", color: "#fff", fontWeight: 600, cursor: "pointer" }}>Yes, delete</button>

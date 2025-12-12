@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Plus, Trash2, ExternalLink, Globe } from "lucide-react";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import {
@@ -10,16 +10,12 @@ import {
 } from "@/lib/referenceUrlStorage";
 
 export default function ReferenceUrlsPage() {
-  const [urls, setUrls] = useState<ReferenceUrl[]>([]);
+  const [urls, setUrls] = useState<ReferenceUrl[]>(() => loadReferenceUrls());
   const [showForm, setShowForm] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setUrls(loadReferenceUrls());
-  }, []);
 
   const handleAdd = () => {
     setError(null);

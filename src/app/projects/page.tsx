@@ -447,7 +447,7 @@ function ProjectsListContent() {
                   <div key={row.id} style={{ fontSize: "0.85rem", color: "#64748b", marginLeft: "16px", marginBottom: "4px" }}>
                     • <strong>Row {row.rowNumber}:</strong> {row.question.slice(0, 80)}{row.question.length > 80 ? "..." : ""}
                     {row.flagNote && (
-                      <span style={{ color: "#92400e", fontStyle: "italic" }}> — "{row.flagNote}"</span>
+                      <span style={{ color: "#92400e", fontStyle: "italic" }}> — &quot;{row.flagNote}&quot;</span>
                     )}
                     {row.flaggedBy && (
                       <span style={{ color: "#94a3b8" }}> (by {row.flaggedBy})</span>
