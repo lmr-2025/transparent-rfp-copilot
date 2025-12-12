@@ -32,12 +32,16 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     const line = rawLine.trim();
     const lineLower = line.toLowerCase();
 
-    // Check for Answer: section header
+    // Check for Answer: or Response: section header (handle both for backwards compatibility)
     if (
       lineLower.startsWith("answer:") ||
       lineLower.startsWith("**answer:**") ||
       lineLower === "answer" ||
-      lineLower === "**answer**"
+      lineLower === "**answer**" ||
+      lineLower.startsWith("response:") ||
+      lineLower.startsWith("**response:**") ||
+      lineLower === "response" ||
+      lineLower === "**response**"
     ) {
       currentSection = "answer";
       const colonIndex = line.indexOf(":");

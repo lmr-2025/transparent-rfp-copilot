@@ -3,6 +3,7 @@ import { generateSkillDraftFromMessages } from "@/lib/llm";
 import { defaultSkillPrompt } from "@/lib/skillPrompt";
 import { ConversationFeedback } from "@/types/conversation";
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL } from "@/lib/config";
 
 type SuggestRequestBody = {
   sourceText?: string;
@@ -17,18 +18,14 @@ type SuggestRequestBody = {
   };
 };
 
-type UpdateSuggestion = {
-  action: "add" | "modify" | "remove";
-  section: string; // Which section this affects (e.g., "## Access Management")
-  description: string; // Human-readable description of the change
-  content: string; // The actual content to add/modify
-};
-
-type UpdateResponse = {
+// Response type for draft updates
+type DraftUpdateResponse = {
+  hasChanges: boolean;
+  summary: string; // What changed or "No updates needed"
   title: string;
   tags: string[];
-  suggestions: UpdateSuggestion[];
-  summary: string; // Brief summary of all changes
+  content: string; // Complete updated content (or original if no changes)
+  changeHighlights: string[]; // Brief bullets about what changed
 };
 
 export async function POST(request: NextRequest) {
@@ -62,11 +59,13 @@ export async function POST(request: NextRequest) {
     // If we have an existing skill, use update mode
     if (existingSkill && (sourceText || sourceUrls.length > 0)) {
       const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
-      const updateResult = await generateSkillUpdate(existingSkill, mergedSource, sourceUrls);
+      // Use the new simpler draft-based approach
+      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls);
       return NextResponse.json({
         updateMode: true,
+        draftMode: true,
         existingSkill,
-        updates: updateResult,
+        draft: draftResult,
         sourceUrls,
       });
     }
@@ -97,11 +96,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function generateSkillUpdate(
+// Generate updated draft by comparing existing skill with new source material
+async function generateDraftUpdate(
   existingSkill: { title: string; content: string; tags: string[] },
   newSourceContent: string,
   sourceUrls: string[]
-): Promise<UpdateResponse> {
+): Promise<DraftUpdateResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY not configured");
@@ -109,40 +109,43 @@ async function generateSkillUpdate(
 
   const anthropic = new Anthropic({ apiKey });
 
-  const systemPrompt = `You are a knowledge management expert helping to update existing security documentation skills with new information.
+  const systemPrompt = `You are a knowledge management expert helping to update security documentation.
 
-Your task is to compare an existing skill document with new source material and suggest INCREMENTAL CHANGES - not a complete rewrite.
+Your task is to review an existing skill document against new source material and decide if updates are needed.
 
-IMPORTANT PRINCIPLES:
-1. PRESERVE existing content that is still accurate
-2. ADD new information that doesn't exist in the current skill
-3. MODIFY sections only where the new source has updated/different information
-4. REMOVE information only if the new source explicitly contradicts it
-5. Be surgical - suggest the minimum changes needed to incorporate new information
+DECISION PROCESS:
+1. Compare the existing skill content with the new source material
+2. If the new source contains SIGNIFICANT new information, updates, or corrections → write an updated draft
+3. If the new source is redundant (same info already in skill) or irrelevant → return hasChanges: false
+
+WHAT COUNTS AS SIGNIFICANT:
+- New facts, procedures, or guidelines not in the current skill
+- Corrections to existing information
+- Updated versions, dates, or specifications
+- New sections that add value
+
+WHAT IS NOT SIGNIFICANT:
+- Same information worded differently
+- Information already covered in the skill
+- Tangentially related content that doesn't add value
 
 OUTPUT FORMAT:
-Return a JSON object with this structure:
+Return a JSON object:
 {
-  "title": "keep same or suggest new title if topic changed",
-  "tags": ["keep existing tags", "add new relevant ones"],
-  "summary": "Brief 1-2 sentence summary of what's new in the source material",
-  "suggestions": [
-    {
-      "action": "add" | "modify" | "remove",
-      "section": "Section name where change applies (e.g., '## Access Management' or 'New Section: ## Backup Procedures')",
-      "description": "Human-readable explanation of what this change does and why",
-      "content": "The actual content to add or the modified content. For 'add', this is new text. For 'modify', this is the replacement text for that section."
-    }
-  ]
+  "hasChanges": true/false,
+  "summary": "Brief explanation of what changed OR 'No significant updates - the source material is already reflected in the current skill'",
+  "title": "Keep same unless topic scope changed",
+  "tags": ["existing tags", "plus any new relevant ones"],
+  "content": "If hasChanges=true: the COMPLETE updated skill content with changes integrated. If hasChanges=false: return the original content unchanged.",
+  "changeHighlights": ["Bullet point 1 describing a change", "Bullet point 2", ...] // Empty array if no changes
 }
 
-GUIDELINES:
-- If new source adds info about a topic already in the skill, suggest "modify" to that section
-- If new source covers a new topic not in the skill, suggest "add" with a new section
-- If new source has different/updated facts, suggest "modify" with explanation
-- Keep the original writing style and formatting conventions
-- Each suggestion should be specific and actionable
-- Include enough context in "content" that the user understands what will change`;
+IMPORTANT GUIDELINES:
+- Preserve the original writing style and structure
+- Integrate new information naturally into existing sections where appropriate
+- Remove duplicate/redundant content
+- Keep the document well-organized with clear headers
+- The content field must be COMPLETE - not just the changes`;
 
   const userPrompt = `EXISTING SKILL:
 Title: ${existingSkill.title}
@@ -160,16 +163,15 @@ ${sourceUrls.length > 0 ? `\nSource URLs: ${sourceUrls.join(", ")}` : ""}
 
 ---
 
-Analyze the new source material and suggest incremental updates to the existing skill. Focus on:
-1. What NEW information does the source contain that's not in the skill?
-2. What information in the skill needs UPDATING based on the source?
-3. Is any existing information now OUTDATED or contradicted?
+Review the new source material against the existing skill.
+- If there's significant new/changed information, return an updated draft with hasChanges=true
+- If the source is redundant or doesn't add value, return hasChanges=false
 
-Return ONLY the JSON object with your suggestions.`;
+Return ONLY the JSON object.`;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
+    model: CLAUDE_MODEL,
+    max_tokens: 12000,
     temperature: 0.1,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
@@ -191,7 +193,7 @@ Return ONLY the JSON object with your suggestions.`;
     jsonText = lines.join("\n");
   }
 
-  const parsed = JSON.parse(jsonText) as UpdateResponse;
+  const parsed = JSON.parse(jsonText) as DraftUpdateResponse;
   return parsed;
 }
 

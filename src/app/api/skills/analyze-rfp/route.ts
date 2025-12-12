@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL } from "@/lib/config";
 
 type RFPEntry = {
   question: string;
@@ -107,7 +108,7 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
 4. Return valid JSON only.`;
 
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: CLAUDE_MODEL,
       max_tokens: 16000,
       temperature: 0.1,
       system: systemPrompt,

@@ -65,7 +65,7 @@ function SignInContent() {
   return (
     <div style={styles.container}>
       <div style={styles.card}>
-        <h1 style={styles.title}>GRC Minion</h1>
+        <h1 style={styles.title}>Transparent Trust</h1>
         <p style={styles.subtitle}>Sign in to continue</p>
 
         {error && (

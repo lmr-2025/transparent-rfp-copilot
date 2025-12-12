@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GRC Minion",
-  description: "Transparent knowledge and questionnaire assistant for security teams.",
+  title: "Transparent Trust",
+  description: "Knowledge-powered AI assistant with full transparency into prompts and reasoning.",
 };
 
 export default function RootLayout({

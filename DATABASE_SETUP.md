@@ -150,9 +150,9 @@ curl http://localhost:3000/api/projects
 ```
 
 3. **Test in the UI**:
-   - Go to http://localhost:3000/questions/bulk/upload
+   - Go to http://localhost:3000/projects/upload
    - Upload a CSV file
-   - Verify it appears in http://localhost:3000/questions/bulk/projects
+   - Verify it appears in http://localhost:3000/projects
 
 ## Common Commands
 

@@ -102,10 +102,17 @@ model BulkRow {
   usedSkills           Json?    // Stored as JSON: Skill[]
   showRecommendation   Boolean  @default(false)
 
+  // Review flagging for individual questions
+  flaggedForReview     Boolean  @default(false)
+  flaggedAt            DateTime?
+  flaggedBy            String?
+  flagNote             String?  @db.Text
+
   project              BulkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([status])
+  @@index([flaggedForReview])
 }
 
 enum ProjectStatus {

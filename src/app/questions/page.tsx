@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
+import Link from "next/link";
 import ConversationalRefinement from "@/components/ConversationalRefinement";
 import { loadSkillsFromStorage } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
 import SkillRecommendation from "@/components/SkillRecommendation";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
+import LoadingSpinner from "@/components/LoadingSpinner";
 
 // Helper to render text with clickable URLs
 function renderTextWithLinks(text: string): React.ReactNode {
@@ -126,7 +128,7 @@ export default function QuestionsPage() {
   const askGrcMinion = async () => {
     const question = questionText.trim();
     if (!question) {
-      setErrorMessage("Enter a question before asking GRC Minion.");
+      setErrorMessage("Enter a question first.");
       return;
     }
 
@@ -153,7 +155,7 @@ export default function QuestionsPage() {
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.answer) {
-        throw new Error(data?.error || "Failed to generate response from GRC Minion.");
+        throw new Error(data?.error || "Failed to generate response.");
       }
       const parsed = parseAnswerSections(data.answer);
       setQuestionResponse(parsed.response);
@@ -166,7 +168,7 @@ export default function QuestionsPage() {
       setShowRecommendation(true);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Unexpected error while contacting GRC Minion.",
+        error instanceof Error ? error.message : "Unexpected error while generating response.",
       );
     } finally {
       setIsAnswering(false);
@@ -175,10 +177,43 @@ export default function QuestionsPage() {
 
   return (
     <div style={styles.container}>
-      <h1>GRC Minion – Question Workspace</h1>
+      <h1>GRC Minion <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Question Workspace)</span></h1>
       <p style={{ color: "#475569" }}>
-        Ask GRC Minion for concise questionnaire responses with structured answers including confidence levels, sources, and remarks.
+        Ask questions and get concise responses with structured answers including confidence levels, sources, and remarks.
       </p>
+
+      {/* Quick Navigation to Projects */}
+      <div style={{
+        ...styles.card,
+        backgroundColor: "#f0f9ff",
+        borderColor: "#bae6fd",
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px"
+      }}>
+        <div>
+          <strong style={{ color: "#0369a1" }}>Working on a questionnaire?</strong>
+          <p style={{ margin: "4px 0 0 0", color: "#475569", fontSize: "0.9rem" }}>
+            Upload a spreadsheet and process multiple questions at once in the Projects workspace.
+          </p>
+        </div>
+        <Link
+          href="/projects"
+          style={{
+            padding: "10px 16px",
+            backgroundColor: "#0ea5e9",
+            color: "#fff",
+            borderRadius: "6px",
+            fontWeight: 600,
+            textDecoration: "none",
+            whiteSpace: "nowrap"
+          }}
+        >
+          Go to Projects
+        </Link>
+      </div>
 
       <SkillUpdateBanner skills={availableSkills} />
 
@@ -187,23 +222,32 @@ export default function QuestionsPage() {
       <div style={styles.card}>
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ ...styles.subBox, backgroundColor: "#fff" }}>
-            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Enter a question</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+              <h3 style={{ margin: 0 }}>Enter a question</h3>
+              <span style={{
+                fontSize: "11px",
+                color: questionText.length > 4500 ? "#dc2626" : "#94a3b8",
+              }}>
+                {questionText.length.toLocaleString()} / 5,000
+              </span>
+            </div>
             <textarea
               id="questionText"
               value={questionText}
-              onChange={(event) => handleQuestionInput(event.target.value)}
+              onChange={(event) => handleQuestionInput(event.target.value.slice(0, 5000))}
               style={{ ...styles.input, minHeight: "120px", resize: "vertical" }}
-              placeholder="Ask GRC Minion anything from your questionnaire..."
+              placeholder="Ask any question..."
+              maxLength={5000}
             />
           </div>
           <div style={styles.subBox}>
-            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>GRC Minion&apos;s response</h3>
+            <h3 style={{ marginTop: 0, marginBottom: "8px" }}>Response</h3>
             <textarea
               id="questionResponse"
               value={questionResponse}
               readOnly
               style={{ ...styles.input, minHeight: "140px", resize: "vertical" }}
-              placeholder="GRC Minion will respond here..."
+              placeholder="Response will appear here..."
             />
             <div style={{ display: "grid", gap: "10px", marginTop: "12px" }}>
               <div>
@@ -215,7 +259,7 @@ export default function QuestionsPage() {
                   type="text"
                   value={questionConfidence}
                   readOnly
-                  placeholder="Will appear after GRC Minion responds..."
+                  placeholder="Will appear after response..."
                   style={{ ...styles.input }}
                 />
               </div>
@@ -265,8 +309,14 @@ export default function QuestionsPage() {
               cursor: isAnswering ? "not-allowed" : "pointer",
             }}
           >
-            {isAnswering ? "Generating..." : "Ask GRC Minion"}
+            {isAnswering ? "Generating..." : "Ask"}
           </button>
+          {isAnswering && (
+            <LoadingSpinner
+              title="Generating response..."
+              subtitle="Analyzing your question and searching knowledge base. This may take 10-20 seconds."
+            />
+          )}
         </div>
 
         {/* Skill Recommendations */}
@@ -316,7 +366,7 @@ export default function QuestionsPage() {
       <div style={styles.card}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: promptCollapsed ? "0" : "12px" }}>
           <label style={{ ...styles.label, marginTop: 0 }} htmlFor="promptText">
-            Prompt sent to GRC Minion
+            System Prompt
           </label>
           <button
             type="button"
@@ -337,7 +387,7 @@ export default function QuestionsPage() {
             <textarea
               id="promptText"
               value={promptText}
-              onChange={(event) => setPromptText(event.target.value)}
+              onChange={(event) => setPromptText(event.target.value.slice(0, 50000))}
               style={{
                 ...styles.input,
                 minHeight: "220px",
@@ -345,11 +395,22 @@ export default function QuestionsPage() {
                 fontFamily: "monospace",
                 backgroundColor: "#f8fafc",
               }}
+              maxLength={50000}
             />
-            <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "8px" }}>
-              GRC Minion responses will follow this exact instruction set. Edit it to tune tone,
-              structure, or sourcing rules—no hidden prompts.
-            </p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "8px" }}>
+              <p style={{ color: "#64748b", fontSize: "0.9rem", margin: 0 }}>
+                Responses will follow this exact instruction set. Edit it to tune tone,
+                structure, or sourcing rules—no hidden prompts.
+              </p>
+              <span style={{
+                fontSize: "11px",
+                color: promptText.length > 45000 ? "#dc2626" : "#94a3b8",
+                whiteSpace: "nowrap",
+                marginLeft: "12px",
+              }}>
+                {promptText.length.toLocaleString()} / 50,000
+              </span>
+            </div>
           </>
         )}
 

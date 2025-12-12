@@ -67,7 +67,7 @@ export default function ReferenceUrlsPage() {
           Reference URLs
         </h1>
         <p style={{ color: "#64748b", fontSize: "0.95rem" }}>
-          External URLs that GRC Minion will search when skills don&apos;t have the answer.
+          External URLs that will be searched when skills don&apos;t have the answer.
           These are fetched as fallback context for answering questions.
         </p>
       </div>
@@ -308,7 +308,7 @@ export default function ReferenceUrlsPage() {
         }}
       >
         <p style={{ margin: 0, fontSize: "0.9rem", color: "#1e40af" }}>
-          <strong>How it works:</strong> When a question doesn&apos;t match any skills, GRC Minion
+          <strong>How it works:</strong> When a question doesn&apos;t match any skills, the assistant
           will fetch and search these URLs for relevant information. The source will appear in the
           Reasoning section of the response.
         </p>

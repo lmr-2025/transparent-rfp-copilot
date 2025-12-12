@@ -233,6 +233,7 @@ export default function ImportRFPPage() {
           content: suggestion.suggestedAdditions,
           quickFacts: [],
           edgeCases: [],
+          sourceUrls: [], // No source URLs for imported skills
           isActive: true,
           createdAt: new Date().toISOString(),
         };
@@ -267,7 +268,7 @@ export default function ImportRFPPage() {
 
   return (
     <div style={styles.container}>
-      <h1>Import from RFPs</h1>
+      <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Import from Docs)</span></h1>
       <p style={{ color: "#475569", marginBottom: "24px" }}>
         Upload completed RFP spreadsheets to extract knowledge and enrich your skills library.
         The system will analyze Q&A pairs and suggest updates to existing skills or new skills to create.

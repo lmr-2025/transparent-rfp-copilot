@@ -15,6 +15,11 @@ export type BulkRow = {
   usedSkills?: (string | { id: string; title: string })[]; // Can be Skill objects or string IDs
   usedFallback?: boolean; // True if answer was generated from reference URLs instead of skills
   showRecommendation?: boolean;
+  // Review flagging
+  flaggedForReview?: boolean;
+  flaggedAt?: string;
+  flaggedBy?: string;
+  flagNote?: string;
   // Legacy fields for conversational refinement
   challengePrompt?: string;
   challengeResponse?: string;

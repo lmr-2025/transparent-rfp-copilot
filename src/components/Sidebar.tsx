@@ -6,32 +6,40 @@ import { useSession, signIn, signOut } from "next-auth/react";
 
 const navItems = [
   {
-    section: "Knowledge",
+    section: "Knowledge Gremlin",
     items: [
       { href: "/knowledge", label: "Build Skills" },
-      { href: "/knowledge/import", label: "Import from RFPs" },
-      { href: "/knowledge/library", label: "Knowledge Library" },
+      { href: "/knowledge/import", label: "Import from Docs" },
+      { href: "/knowledge/library", label: "Library" },
       { href: "/knowledge/documents", label: "Documents" },
       { href: "/knowledge/urls", label: "Reference URLs" },
     ],
   },
   {
-    section: "Questions",
+    section: "The Oracle",
+    items: [
+      { href: "/chat", label: "Chat" },
+      { href: "/prompts/library", label: "Prompt Library" },
+    ],
+  },
+  {
+    section: "GRC Minion",
     items: [
       { href: "/questions", label: "Ask Questions" },
-      { href: "/questions/bulk/projects", label: "Bulk Projects" },
     ],
   },
   {
-    section: "Review",
+    section: "Answer Goblin",
     items: [
-      { href: "/review", label: "Review Queue" },
+      { href: "/projects", label: "All Projects" },
+      { href: "/projects/upload", label: "Upload New" },
+      { href: "/projects?filter=needs_review", label: "Needs Review" },
     ],
   },
   {
-    section: "Configuration",
+    section: "TruthTeller",
     items: [
-      { href: "/prompts", label: "Prompts" },
+      { href: "/prompts", label: "System Prompts" },
     ],
   },
 ];
@@ -63,7 +71,7 @@ export default function Sidebar() {
           textDecoration: "none",
           display: "block",
         }}>
-          GRC Minion
+          Transparent Trust
         </Link>
         <p style={{
           fontSize: "12px",
@@ -71,7 +79,7 @@ export default function Sidebar() {
           marginTop: "4px",
           marginBottom: 0,
         }}>
-          Security Questionnaire Assistant
+          Knowledge-Powered AI Assistant
         </p>
       </div>
 

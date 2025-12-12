@@ -2,6 +2,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
+import { CLAUDE_MODEL } from '@/lib/config';
 
 export const maxDuration = 60;
 
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Call Claude API
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: CLAUDE_MODEL,
       max_tokens: 16000,
       system: systemPrompt || '',
       messages: messages as Anthropic.MessageParam[],

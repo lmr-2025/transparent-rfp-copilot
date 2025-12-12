@@ -1,6 +1,7 @@
 import { defaultSkillPrompt } from "./skillPrompt";
 import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
+import { CLAUDE_MODEL } from "./config";
 
 export type SkillDraft = {
   title: string;
@@ -34,7 +35,7 @@ export async function generateSkillDraftFromMessages(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: CLAUDE_MODEL,
       max_tokens: 16000,
       temperature: 0.1,
       system: promptText,
@@ -80,7 +81,7 @@ export async function answerQuestionWithPrompt(
 ): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) {
-    throw new Error("A question is required for GRC Minion to respond.");
+    throw new Error("A question is required to generate a response.");
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -156,7 +157,7 @@ export async function answerQuestionWithPrompt(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: CLAUDE_MODEL,
       max_tokens: 16000,
       temperature: 0.2,
       system: promptText,
@@ -170,7 +171,7 @@ export async function answerQuestionWithPrompt(
 
     const content = response.content[0];
     if (content.type !== "text" || !content.text?.trim()) {
-      throw new Error("GRC Minion returned an empty response.");
+      throw new Error("The assistant returned an empty response.");
     }
 
     const answerText = content.text.trim();
@@ -189,9 +190,9 @@ export async function answerQuestionWithPrompt(
     };
   } catch (error) {
     if (error instanceof Error) {
-      throw new Error(`Failed to fetch GRC Minion response: ${error.message}`);
+      throw new Error(`Failed to generate response: ${error.message}`);
     }
-    throw new Error("Failed to fetch GRC Minion response.");
+    throw new Error("Failed to generate response.");
   }
 }
 

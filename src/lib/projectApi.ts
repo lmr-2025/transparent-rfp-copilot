@@ -21,6 +21,11 @@ interface DbRow {
   remarks?: string;
   usedSkills?: unknown;
   showRecommendation?: boolean;
+  // Review flagging
+  flaggedForReview?: boolean;
+  flaggedAt?: string;
+  flaggedBy?: string;
+  flagNote?: string;
 }
 
 // Type for database project format
@@ -115,7 +120,7 @@ function transformProjectFromDb(dbProject: DbProject): BulkProject {
     lastModifiedAt: dbProject.lastModifiedAt,
     ownerName: dbProject.ownerName,
     customerName: dbProject.customerName,
-    status: dbProject.status.toLowerCase().replace(/_/g, "-") as "draft" | "in_progress" | "needs_review" | "approved",
+    status: dbProject.status.toLowerCase() as "draft" | "in_progress" | "needs_review" | "approved",
     notes: dbProject.notes,
     reviewRequestedAt: dbProject.reviewRequestedAt,
     reviewRequestedBy: dbProject.reviewRequestedBy,
@@ -136,6 +141,11 @@ function transformProjectFromDb(dbProject: DbProject): BulkProject {
       remarks: row.remarks,
       usedSkills: row.usedSkills as BulkRow["usedSkills"],
       showRecommendation: row.showRecommendation,
+      // Review flagging
+      flaggedForReview: row.flaggedForReview,
+      flaggedAt: row.flaggedAt,
+      flaggedBy: row.flaggedBy,
+      flagNote: row.flagNote,
     })),
   };
 }
@@ -171,6 +181,11 @@ function transformProjectToDb(project: BulkProject) {
       remarks: row.remarks,
       usedSkills: row.usedSkills,
       showRecommendation: row.showRecommendation,
+      // Review flagging
+      flaggedForReview: row.flaggedForReview,
+      flaggedAt: row.flaggedAt,
+      flaggedBy: row.flaggedBy,
+      flagNote: row.flagNote,
     })),
   };
 }

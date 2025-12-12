@@ -206,7 +206,7 @@ If the user asks you to generate a new/updated response, format it the same way 
       });
 
       if (!response.ok) {
-        throw new Error('Failed to get response from GRC Minion');
+        throw new Error('Failed to get response');
       }
 
       const data = await response.json();
@@ -256,7 +256,7 @@ If the user asks you to generate a new/updated response, format it the same way 
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <span>💬 Ask GRC Minion</span>
+        <span>Refine Response</span>
         <button onClick={onClose} style={styles.closeButton} title="Close conversation">
           <X size={20} />
         </button>
@@ -306,20 +306,31 @@ If the user asks you to generate a new/updated response, format it the same way 
       </div>
 
       <div style={styles.inputContainer}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              sendMessage();
-            }
-          }}
-          placeholder="Ask to refine, explain, shorten, add detail..."
-          style={styles.textarea}
-          disabled={isProcessing}
-          rows={1}
-        />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value.slice(0, 5000))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+            placeholder="Ask to refine, explain, shorten, add detail..."
+            style={styles.textarea}
+            disabled={isProcessing}
+            rows={1}
+            maxLength={5000}
+          />
+          <div style={{
+            fontSize: '10px',
+            color: input.length > 4500 ? '#dc2626' : '#94a3b8',
+            textAlign: 'right',
+            marginTop: '2px',
+          }}>
+            {input.length.toLocaleString()} / 5,000
+          </div>
+        </div>
         <button
           onClick={sendMessage}
           disabled={isProcessing || !input.trim()}

@@ -1,9 +1,35 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
-import { Skill } from "@/types/skill";
-import { defaultSkillPrompt } from "@/lib/skillPrompt";
+import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
+import { defaultSkillSections, buildSkillPromptFromSections, EditableSkillSection } from "@/lib/promptSections";
+import { SKILL_PROMPT_SECTIONS_KEY } from "@/lib/promptStorage";
+import LoadingSpinner from "@/components/LoadingSpinner";
+
+// Helper to load skill sections from localStorage
+const loadSkillSections = (): EditableSkillSection[] => {
+  if (typeof window === "undefined") {
+    return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
+  }
+  try {
+    const raw = window.localStorage.getItem(SKILL_PROMPT_SECTIONS_KEY);
+    if (!raw) {
+      return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
+    }
+    const parsed = JSON.parse(raw) as EditableSkillSection[];
+    if (!Array.isArray(parsed)) {
+      return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
+    }
+    return parsed.map(section => ({
+      ...section,
+      enabled: section.enabled ?? true,
+      text: section.text ?? section.defaultText ?? "",
+    }));
+  } catch {
+    return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
+  }
+};
 
 type UploadStatus = {
   id: string;
@@ -17,6 +43,35 @@ type SkillDraft = {
   tags: string[];
   content: string;
   sourceMapping?: string[];
+  // Store source URLs directly in the draft so they survive any re-renders
+  _sourceUrls?: string[];
+};
+
+// Analysis result types
+type SplitSuggestion = {
+  title: string;
+  description: string;
+  relevantUrls: string[];
+};
+
+type SkillSuggestion = {
+  action: "create_new" | "update_existing" | "split_topics";
+  existingSkillId?: string;
+  existingSkillTitle?: string;
+  suggestedTitle?: string;
+  suggestedTags?: string[];
+  splitSuggestions?: SplitSuggestion[];
+  reason: string;
+};
+
+type AnalysisResult = {
+  suggestion: SkillSuggestion;
+  sourcePreview: string;
+  urlAlreadyUsed?: {
+    skillId: string;
+    skillTitle: string;
+    matchedUrls: string[];
+  };
 };
 
 const styles = {
@@ -72,10 +127,17 @@ export default function KnowledgeUploadPage() {
 
   // Skill builder from URLs
   const [urlInput, setUrlInput] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isBuilding, setIsBuilding] = useState(false);
   const [buildError, setBuildError] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [generatedDraft, setGeneratedDraft] = useState<SkillDraft | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [selectedSplitIndex, setSelectedSplitIndex] = useState<number | null>(null);
+  // Track the URLs used for the current build (to store in skill)
+  const buildUrlsRef = useRef<string[]>([]);
+  // Load configured skill prompt sections
+  const [skillSections] = useState<EditableSkillSection[]>(() => loadSkillSections());
 
   useEffect(() => {
     saveSkillsToStorage(skills);
@@ -85,8 +147,13 @@ export default function KnowledgeUploadPage() {
     setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
 
-  const handleBuildFromUrls = async () => {
+  // Step 1: Analyze URLs to determine routing
+  const handleAnalyzeUrls = async () => {
     setBuildError(null);
+    setAnalysisResult(null);
+    setGeneratedDraft(null);
+    setSelectedSplitIndex(null);
+
     const urls = urlInput
       .split("\n")
       .map((url) => url.trim())
@@ -97,21 +164,137 @@ export default function KnowledgeUploadPage() {
       return;
     }
 
-    setIsBuilding(true);
+    setIsAnalyzing(true);
     try {
-      const response = await fetch("/api/skills/suggest", {
+      // Prepare existing skills summary for analysis (including sourceUrls for matching)
+      const existingSkills = skills.map(s => ({
+        id: s.id,
+        title: s.title,
+        tags: s.tags,
+        contentPreview: s.content.substring(0, 500),
+        sourceUrls: s.sourceUrls?.map(u => u.url) || [],
+      }));
+
+      const response = await fetch("/api/skills/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceUrls: urls }),
+        body: JSON.stringify({ sourceUrls: urls, existingSkills }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to build skill");
+        throw new Error(errorData.error || "Failed to analyze URLs");
       }
 
-      const data = await response.json();
-      setGeneratedDraft(data.draft);
+      const data = await response.json() as AnalysisResult;
+      setAnalysisResult(data);
+    } catch (error) {
+      setBuildError(error instanceof Error ? error.message : "Failed to analyze URLs");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  // Step 2: Build skill based on analysis decision
+  const handleBuildFromUrls = async (urlsOverride?: string[], forUpdate?: { skillId: string }) => {
+    setBuildError(null);
+    const urls = urlsOverride || urlInput
+      .split("\n")
+      .map((url) => url.trim())
+      .filter((url) => url.length > 0);
+
+    if (urls.length === 0) {
+      setBuildError("Please enter at least one URL");
+      return;
+    }
+
+    // Store URLs for later use when saving the skill
+    buildUrlsRef.current = urls;
+
+    setIsBuilding(true);
+    try {
+      // If updating existing skill, use update mode
+      if (forUpdate) {
+        const existingSkill = skills.find(s => s.id === forUpdate.skillId);
+        if (!existingSkill) {
+          throw new Error("Skill not found");
+        }
+
+        // Build the prompt from configured sections
+        const configuredPrompt = buildSkillPromptFromSections(skillSections);
+
+        const response = await fetch("/api/skills/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceUrls: urls,
+            prompt: configuredPrompt,
+            existingSkill: {
+              title: existingSkill.title,
+              content: existingSkill.content,
+              tags: existingSkill.tags,
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to update skill");
+        }
+
+        const data = await response.json();
+        if (data.draftMode && data.draft) {
+          // Apply the update directly if has changes
+          if (data.draft.hasChanges) {
+            const now = new Date().toISOString();
+            // Merge new URLs with existing ones (avoid duplicates)
+            const existingUrls = existingSkill.sourceUrls || [];
+            const existingUrlStrings = new Set(existingUrls.map(u => u.url));
+            const newSourceUrls: SourceUrl[] = urls
+              .filter(url => !existingUrlStrings.has(url))
+              .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
+            // Update lastFetchedAt for URLs that were re-fetched
+            const updatedExistingUrls = existingUrls.map(u =>
+              urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
+            );
+
+            const updatedSkill: Skill = {
+              ...existingSkill,
+              title: data.draft.title || existingSkill.title,
+              content: data.draft.content,
+              tags: [...new Set([...existingSkill.tags, ...data.draft.tags])],
+              sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
+              lastRefreshedAt: now,
+            };
+            setSkills((prev) => prev.map((s) => (s.id === existingSkill.id ? updatedSkill : s)));
+            setAnalysisResult(null);
+            setUrlInput("");
+            alert(`Updated skill: "${existingSkill.title}"`);
+          } else {
+            alert("No significant changes found. The existing skill already covers this content.");
+            setAnalysisResult(null);
+          }
+        }
+      } else {
+        // Create new skill
+        const configuredPrompt = buildSkillPromptFromSections(skillSections);
+
+        const response = await fetch("/api/skills/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceUrls: urls, prompt: configuredPrompt }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Failed to build skill");
+        }
+
+        const data = await response.json();
+        // Store URLs directly in the draft so they survive re-renders
+        setGeneratedDraft({ ...data.draft, _sourceUrls: urls });
+        setAnalysisResult(null);
+      }
     } catch (error) {
       setBuildError(error instanceof Error ? error.message : "Failed to build skill");
     } finally {
@@ -119,8 +302,37 @@ export default function KnowledgeUploadPage() {
     }
   };
 
+  // Handle building one of the split suggestions
+  const handleBuildSplitSkill = async (split: SplitSuggestion, index: number) => {
+    setSelectedSplitIndex(index);
+    await handleBuildFromUrls(split.relevantUrls);
+    setSelectedSplitIndex(null);
+  };
+
+  // Skip analysis and build directly (user override)
+  const handleSkipAnalysis = () => {
+    setAnalysisResult(null);
+    handleBuildFromUrls();
+  };
+
   const handleSaveDraft = () => {
     if (!generatedDraft) return;
+
+    const now = new Date().toISOString();
+    // Use URLs from draft (primary) or ref (fallback)
+    const urlsToSave = generatedDraft._sourceUrls ?? buildUrlsRef.current;
+    const sourceUrls: SourceUrl[] = urlsToSave.map(url => ({
+      url,
+      addedAt: now,
+      lastFetchedAt: now,
+    }));
+
+    // Create initial history entry
+    const history: SkillHistoryEntry[] = [{
+      date: now,
+      action: 'created',
+      summary: `Skill created from ${urlsToSave.length} source URL${urlsToSave.length > 1 ? 's' : ''}`,
+    }];
 
     const newSkill: Skill = {
       id: crypto.randomUUID(),
@@ -129,18 +341,16 @@ export default function KnowledgeUploadPage() {
       content: generatedDraft.content,
       quickFacts: [],
       edgeCases: [],
-      information: generatedDraft.sourceMapping
-        ? {
-            sources: generatedDraft.sourceMapping,
-          }
-        : undefined,
+      sourceUrls,
       isActive: true,
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      history,
     };
 
     setSkills((prev) => [newSkill, ...prev]);
     setGeneratedDraft(null);
     setUrlInput("");
+    buildUrlsRef.current = [];
   };
 
   const handleCancelDraft = () => {
@@ -170,6 +380,7 @@ export default function KnowledgeUploadPage() {
           updateQueueItem(queueId, { status: "error", message: "File was empty" });
           return;
         }
+        const createdAt = new Date().toISOString();
         const newSkill: Skill = {
           id: crypto.randomUUID(),
           title: deriveTitleFromFilename(file.name),
@@ -177,9 +388,14 @@ export default function KnowledgeUploadPage() {
           content: text,
           quickFacts: [],
           edgeCases: [],
-          information: undefined,
+          sourceUrls: [], // File uploads don't have source URLs
           isActive: true,
-          createdAt: new Date().toISOString(),
+          createdAt,
+          history: [{
+            date: createdAt,
+            action: 'created',
+            summary: `Skill created from uploaded file: ${file.name}`,
+          }],
         };
         setSkills((prev) => [newSkill, ...prev]);
         updateQueueItem(queueId, { status: "saved", message: "Saved" });
@@ -195,17 +411,8 @@ export default function KnowledgeUploadPage() {
     .slice(0, 5);
 
   return (
-    <>
-      <style>
-        {`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-        `}
-      </style>
-      <div style={styles.container}>
-        <h1>GRC Minion – Knowledge Builder</h1>
+    <div style={styles.container}>
+        <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Skill Builder)</span></h1>
       <p style={{ color: "#475569" }}>
         Build skills from documentation URLs or upload finalized files. Skills appear in the
         Knowledge Library instantly.
@@ -223,9 +430,10 @@ export default function KnowledgeUploadPage() {
         </p>
         <textarea
           value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value)}
+          onChange={(e) => setUrlInput(e.target.value.slice(0, 10000))}
           placeholder="https://example.com/docs/security&#10;https://example.com/docs/compliance&#10;https://example.com/docs/privacy"
-          disabled={isBuilding || generatedDraft !== null}
+          disabled={isBuilding || isAnalyzing || generatedDraft !== null || analysisResult !== null}
+          maxLength={10000}
           style={{
             width: "100%",
             minHeight: "120px",
@@ -237,50 +445,306 @@ export default function KnowledgeUploadPage() {
             resize: "vertical",
           }}
         />
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: "4px",
+          fontSize: "11px",
+          color: urlInput.length > 9000 ? "#dc2626" : "#94a3b8",
+        }}>
+          {urlInput.length.toLocaleString()} / 10,000
+        </div>
         <button
-          onClick={handleBuildFromUrls}
-          disabled={isBuilding || !urlInput.trim() || generatedDraft !== null}
+          onClick={handleAnalyzeUrls}
+          disabled={isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null}
           style={{
             marginTop: "12px",
             padding: "10px 20px",
-            backgroundColor: isBuilding || !urlInput.trim() || generatedDraft !== null ? "#cbd5e1" : "#2563eb",
+            backgroundColor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null ? "#cbd5e1" : "#2563eb",
             color: "#fff",
             border: "none",
             borderRadius: "6px",
             fontWeight: 600,
-            cursor: isBuilding || !urlInput.trim() || generatedDraft !== null ? "not-allowed" : "pointer",
+            cursor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null ? "not-allowed" : "pointer",
           }}
         >
-          {isBuilding ? "Building Skill..." : "Build Skill from URLs"}
+          {isAnalyzing ? "Analyzing..." : "Analyze & Build Skill"}
         </button>
         {buildError && <div style={styles.error}>{buildError}</div>}
+        {isAnalyzing && (
+          <LoadingSpinner
+            title="Analyzing source content..."
+            subtitle="Checking if this should update an existing skill or create a new one. This takes 10-15 seconds."
+          />
+        )}
         {isBuilding && (
-          <div style={{
-            marginTop: "16px",
-            padding: "16px",
-            backgroundColor: "#eff6ff",
-            border: "2px solid #60a5fa",
-            borderRadius: "8px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-          }}>
+          <LoadingSpinner
+            title="Building skill from documentation..."
+            subtitle="Fetching URLs and generating structured knowledge. This may take 20-30 seconds."
+          />
+        )}
+
+        {/* Analysis Result UI */}
+        {analysisResult && !generatedDraft && !isBuilding && (
+          <div style={{ marginTop: "16px" }}>
+            {/* URL Already Used Notice */}
+            {analysisResult.urlAlreadyUsed && (
+              <div style={{
+                padding: "12px",
+                backgroundColor: "#fef9c3",
+                borderRadius: "8px",
+                border: "1px solid #fde047",
+                marginBottom: "16px",
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "8px",
+              }}>
+                <span style={{ fontSize: "16px" }}>⚠️</span>
+                <div>
+                  <strong style={{ fontSize: "13px", color: "#854d0e" }}>
+                    URL already used in "{analysisResult.urlAlreadyUsed.skillTitle}"
+                  </strong>
+                  <p style={{ margin: "4px 0 0 0", color: "#a16207", fontSize: "12px" }}>
+                    {analysisResult.urlAlreadyUsed.matchedUrls.length === 1
+                      ? "This URL was"
+                      : `${analysisResult.urlAlreadyUsed.matchedUrls.length} URLs were`} previously used to build that skill.
+                    Updating will refresh the content from the source.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Source Preview */}
             <div style={{
-              width: "24px",
-              height: "24px",
-              border: "3px solid #e0e7ff",
-              borderTop: "3px solid #2563eb",
-              borderRadius: "50%",
-              animation: "spin 1s linear infinite",
-            }} />
-            <div>
-              <div style={{ fontWeight: 600, color: "#1e40af", marginBottom: "4px" }}>
-                Building skill from documentation...
-              </div>
-              <div style={{ fontSize: "14px", color: "#60a5fa" }}>
-                Fetching URLs and generating structured knowledge. This may take 20-30 seconds.
-              </div>
+              padding: "12px",
+              backgroundColor: "#f8fafc",
+              borderRadius: "8px",
+              border: "1px solid #e2e8f0",
+              marginBottom: "16px",
+            }}>
+              <strong style={{ fontSize: "13px", color: "#475569" }}>Content detected:</strong>
+              <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>
+                {analysisResult.sourcePreview}
+              </p>
             </div>
+
+            {/* Recommendation based on action type */}
+            {analysisResult.suggestion.action === "update_existing" && (
+              <div style={{
+                padding: "16px",
+                backgroundColor: "#fef3c7",
+                borderRadius: "8px",
+                border: "1px solid #fcd34d",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "18px" }}>📝</span>
+                  <strong style={{ color: "#92400e" }}>Suggested: Update existing skill</strong>
+                </div>
+                <p style={{ margin: "0 0 12px 0", color: "#78350f", fontSize: "14px" }}>
+                  This content looks related to <strong>"{analysisResult.suggestion.existingSkillTitle}"</strong>.
+                </p>
+                <p style={{ margin: "0 0 12px 0", color: "#92400e", fontSize: "13px" }}>
+                  {analysisResult.suggestion.reason}
+                </p>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => handleBuildFromUrls(undefined, { skillId: analysisResult.suggestion.existingSkillId! })}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#f59e0b",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Update "{analysisResult.suggestion.existingSkillTitle}"
+                  </button>
+                  <button
+                    onClick={handleSkipAnalysis}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#fff",
+                      color: "#475569",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Create New Skill Instead
+                  </button>
+                  <button
+                    onClick={() => setAnalysisResult(null)}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#fff",
+                      color: "#64748b",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {analysisResult.suggestion.action === "create_new" && (
+              <div style={{
+                padding: "16px",
+                backgroundColor: "#dcfce7",
+                borderRadius: "8px",
+                border: "1px solid #86efac",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "18px" }}>✨</span>
+                  <strong style={{ color: "#166534" }}>Ready to create new skill</strong>
+                </div>
+                <p style={{ margin: "0 0 8px 0", color: "#15803d", fontSize: "14px" }}>
+                  Suggested title: <strong>"{analysisResult.suggestion.suggestedTitle}"</strong>
+                </p>
+                <p style={{ margin: "0 0 12px 0", color: "#166534", fontSize: "13px" }}>
+                  {analysisResult.suggestion.reason}
+                </p>
+                {analysisResult.suggestion.suggestedTags && analysisResult.suggestion.suggestedTags.length > 0 && (
+                  <div style={{ marginBottom: "12px" }}>
+                    <span style={{ fontSize: "12px", color: "#166534" }}>Suggested tags: </span>
+                    {analysisResult.suggestion.suggestedTags.map((tag, i) => (
+                      <span key={i} style={{
+                        display: "inline-block",
+                        padding: "2px 8px",
+                        marginLeft: "4px",
+                        backgroundColor: "#bbf7d0",
+                        color: "#166534",
+                        borderRadius: "4px",
+                        fontSize: "11px",
+                      }}>
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => handleBuildFromUrls()}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#22c55e",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Build Skill
+                  </button>
+                  <button
+                    onClick={() => setAnalysisResult(null)}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#fff",
+                      color: "#64748b",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {analysisResult.suggestion.action === "split_topics" && analysisResult.suggestion.splitSuggestions && (
+              <div style={{
+                padding: "16px",
+                backgroundColor: "#ede9fe",
+                borderRadius: "8px",
+                border: "1px solid #c4b5fd",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "18px" }}>🔀</span>
+                  <strong style={{ color: "#5b21b6" }}>Multiple topics detected</strong>
+                </div>
+                <p style={{ margin: "0 0 12px 0", color: "#6d28d9", fontSize: "14px" }}>
+                  {analysisResult.suggestion.reason}
+                </p>
+                <p style={{ margin: "0 0 12px 0", color: "#7c3aed", fontSize: "13px" }}>
+                  Consider creating separate, focused skills for each topic:
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
+                  {analysisResult.suggestion.splitSuggestions.map((split, idx) => (
+                    <div key={idx} style={{
+                      padding: "12px",
+                      backgroundColor: "#fff",
+                      borderRadius: "6px",
+                      border: "1px solid #ddd6fe",
+                    }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                        <div style={{ flex: 1 }}>
+                          <strong style={{ color: "#5b21b6", fontSize: "14px" }}>{split.title}</strong>
+                          <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "12px" }}>
+                            {split.description}
+                          </p>
+                          <p style={{ margin: "4px 0 0 0", color: "#94a3b8", fontSize: "11px" }}>
+                            {split.relevantUrls.length} URL(s)
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => handleBuildSplitSkill(split, idx)}
+                          disabled={selectedSplitIndex !== null}
+                          style={{
+                            padding: "8px 12px",
+                            backgroundColor: selectedSplitIndex === idx ? "#94a3b8" : "#8b5cf6",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontWeight: 600,
+                            cursor: selectedSplitIndex !== null ? "not-allowed" : "pointer",
+                            fontSize: "13px",
+                          }}
+                        >
+                          {selectedSplitIndex === idx ? "Building..." : "Build This"}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid #ddd6fe" }}>
+                  <button
+                    onClick={handleSkipAnalysis}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#fff",
+                      color: "#5b21b6",
+                      border: "1px solid #c4b5fd",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Build All as One Skill Anyway
+                  </button>
+                  <button
+                    onClick={() => setAnalysisResult(null)}
+                    style={{
+                      padding: "10px 16px",
+                      backgroundColor: "#fff",
+                      color: "#64748b",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -318,7 +782,7 @@ export default function KnowledgeUploadPage() {
         </p>
         {showPrompt && (
           <textarea
-            value={defaultSkillPrompt}
+            value={buildSkillPromptFromSections(skillSections)}
             readOnly
             style={{
               width: "100%",
@@ -484,6 +948,5 @@ export default function KnowledgeUploadPage() {
         </p>
       </div>
     </div>
-    </>
   );
 }

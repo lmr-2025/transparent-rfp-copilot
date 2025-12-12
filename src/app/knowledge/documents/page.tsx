@@ -138,8 +138,8 @@ export default function DocumentsPage() {
           Knowledge Documents
         </h1>
         <p style={{ color: "#64748b", fontSize: "0.95rem" }}>
-          Upload documents (PDF, Word, TXT) that GRC Minion will search when skills don&apos;t have the answer.
-          Great for SOC2 reports, security policies, and compliance documentation.
+          Upload documents (PDF, Word, TXT) that will be searched when skills don&apos;t have the answer.
+          Great for reference materials and internal documentation.
         </p>
       </div>
 
@@ -387,7 +387,7 @@ export default function DocumentsPage() {
         }}
       >
         <p style={{ margin: 0, fontSize: "0.9rem", color: "#1e40af" }}>
-          <strong>How it works:</strong> When a question doesn&apos;t match any skills, GRC Minion
+          <strong>How it works:</strong> When a question doesn&apos;t match any skills, the assistant
           searches your uploaded documents for relevant information. The source will appear in the
           Reasoning section of the response.
         </p>

@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const message =
       error instanceof Error
         ? error.message
-        : "Unable to generate response from GRC Minion. Please try again later.";
+        : "Unable to generate response. Please try again later.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
