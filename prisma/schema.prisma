@@ -79,7 +79,8 @@ model BulkProject {
   reviewedAt        DateTime?
   reviewedBy        String?
 
-  rows           BulkRow[] // One-to-many relationship with BulkRow
+  rows              BulkRow[] // One-to-many relationship with BulkRow
+  customerProfiles  ProjectCustomerProfile[] // Many-to-many with CustomerProfile
 
   @@index([status])
   @@index([lastModifiedAt])
@@ -139,4 +140,45 @@ model KnowledgeDocument {
   description String?  @db.Text
 
   @@index([uploadedAt])
+}
+
+// Customer Profiles (The Rolodex)
+model CustomerProfile {
+  id              String   @id @default(uuid())
+  name            String   // Company name
+  industry        String?  // e.g., "Healthcare", "FinTech"
+  website         String?  // Primary company URL
+  overview        String   @db.Text // AI-generated company overview
+  products        String?  @db.Text // Products/services description
+  challenges      String?  @db.Text // Known challenges/pain points
+  keyFacts        Json?    // Array of {label, value} pairs
+  tags            String[] // For filtering/search
+  sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastRefreshedAt DateTime?
+  createdBy       String?
+  owners          Json?    // Array of {name, email}
+  history         Json?    // Audit trail entries
+
+  projects        ProjectCustomerProfile[]
+
+  @@index([isActive, updatedAt])
+  @@index([industry])
+}
+
+// Join table for Projects <-> CustomerProfiles (many-to-many)
+model ProjectCustomerProfile {
+  id        String   @id @default(uuid())
+  projectId String
+  profileId String
+  addedAt   DateTime @default(now())
+
+  project   BulkProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  profile   CustomerProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, profileId])
+  @@index([projectId])
+  @@index([profileId])
 }
