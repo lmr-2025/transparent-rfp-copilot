@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { SKILLS_STORAGE_KEY, loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
+import { SKILLS_STORAGE_KEY, loadSkillsFromStorage, loadSkillsFromApi, updateSkillViaApi, deleteSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SkillFact, SourceUrl, SkillOwner, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
 import { loadCategories, migrateSkillCategories } from "@/lib/categoryStorage";
 import SkillOwnerEditor from "@/components/SkillOwnerEditor";
@@ -539,71 +539,76 @@ export default function KnowledgeLibraryPage() {
     }));
   };
 
+  // Load skills from API on mount
   useEffect(() => {
-    setSkills(loadSkillsFromStorage());
+    loadSkillsFromApi().then(setSkills).catch(console.error);
   }, []);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key === SKILLS_STORAGE_KEY) {
-        setSkills(loadSkillsFromStorage());
+        // Reload from API when storage changes
+        loadSkillsFromApi().then(setSkills).catch(console.error);
       }
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  const handleDeleteSkill = (skillId: string) => {
-    setSkills((prev) => {
-      const next = prev.filter((skill) => skill.id !== skillId);
-      saveSkillsToStorage(next);
-      return next;
-    });
-    setConfirmingDeleteId(null);
-    setRefreshStates((prev) => {
-      const copy = { ...prev };
-      delete copy[skillId];
-      return copy;
-    });
+  const handleDeleteSkill = async (skillId: string) => {
+    try {
+      await deleteSkillViaApi(skillId);
+      setSkills((prev) => prev.filter((skill) => skill.id !== skillId));
+      setConfirmingDeleteId(null);
+      setRefreshStates((prev) => {
+        const copy = { ...prev };
+        delete copy[skillId];
+        return copy;
+      });
+    } catch (error) {
+      console.error("Failed to delete skill:", error);
+      alert("Failed to delete skill. Please try again.");
+    }
   };
 
-  const handleUpdateSkillOwners = (skillId: string, owners: SkillOwner[]) => {
-    setSkills((prev) => {
-      const updated = prev.map((skill) => {
-        if (skill.id !== skillId) return skill;
+  const handleUpdateSkillOwners = async (skillId: string, owners: SkillOwner[]) => {
+    const skill = skills.find((s) => s.id === skillId);
+    if (!skill) return;
 
-        // Add history entry for owner changes
-        const existingOwners = skill.owners || [];
-        const addedOwners = owners.filter(o => !existingOwners.some(eo => eo.name === o.name));
-        const removedOwners = existingOwners.filter(eo => !owners.some(o => o.name === eo.name));
+    // Add history entry for owner changes
+    const existingOwners = skill.owners || [];
+    const addedOwners = owners.filter(o => !existingOwners.some(eo => eo.name === o.name));
+    const removedOwners = existingOwners.filter(eo => !owners.some(o => o.name === eo.name));
 
-        const historyEntries: SkillHistoryEntry[] = [];
-        const now = new Date().toISOString();
+    const historyEntries: SkillHistoryEntry[] = [];
+    const now = new Date().toISOString();
 
-        if (addedOwners.length > 0) {
-          historyEntries.push({
-            date: now,
-            action: 'owner_added',
-            summary: `Added owner(s): ${addedOwners.map(o => o.name).join(', ')}`,
-          });
-        }
-        if (removedOwners.length > 0) {
-          historyEntries.push({
-            date: now,
-            action: 'owner_removed',
-            summary: `Removed owner(s): ${removedOwners.map(o => o.name).join(', ')}`,
-          });
-        }
-
-        return {
-          ...skill,
-          owners: owners.length > 0 ? owners : undefined,
-          history: [...(skill.history || []), ...historyEntries],
-        };
+    if (addedOwners.length > 0) {
+      historyEntries.push({
+        date: now,
+        action: 'owner_added',
+        summary: `Added owner(s): ${addedOwners.map(o => o.name).join(', ')}`,
       });
-      saveSkillsToStorage(updated);
-      return updated;
-    });
+    }
+    if (removedOwners.length > 0) {
+      historyEntries.push({
+        date: now,
+        action: 'owner_removed',
+        summary: `Removed owner(s): ${removedOwners.map(o => o.name).join(', ')}`,
+      });
+    }
+
+    const updates = {
+      owners: owners.length > 0 ? owners : undefined,
+      history: [...(skill.history || []), ...historyEntries],
+    };
+
+    try {
+      const updatedSkill = await updateSkillViaApi(skillId, updates);
+      setSkills((prev) => prev.map((s) => s.id === skillId ? updatedSkill : s));
+    } catch (error) {
+      console.error("Failed to update skill owners:", error);
+    }
   };
 
   const handleRefreshSkill = async (skillId: string, urlsOverride?: string[]) => {
@@ -674,8 +679,11 @@ export default function KnowledgeLibraryPage() {
     }
   };
 
-const handleApplySuggestion = (skillId: string) => {
+const handleApplySuggestion = async (skillId: string) => {
   const state = getRefreshState(skillId);
+  const skill = skills.find((s) => s.id === skillId);
+  if (!skill) return;
+
   const urls = state.sourceLinks
     .split("\n")
     .map((entry) => entry.trim())
@@ -686,66 +694,59 @@ const handleApplySuggestion = (skillId: string) => {
     const selectedIndices = state.selectedSuggestions;
     if (selectedIndices.size === 0) return;
 
-    setSkills((prev) => {
-      const updated = prev.map((skill) => {
-        if (skill.id !== skillId) return skill;
+    const now = new Date().toISOString();
+    let newContent = skill.content;
 
-        const now = new Date().toISOString();
-        let newContent = skill.content;
+    // Apply selected suggestions
+    state.updates.suggestions.forEach((suggestion, index) => {
+      if (!selectedIndices.has(index)) return;
 
-        // Apply selected suggestions
-        state.updates!.suggestions.forEach((suggestion, index) => {
-          if (!selectedIndices.has(index)) return;
-
-          if (suggestion.action === "add") {
-            // Add new content at the end
-            newContent = newContent.trim() + "\n\n" + suggestion.content;
-          } else if (suggestion.action === "modify") {
-            // For modify, append the new content (user can manually merge)
-            // A more sophisticated approach would try to find and replace sections
-            newContent = newContent.trim() + "\n\n" + suggestion.content;
-          }
-          // For "remove", we'd need more sophisticated logic - skip for now
-        });
-
-        // Merge tags
-        const existingTags = new Set(skill.tags);
-        const newTags = [...skill.tags];
-        state.updates!.tags.forEach((tag) => {
-          if (!existingTags.has(tag)) {
-            newTags.push(tag);
-          }
-        });
-
-        // Merge source URLs
-        const existingUrls = skill.sourceUrls || [];
-        const existingUrlStrings = new Set(existingUrls.map(u => u.url));
-        const newSourceUrls: SourceUrl[] = urls
-          .filter(url => !existingUrlStrings.has(url))
-          .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
-        const updatedExistingUrls = existingUrls.map(u =>
-          urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
-        );
-
-        // Add history entry for the refresh
-        const historyEntry: SkillHistoryEntry = {
-          date: now,
-          action: 'refreshed',
-          summary: `Applied ${state.selectedSuggestions?.size ?? 0} update suggestions from ${urls.length} source${urls.length > 1 ? 's' : ''}`,
-        };
-
-        return {
-          ...skill,
-          content: newContent,
-          tags: newTags,
-          sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
-          lastRefreshedAt: now,
-          history: [...(skill.history || []), historyEntry],
-        };
-      });
-      saveSkillsToStorage(updated);
-      return updated;
+      if (suggestion.action === "add") {
+        newContent = newContent.trim() + "\n\n" + suggestion.content;
+      } else if (suggestion.action === "modify") {
+        newContent = newContent.trim() + "\n\n" + suggestion.content;
+      }
     });
+
+    // Merge tags
+    const existingTags = new Set(skill.tags);
+    const newTags = [...skill.tags];
+    state.updates.tags.forEach((tag) => {
+      if (!existingTags.has(tag)) {
+        newTags.push(tag);
+      }
+    });
+
+    // Merge source URLs
+    const existingUrls = skill.sourceUrls || [];
+    const existingUrlStrings = new Set(existingUrls.map(u => u.url));
+    const newSourceUrls: SourceUrl[] = urls
+      .filter(url => !existingUrlStrings.has(url))
+      .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
+    const updatedExistingUrls = existingUrls.map(u =>
+      urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
+    );
+
+    const historyEntry: SkillHistoryEntry = {
+      date: now,
+      action: 'refreshed',
+      summary: `Applied ${state.selectedSuggestions?.size ?? 0} update suggestions from ${urls.length} source${urls.length > 1 ? 's' : ''}`,
+    };
+
+    const updates = {
+      content: newContent,
+      tags: newTags,
+      sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
+      lastRefreshedAt: now,
+      history: [...(skill.history || []), historyEntry],
+    };
+
+    try {
+      const updatedSkill = await updateSkillViaApi(skillId, updates);
+      setSkills((prev) => prev.map((s) => s.id === skillId ? updatedSkill : s));
+    } catch (error) {
+      console.error("Failed to apply suggestion:", error);
+    }
 
     mergeRefreshState(skillId, {
       updates: undefined,
@@ -763,57 +764,52 @@ const handleApplySuggestion = (skillId: string) => {
   }
 
   const draft = state.draft;
+  const now = new Date().toISOString();
+  const nextInformation =
+    draft.sourceMapping && draft.sourceMapping.length > 0
+      ? {
+          responseTemplate: undefined,
+          sources: draft.sourceMapping,
+        }
+      : skill.information;
 
-  setSkills((prev) => {
-    const updated = prev.map((skill) => {
-      if (skill.id !== skillId) {
-        return skill;
-      }
-      const now = new Date().toISOString();
-      const nextInformation =
-        draft.sourceMapping && draft.sourceMapping.length > 0
-          ? {
-              responseTemplate: undefined,
-              sources: draft.sourceMapping,
-            }
-          : skill.information;
+  // Merge source URLs
+  const existingUrls = skill.sourceUrls || [];
+  const existingUrlStrings = new Set(existingUrls.map(u => u.url));
+  const newSourceUrls: SourceUrl[] = urls
+    .filter(url => !existingUrlStrings.has(url))
+    .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
+  const updatedExistingUrls = existingUrls.map(u =>
+    urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
+  );
 
-      // Merge source URLs
-      const existingUrls = skill.sourceUrls || [];
-      const existingUrlStrings = new Set(existingUrls.map(u => u.url));
-      const newSourceUrls: SourceUrl[] = urls
-        .filter(url => !existingUrlStrings.has(url))
-        .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
-      const updatedExistingUrls = existingUrls.map(u =>
-        urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
-      );
+  const historyEntry: SkillHistoryEntry = {
+    date: now,
+    action: 'refreshed',
+    summary: `Skill refreshed from ${urls.length} source${urls.length > 1 ? 's' : ''}`,
+  };
 
-      // Add history entry for the refresh
-      const historyEntry: SkillHistoryEntry = {
-        date: now,
-        action: 'refreshed',
-        summary: `Skill refreshed from ${urls.length} source${urls.length > 1 ? 's' : ''}`,
-      };
+  const updates = {
+    tags:
+      Array.isArray(draft.tags) && draft.tags.length > 0
+        ? draft.tags
+        : skill.tags,
+    content:
+      typeof draft.content === "string" && draft.content.trim().length > 0
+        ? draft.content
+        : skill.content,
+    sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
+    information: nextInformation,
+    lastRefreshedAt: now,
+    history: [...(skill.history || []), historyEntry],
+  };
 
-      return {
-        ...skill,
-        tags:
-          Array.isArray(draft.tags) && draft.tags.length > 0
-            ? draft.tags
-            : skill.tags,
-        content:
-          typeof draft.content === "string" && draft.content.trim().length > 0
-            ? draft.content
-            : skill.content,
-        sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
-        information: nextInformation,
-        lastRefreshedAt: now,
-        history: [...(skill.history || []), historyEntry],
-      };
-    });
-    saveSkillsToStorage(updated);
-    return updated;
-  });
+  try {
+    const updatedSkill = await updateSkillViaApi(skillId, updates);
+    setSkills((prev) => prev.map((s) => s.id === skillId ? updatedSkill : s));
+  } catch (error) {
+    console.error("Failed to apply draft:", error);
+  }
 
   mergeRefreshState(skillId, {
     draft: undefined,
@@ -1768,7 +1764,7 @@ const handleApplySuggestion = (skillId: string) => {
                         <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               // Apply the draft update
                               const now = new Date().toISOString();
                               const historyEntry: SkillHistoryEntry = {
@@ -1776,19 +1772,19 @@ const handleApplySuggestion = (skillId: string) => {
                                 action: 'refreshed',
                                 summary: refreshState.draftUpdate!.summary || 'Skill refreshed with proposed changes',
                               };
-                              const updatedSkill: Skill = {
-                                ...skill,
+                              const updates = {
                                 title: refreshState.draftUpdate!.title || skill.title,
                                 content: refreshState.draftUpdate!.content,
                                 tags: [...new Set([...skill.tags, ...refreshState.draftUpdate!.tags])],
                                 lastRefreshedAt: now,
                                 history: [...(skill.history || []), historyEntry],
                               };
-                              setSkills((prev) => {
-                                const updated = prev.map((s) => (s.id === skill.id ? updatedSkill : s));
-                                saveSkillsToStorage(updated);
-                                return updated;
-                              });
+                              try {
+                                const updatedSkill = await updateSkillViaApi(skill.id, updates);
+                                setSkills((prev) => prev.map((s) => (s.id === skill.id ? updatedSkill : s)));
+                              } catch (error) {
+                                console.error("Failed to apply changes:", error);
+                              }
                               mergeRefreshState(skill.id, { draftUpdate: undefined, isInputVisible: false, sourceLinks: "" });
                             }}
                             style={{ padding: "10px 16px", borderRadius: "6px", border: "none", backgroundColor: "#22c55e", color: "#fff", fontWeight: 600, cursor: "pointer" }}
@@ -2452,7 +2448,7 @@ const handleApplySuggestion = (skillId: string) => {
                         <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={async () => {
                               // Apply the draft update
                               const now = new Date().toISOString();
                               const historyEntry: SkillHistoryEntry = {
@@ -2460,19 +2456,19 @@ const handleApplySuggestion = (skillId: string) => {
                                 action: 'refreshed',
                                 summary: refreshState.draftUpdate!.summary || 'Skill refreshed with proposed changes',
                               };
-                              const updatedSkill: Skill = {
-                                ...skill,
+                              const updates = {
                                 title: refreshState.draftUpdate!.title || skill.title,
                                 content: refreshState.draftUpdate!.content,
                                 tags: [...new Set([...skill.tags, ...refreshState.draftUpdate!.tags])],
                                 lastRefreshedAt: now,
                                 history: [...(skill.history || []), historyEntry],
                               };
-                              setSkills((prev) => {
-                                const updated = prev.map((s) => (s.id === skill.id ? updatedSkill : s));
-                                saveSkillsToStorage(updated);
-                                return updated;
-                              });
+                              try {
+                                const updatedSkill = await updateSkillViaApi(skill.id, updates);
+                                setSkills((prev) => prev.map((s) => (s.id === skill.id ? updatedSkill : s)));
+                              } catch (error) {
+                                console.error("Failed to apply changes:", error);
+                              }
                               mergeRefreshState(skill.id, { draftUpdate: undefined, isInputVisible: false, sourceLinks: "" });
                             }}
                             style={{ padding: "10px 16px", borderRadius: "6px", border: "none", backgroundColor: "#22c55e", color: "#fff", fontWeight: 600, cursor: "pointer" }}

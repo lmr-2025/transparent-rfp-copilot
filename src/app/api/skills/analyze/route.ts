@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
-import { getCategoryNames } from "@/lib/categoryStorage";
+import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 
 type ExistingSkillInfo = {
   id: string;
@@ -188,7 +188,7 @@ async function analyzeContent(
     ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || "Uncategorized"}\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
     : "No existing skills in the knowledge base.";
 
-  const categoriesList = getCategoryNames().join(", ");
+  const categoriesList = (await getCategoryNamesFromDb()).join(", ");
 
   const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
 

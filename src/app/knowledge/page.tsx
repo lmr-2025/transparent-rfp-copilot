@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
+import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
 import { loadCategories } from "@/lib/categoryStorage";
 import { defaultSkillSections, buildSkillPromptFromSections, EditableSkillSection } from "@/lib/promptSections";
@@ -144,9 +144,10 @@ export default function KnowledgeUploadPage() {
   // Load configured skill prompt sections
   const [skillSections] = useState<EditableSkillSection[]>(() => loadSkillSections());
 
+  // Load skills from API on mount
   useEffect(() => {
-    saveSkillsToStorage(skills);
-  }, [skills]);
+    loadSkillsFromApi().then(setSkills).catch(console.error);
+  }, []);
 
   const updateQueueItem = (id: string, patch: Partial<UploadStatus>) => {
     setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
@@ -267,14 +268,15 @@ export default function KnowledgeUploadPage() {
               urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
             );
 
-            const updatedSkill: Skill = {
-              ...existingSkill,
+            const updates = {
               title: data.draft.title || existingSkill.title,
               content: data.draft.content,
               tags: [...new Set([...existingSkill.tags, ...data.draft.tags])],
               sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
               lastRefreshedAt: now,
             };
+            // Save to database via API
+            const updatedSkill = await updateSkillViaApi(existingSkill.id, updates);
             setSkills((prev) => prev.map((s) => (s.id === existingSkill.id ? updatedSkill : s)));
             setAnalysisResult(null);
             setUrlInput("");
@@ -324,7 +326,7 @@ export default function KnowledgeUploadPage() {
     handleBuildFromUrls();
   };
 
-  const handleSaveDraft = () => {
+  const handleSaveDraft = async () => {
     if (!generatedDraft) return;
 
     const now = new Date().toISOString();
@@ -343,8 +345,7 @@ export default function KnowledgeUploadPage() {
       summary: `Skill created from ${urlsToSave.length} source URL${urlsToSave.length > 1 ? 's' : ''}`,
     }];
 
-    const newSkill: Skill = {
-      id: crypto.randomUUID(),
+    const skillData = {
       title: generatedDraft.title,
       categories: selectedCategories.length > 0 ? selectedCategories : undefined,
       tags: generatedDraft.tags,
@@ -353,15 +354,21 @@ export default function KnowledgeUploadPage() {
       edgeCases: [],
       sourceUrls,
       isActive: true,
-      createdAt: now,
       history,
     };
 
-    setSkills((prev) => [newSkill, ...prev]);
-    setGeneratedDraft(null);
-    setSelectedCategories([]);
-    setUrlInput("");
-    buildUrlsRef.current = [];
+    try {
+      // Save to database via API
+      const newSkill = await createSkillViaApi(skillData);
+      setSkills((prev) => [newSkill, ...prev]);
+      setGeneratedDraft(null);
+      setSelectedCategories([]);
+      setUrlInput("");
+      buildUrlsRef.current = [];
+    } catch (error) {
+      console.error("Failed to save skill:", error);
+      alert("Failed to save skill. Please try again.");
+    }
   };
 
   const handleCancelDraft = () => {
@@ -385,31 +392,34 @@ export default function KnowledgeUploadPage() {
       const queueId = newQueueEntries[index].id;
       updateQueueItem(queueId, { status: "processing" });
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         const text = typeof reader.result === "string" ? reader.result : "";
         if (!text.trim()) {
           updateQueueItem(queueId, { status: "error", message: "File was empty" });
           return;
         }
-        const createdAt = new Date().toISOString();
-        const newSkill: Skill = {
-          id: crypto.randomUUID(),
+        const skillData = {
           title: deriveTitleFromFilename(file.name),
-          tags: [],
+          tags: [] as string[],
           content: text,
-          quickFacts: [],
-          edgeCases: [],
-          sourceUrls: [], // File uploads don't have source URLs
+          quickFacts: [] as { question: string; answer: string }[],
+          edgeCases: [] as string[],
+          sourceUrls: [] as SourceUrl[], // File uploads don't have source URLs
           isActive: true,
-          createdAt,
           history: [{
-            date: createdAt,
-            action: 'created',
+            date: new Date().toISOString(),
+            action: 'created' as const,
             summary: `Skill created from uploaded file: ${file.name}`,
           }],
         };
-        setSkills((prev) => [newSkill, ...prev]);
-        updateQueueItem(queueId, { status: "saved", message: "Saved" });
+        try {
+          const newSkill = await createSkillViaApi(skillData);
+          setSkills((prev) => [newSkill, ...prev]);
+          updateQueueItem(queueId, { status: "saved", message: "Saved" });
+        } catch (error) {
+          console.error("Failed to save skill:", error);
+          updateQueueItem(queueId, { status: "error", message: "Failed to save" });
+        }
       };
       reader.onerror = () =>
         updateQueueItem(queueId, { status: "error", message: "Could not read file" });

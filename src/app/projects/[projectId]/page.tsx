@@ -10,7 +10,7 @@ import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
 import { BulkProject, BulkRow, ProjectCustomerProfileRef } from "@/types/bulkProject";
 import { fetchProject, updateProject, deleteProject as deleteProjectApi } from "@/lib/projectApi";
 import ConversationalRefinement from "@/components/ConversationalRefinement";
-import { loadSkillsFromStorage } from "@/lib/skillStorage";
+import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 import { loadReferenceUrls } from "@/lib/referenceUrlStorage";
@@ -199,7 +199,7 @@ export default function BulkResponsesPage() {
 
   // Load skills, reference URLs, and customer profiles on mount
   useEffect(() => {
-    setAvailableSkills(loadSkillsFromStorage());
+    loadSkillsFromApi().then(setAvailableSkills).catch(console.error);
     setReferenceUrls(loadReferenceUrls());
     fetchActiveProfiles()
       .then(profiles => setAllCustomerProfiles(profiles))

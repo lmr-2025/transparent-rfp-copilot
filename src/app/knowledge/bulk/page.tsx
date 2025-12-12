@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
+import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import { defaultSkillSections, buildSkillPromptFromSections, EditableSkillSection } from "@/lib/promptSections";
 import { SKILL_PROMPT_SECTIONS_KEY } from "@/lib/promptStorage";
@@ -101,9 +101,10 @@ export default function BulkUrlImportPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [skillSections] = useState<EditableSkillSection[]>(() => loadSkillSections());
 
+  // Load skills from API on mount
   useEffect(() => {
-    saveSkillsToStorage(skills);
-  }, [skills]);
+    loadSkillsFromApi().then(setSkills).catch(console.error);
+  }, []);
 
   const updateQueueItem = useCallback((id: string, patch: Partial<UrlQueueItem>) => {
     setQueue(prev => prev.map(item => item.id === id ? { ...item, ...patch } : item));
@@ -275,8 +276,7 @@ export default function BulkUrlImportPage() {
               : u
           );
 
-          const updatedSkill: Skill = {
-            ...existingSkill,
+          const updates = {
             title: data.draft.title || existingSkill.title,
             content: data.draft.content,
             tags: [...new Set([...existingSkill.tags, ...data.draft.tags])],
@@ -286,12 +286,13 @@ export default function BulkUrlImportPage() {
               ...(existingSkill.history || []),
               {
                 date: now,
-                action: "updated",
+                action: "updated" as const,
                 summary: `Updated from bulk import: ${item.url}`,
               },
             ],
           };
 
+          const updatedSkill = await updateSkillViaApi(existingSkill.id, updates);
           setSkills(prev => prev.map(s => s.id === existingSkill.id ? updatedSkill : s));
           return { skillId: existingSkill.id, skillTitle: existingSkill.title };
         } else {
@@ -329,23 +330,22 @@ export default function BulkUrlImportPage() {
 
       const history: SkillHistoryEntry[] = [{
         date: now,
-        action: "created",
+        action: "created" as const,
         summary: `Created from bulk URL import`,
       }];
 
-      const newSkill: Skill = {
-        id: crypto.randomUUID(),
+      const skillData = {
         title: draft.title,
-        tags: draft.tags,
+        tags: draft.tags as string[],
         content: draft.content,
-        quickFacts: [],
-        edgeCases: [],
+        quickFacts: [] as { question: string; answer: string }[],
+        edgeCases: [] as string[],
         sourceUrls,
         isActive: true,
-        createdAt: now,
         history,
       };
 
+      const newSkill = await createSkillViaApi(skillData);
       setSkills(prev => [newSkill, ...prev]);
       return { skillId: newSkill.id, skillTitle: newSkill.title };
     }

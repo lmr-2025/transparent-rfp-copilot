@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { loadSkillsFromStorage } from "@/lib/skillStorage";
+import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { CustomerProfile } from "@/types/customerProfile";
@@ -288,17 +288,18 @@ export default function ChatPage() {
 
   // Load skills, customer profiles, and prompts on mount
   useEffect(() => {
-    const loaded = loadSkillsFromStorage();
-    const activeSkills = loaded.filter(s => s.isActive);
-    setSkills(activeSkills);
-    setSkillSelections(
-      activeSkills.map(s => ({
-        id: s.id,
-        title: s.title,
-        tags: s.tags,
-        selected: true,
-      }))
-    );
+    loadSkillsFromApi().then((loaded) => {
+      const activeSkills = loaded.filter(s => s.isActive);
+      setSkills(activeSkills);
+      setSkillSelections(
+        activeSkills.map(s => ({
+          id: s.id,
+          title: s.title,
+          tags: s.tags,
+          selected: true,
+        }))
+      );
+    }).catch(console.error);
     setPrompts(getAllPrompts());
     setCategories(getEffectiveCategories());
 

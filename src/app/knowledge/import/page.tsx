@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { Skill } from "@/types/skill";
-import { loadSkillsFromStorage, saveSkillsToStorage } from "@/lib/skillStorage";
+import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 
 type RFPEntry = {
   question: string;
@@ -79,6 +79,11 @@ export default function ImportRFPPage() {
   const [columns, setColumns] = useState<string[]>([]);
   const [questionColumn, setQuestionColumn] = useState("");
   const [answerColumn, setAnswerColumn] = useState("");
+
+  // Load skills from API on mount
+  useEffect(() => {
+    loadSkillsFromApi().then(setSkills).catch(console.error);
+  }, []);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -203,47 +208,59 @@ export default function ImportRFPPage() {
     });
   };
 
-  const handleApplySelected = () => {
+  const handleApplySelected = async () => {
     if (!analysisResult || selectedSuggestions.size === 0) return;
 
-    const updatedSkills = [...skills];
     let updatesApplied = 0;
     let newSkillsCreated = 0;
+    const updatedSkillsList: Skill[] = [];
+    const newSkillsList: Skill[] = [];
 
-    analysisResult.suggestions.forEach((suggestion, index) => {
-      if (!selectedSuggestions.has(index)) return;
+    for (const [index, suggestion] of analysisResult.suggestions.entries()) {
+      if (!selectedSuggestions.has(index)) continue;
 
-      if (suggestion.type === "update" && suggestion.skillId) {
-        // Find and update existing skill
-        const skillIndex = updatedSkills.findIndex((s) => s.id === suggestion.skillId);
-        if (skillIndex !== -1) {
-          updatedSkills[skillIndex] = {
-            ...updatedSkills[skillIndex],
-            content: updatedSkills[skillIndex].content + "\n\n" + suggestion.suggestedAdditions,
-            lastRefreshedAt: new Date().toISOString(),
+      try {
+        if (suggestion.type === "update" && suggestion.skillId) {
+          // Find and update existing skill via API
+          const existingSkill = skills.find((s) => s.id === suggestion.skillId);
+          if (existingSkill) {
+            const updates = {
+              content: existingSkill.content + "\n\n" + suggestion.suggestedAdditions,
+              lastRefreshedAt: new Date().toISOString(),
+            };
+            const updatedSkill = await updateSkillViaApi(suggestion.skillId, updates);
+            updatedSkillsList.push(updatedSkill);
+            updatesApplied++;
+          }
+        } else if (suggestion.type === "new") {
+          // Create new skill via API
+          const skillData = {
+            title: suggestion.skillTitle,
+            tags: suggestion.tags,
+            content: suggestion.suggestedAdditions,
+            quickFacts: [] as { question: string; answer: string }[],
+            edgeCases: [] as string[],
+            sourceUrls: [] as { url: string; addedAt: string; lastFetchedAt?: string }[],
+            isActive: true,
           };
-          updatesApplied++;
+          const newSkill = await createSkillViaApi(skillData);
+          newSkillsList.push(newSkill);
+          newSkillsCreated++;
         }
-      } else if (suggestion.type === "new") {
-        // Create new skill
-        const newSkill: Skill = {
-          id: crypto.randomUUID(),
-          title: suggestion.skillTitle,
-          tags: suggestion.tags,
-          content: suggestion.suggestedAdditions,
-          quickFacts: [],
-          edgeCases: [],
-          sourceUrls: [], // No source URLs for imported skills
-          isActive: true,
-          createdAt: new Date().toISOString(),
-        };
-        updatedSkills.unshift(newSkill);
-        newSkillsCreated++;
+      } catch (error) {
+        console.error("Failed to apply suggestion:", error);
       }
+    }
+
+    // Update local state
+    setSkills((prev) => {
+      let updated = prev.map((s) => {
+        const updatedVersion = updatedSkillsList.find((u) => u.id === s.id);
+        return updatedVersion || s;
+      });
+      return [...newSkillsList, ...updated];
     });
 
-    setSkills(updatedSkills);
-    saveSkillsToStorage(updatedSkills);
     setSuccessMessage(
       `Applied ${updatesApplied} skill update${updatesApplied !== 1 ? "s" : ""} and created ${newSkillsCreated} new skill${newSkillsCreated !== 1 ? "s" : ""}.`
     );

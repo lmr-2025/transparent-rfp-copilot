@@ -6,7 +6,7 @@ import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
 import Link from "next/link";
 import ConversationalRefinement from "@/components/ConversationalRefinement";
-import { loadSkillsFromStorage } from "@/lib/skillStorage";
+import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
 import SkillRecommendation from "@/components/SkillRecommendation";
@@ -112,7 +112,7 @@ export default function QuestionsPage() {
 
   // Load skills on mount
   useEffect(() => {
-    setAvailableSkills(loadSkillsFromStorage());
+    loadSkillsFromApi().then(setAvailableSkills).catch(console.error);
   }, []);
 
   const handleQuestionInput = (value: string) => {

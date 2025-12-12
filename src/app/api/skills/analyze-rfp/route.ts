@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
-import { getCategoryNames } from "@/lib/categoryStorage";
+import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 
 type RFPEntry = {
   question: string;
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
       ? existingSkills.map((s, i) => `${i + 1}. "${s.title}" (ID: ${s.id})\n   Category: ${s.category || "Uncategorized"}\n   Tags: ${s.tags.join(", ") || "none"}\n   Content preview: ${s.content.substring(0, 300)}...`).join("\n\n")
       : "No existing skills.";
 
-    const categoriesList = getCategoryNames().join(", ");
+    const categoriesList = (await getCategoryNamesFromDb()).join(", ");
 
     const rfpSummary = rfpEntries.map((e, i) =>
       `[${i + 1}] Q: ${e.question}\nA: ${e.answer}`
