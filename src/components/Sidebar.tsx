@@ -17,6 +17,13 @@ const navItems = [
     ],
   },
   {
+    section: "The Rolodex",
+    items: [
+      { href: "/customers", label: "Build Profile" },
+      { href: "/customers/library", label: "Library" },
+    ],
+  },
+  {
     section: "The Oracle",
     items: [
       { href: "/chat", label: "Chat" },

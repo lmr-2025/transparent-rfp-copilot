@@ -4,6 +4,8 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { loadSkillsFromStorage } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
+import { fetchActiveProfiles } from "@/lib/customerProfileApi";
+import { CustomerProfile } from "@/types/customerProfile";
 import {
   ChatPrompt,
   getAllPrompts,
@@ -24,6 +26,7 @@ import TransparencyModal from "@/components/TransparencyModal";
 type TransparencyData = {
   systemPrompt: string;
   knowledgeContext: string;
+  customerContext: string;
   model: string;
   maxTokens: number;
   temperature: number;
@@ -35,6 +38,7 @@ type ChatMessage = {
   content: string;
   timestamp: Date;
   skillsUsed?: { id: string; title: string }[];
+  customersUsed?: { id: string; name: string }[];
   transparency?: TransparencyData;
 };
 
@@ -45,7 +49,14 @@ type SkillSelection = {
   tags: string[];
 };
 
-type SidebarTab = "skills" | "prompts";
+type CustomerSelection = {
+  id: string;
+  name: string;
+  industry?: string;
+  selected: boolean;
+};
+
+type SidebarTab = "skills" | "prompts" | "customers";
 
 // Helper to load chat sections from localStorage
 const loadChatSections = (): EditableChatSection[] => {
@@ -256,6 +267,8 @@ const styles = {
 export default function ChatPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillSelections, setSkillSelections] = useState<SkillSelection[]>([]);
+  const [customerProfiles, setCustomerProfiles] = useState<CustomerProfile[]>([]);
+  const [customerSelections, setCustomerSelections] = useState<CustomerSelection[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -273,7 +286,7 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load skills and prompts on mount
+  // Load skills, customer profiles, and prompts on mount
   useEffect(() => {
     const loaded = loadSkillsFromStorage();
     const activeSkills = loaded.filter(s => s.isActive);
@@ -288,6 +301,23 @@ export default function ChatPage() {
     );
     setPrompts(getAllPrompts());
     setCategories(getEffectiveCategories());
+
+    // Load customer profiles from database
+    fetchActiveProfiles()
+      .then(profiles => {
+        setCustomerProfiles(profiles);
+        setCustomerSelections(
+          profiles.map(p => ({
+            id: p.id,
+            name: p.name,
+            industry: p.industry || undefined,
+            selected: false, // Default to none selected
+          }))
+        );
+      })
+      .catch(err => {
+        console.error("Failed to load customer profiles:", err);
+      });
   }, []);
 
   // Scroll to bottom when messages change
@@ -319,6 +349,23 @@ export default function ChatPage() {
 
   const selectedCount = skillSelections.filter(s => s.selected).length;
 
+  // Customer selection helpers
+  const toggleCustomer = (customerId: string) => {
+    setCustomerSelections(prev =>
+      prev.map(c => (c.id === customerId ? { ...c, selected: !c.selected } : c))
+    );
+  };
+
+  const selectAllCustomers = () => {
+    setCustomerSelections(prev => prev.map(c => ({ ...c, selected: true })));
+  };
+
+  const selectNoCustomers = () => {
+    setCustomerSelections(prev => prev.map(c => ({ ...c, selected: false })));
+  };
+
+  const selectedCustomerCount = customerSelections.filter(c => c.selected).length;
+
   const handleSend = async (promptOverride?: string) => {
     const messageContent = promptOverride || inputValue.trim();
     if (!messageContent || isLoading) return;
@@ -346,6 +393,19 @@ export default function ChatPage() {
           tags: s.tags,
         }));
 
+      const selectedCustomerIds = new Set(customerSelections.filter(c => c.selected).map(c => c.id));
+      const selectedCustomers = customerProfiles
+        .filter(p => selectedCustomerIds.has(p.id))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          industry: p.industry || undefined,
+          overview: p.overview,
+          products: p.products || undefined,
+          challenges: p.challenges || undefined,
+          keyFacts: p.keyFacts,
+        }));
+
       const conversationHistory = messages.map(m => ({
         role: m.role,
         content: m.content,
@@ -357,6 +417,7 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: userMessage.content,
           skills: selectedSkills,
+          customerProfiles: selectedCustomers,
           conversationHistory,
           chatSections: chatSections.filter(s => s.enabled),
         }),
@@ -375,6 +436,7 @@ export default function ChatPage() {
         content: data.response,
         timestamp: new Date(),
         skillsUsed: data.skillsUsed,
+        customersUsed: data.customersUsed,
         transparency: data.transparency,
       };
 
@@ -436,12 +498,38 @@ export default function ChatPage() {
         ).join("\n\n---\n\n")
       : "No knowledge base documents provided.";
 
+    // Build customer context
+    const selectedCustomerIds = new Set(customerSelections.filter(c => c.selected).map(c => c.id));
+    const selectedCustomers = customerProfiles.filter(p => selectedCustomerIds.has(p.id));
+
+    const customerContext = selectedCustomers.length > 0
+      ? selectedCustomers.map((profile) => {
+          const keyFactsText = profile.keyFacts.length > 0
+            ? `Key Facts:\n${profile.keyFacts.map(f => `  - ${f.label}: ${f.value}`).join("\n")}`
+            : "";
+          return `=== CUSTOMER PROFILE: ${profile.name} ===
+Industry: ${profile.industry || "Not specified"}
+
+Overview:
+${profile.overview}
+${profile.products ? `\nProducts & Services:\n${profile.products}` : ""}
+${profile.challenges ? `\nChallenges & Needs:\n${profile.challenges}` : ""}
+${keyFactsText}`;
+        }).join("\n\n---\n\n")
+      : "";
+
+    // Build combined context
+    const combinedKnowledgeContext = customerContext
+      ? `${knowledgeContext}\n\n=== CUSTOMER INTELLIGENCE ===\n\n${customerContext}`
+      : knowledgeContext;
+
     // Use configured chat sections from localStorage
-    const systemPrompt = buildChatPromptFromSections(chatSections, knowledgeContext);
+    const systemPrompt = buildChatPromptFromSections(chatSections, combinedKnowledgeContext);
 
     return {
       systemPrompt,
       knowledgeContext,
+      customerContext,
       model: CLAUDE_MODEL,
       maxTokens: 4000,
       temperature: 0.3,
@@ -472,7 +560,7 @@ export default function ChatPage() {
               ...(sidebarTab === "prompts" ? styles.sidebarTabActive : {}),
             }}
           >
-            Prompt Library
+            Prompts
           </button>
           <button
             onClick={() => setSidebarTab("skills")}
@@ -483,9 +571,121 @@ export default function ChatPage() {
           >
             Skills ({selectedCount})
           </button>
+          <button
+            onClick={() => setSidebarTab("customers")}
+            style={{
+              ...styles.sidebarTab,
+              ...(sidebarTab === "customers" ? styles.sidebarTabActive : {}),
+            }}
+          >
+            Customers ({selectedCustomerCount})
+          </button>
         </div>
 
-        {sidebarTab === "skills" ? (
+        {sidebarTab === "customers" ? (
+          <>
+            <div style={styles.sidebarHeader}>
+              <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                {selectedCustomerCount} of {customerSelections.length} customer profiles selected
+              </p>
+              <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                <button
+                  onClick={selectAllCustomers}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    backgroundColor: "#f1f5f9",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={selectNoCustomers}
+                  style={{
+                    padding: "4px 8px",
+                    fontSize: "11px",
+                    backgroundColor: "#f1f5f9",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Select None
+                </button>
+              </div>
+            </div>
+            <div style={styles.sidebarContent}>
+              {customerSelections.length === 0 ? (
+                <p style={{ fontSize: "13px", color: "#64748b", textAlign: "center", marginTop: "20px" }}>
+                  No customer profiles yet.{" "}
+                  <a href="/customers" style={{ color: "#3b82f6" }}>Build one</a>
+                </p>
+              ) : (
+                customerSelections.map(customer => (
+                  <div
+                    key={customer.id}
+                    onClick={() => toggleCustomer(customer.id)}
+                    style={{
+                      ...styles.skillItem,
+                      ...(customer.selected ? styles.skillItemSelected : {}),
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={customer.selected}
+                      onChange={() => toggleCustomer(customer.id)}
+                      style={{ marginTop: "2px" }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        color: "#1e293b",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}>
+                        {customer.name}
+                      </div>
+                      {customer.industry && (
+                        <span style={{
+                          ...styles.tag,
+                          backgroundColor: "#f0fdf4",
+                          color: "#166534",
+                        }}>
+                          {customer.industry}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+              {/* Link to Customer Library */}
+              <div style={{ padding: "12px 0", borderTop: "1px solid #e2e8f0", marginTop: "8px" }}>
+                <Link
+                  href="/customers/library"
+                  style={{
+                    display: "block",
+                    padding: "10px 12px",
+                    backgroundColor: "#f8fafc",
+                    borderRadius: "6px",
+                    textDecoration: "none",
+                    color: "#2563eb",
+                    fontSize: "13px",
+                    fontWeight: 500,
+                    textAlign: "center",
+                    border: "1px solid #e2e8f0",
+                  }}
+                >
+                  Manage profiles →
+                </Link>
+              </div>
+            </div>
+          </>
+        ) : sidebarTab === "skills" ? (
           <>
             <div style={styles.sidebarHeader}>
               <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
@@ -786,6 +986,15 @@ export default function ChatPage() {
                         {message.skillsUsed && message.skillsUsed.length > 0 && message.skillsUsed.map(skill => (
                           <span key={skill.id} style={styles.skillsUsedBadge}>
                             📚 {skill.title}
+                          </span>
+                        ))}
+                        {message.customersUsed && message.customersUsed.length > 0 && message.customersUsed.map(customer => (
+                          <span key={customer.id} style={{
+                            ...styles.skillsUsedBadge,
+                            backgroundColor: "#fef3c7",
+                            color: "#92400e",
+                          }}>
+                            🏢 {customer.name}
                           </span>
                         ))}
                         {message.transparency && (

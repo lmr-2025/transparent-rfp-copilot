@@ -29,6 +29,13 @@ export type BulkRow = {
   selected?: boolean;
 };
 
+// Simplified customer profile reference for projects
+export type ProjectCustomerProfileRef = {
+  id: string;
+  name: string;
+  industry?: string;
+};
+
 export type BulkProject = {
   id: string;
   name: string;
@@ -46,4 +53,6 @@ export type BulkProject = {
   reviewRequestedBy?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  // Linked customer profiles
+  customerProfiles?: ProjectCustomerProfileRef[];
 };

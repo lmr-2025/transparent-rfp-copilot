@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
-import { BulkProject, BulkRow } from "@/types/bulkProject";
+import { BulkProject, BulkRow, ProjectCustomerProfileRef } from "@/types/bulkProject";
 import { fetchProject, updateProject, deleteProject as deleteProjectApi } from "@/lib/projectApi";
 import ConversationalRefinement from "@/components/ConversationalRefinement";
 import { loadSkillsFromStorage } from "@/lib/skillStorage";
@@ -24,6 +24,8 @@ import {
   exportHighConfidenceOnly,
   exportLowConfidenceOnly,
 } from "@/lib/excelExport";
+import { fetchActiveProfiles } from "@/lib/customerProfileApi";
+import { CustomerProfile } from "@/types/customerProfile";
 
 // Helper to render text with clickable URLs
 function renderTextWithLinks(text: string): React.ReactNode {
@@ -156,6 +158,9 @@ export default function BulkResponsesPage() {
   const [isRequestingReview, setIsRequestingReview] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [allCustomerProfiles, setAllCustomerProfiles] = useState<CustomerProfile[]>([]);
+  const [showCustomerSelector, setShowCustomerSelector] = useState(false);
+  const [savingCustomers, setSavingCustomers] = useState(false);
 
   // Load project by ID on mount
   useEffect(() => {
@@ -192,10 +197,13 @@ export default function BulkResponsesPage() {
     return () => clearTimeout(saveTimeout);
   }, [project]);
 
-  // Load skills and reference URLs on mount
+  // Load skills, reference URLs, and customer profiles on mount
   useEffect(() => {
     setAvailableSkills(loadSkillsFromStorage());
     setReferenceUrls(loadReferenceUrls());
+    fetchActiveProfiles()
+      .then(profiles => setAllCustomerProfiles(profiles))
+      .catch(err => console.error("Failed to load customer profiles:", err));
   }, []);
 
   // Handle filter query param from URL (e.g., ?filter=flagged)
@@ -520,6 +528,34 @@ export default function BulkResponsesPage() {
     }
   };
 
+  const handleSaveCustomerProfiles = async (selectedIds: string[]) => {
+    if (!project) return;
+
+    setSavingCustomers(true);
+    try {
+      // Call API to update customer profile associations
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerProfileIds: selectedIds }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save customer profiles");
+      }
+
+      const data = await response.json();
+      // Update local state with returned project (which includes customerProfiles)
+      setProject(data.project);
+      setShowCustomerSelector(false);
+    } catch (error) {
+      console.error("Failed to save customer profiles:", error);
+      alert("Failed to save customer profiles. Please try again.");
+    } finally {
+      setSavingCustomers(false);
+    }
+  };
+
   const renderStatus = (status: string) => {
     switch (status) {
       case "pending":
@@ -583,6 +619,46 @@ export default function BulkResponsesPage() {
               <strong>Approved by:</strong> {project.reviewedBy}
             </>
           )}
+          <div style={{ marginTop: "8px" }}>
+            <strong>Customers:</strong>{" "}
+            {project.customerProfiles && project.customerProfiles.length > 0 ? (
+              <span>
+                {project.customerProfiles.map((cp, idx) => (
+                  <span key={cp.id}>
+                    <span style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      backgroundColor: "#e0e7ff",
+                      color: "#4338ca",
+                      borderRadius: "4px",
+                      fontSize: "0.8rem",
+                      fontWeight: 500,
+                      marginRight: "4px",
+                    }}>
+                      {cp.name}
+                    </span>
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span style={{ color: "#94a3b8" }}>None linked</span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowCustomerSelector(true)}
+              style={{
+                marginLeft: "8px",
+                padding: "2px 8px",
+                fontSize: "0.8rem",
+                backgroundColor: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "4px",
+                cursor: "pointer",
+              }}
+            >
+              Edit
+            </button>
+          </div>
         </div>
         <div>
           <strong>Total:</strong> {stats.total} · <strong>High:</strong> {stats.high} ·{" "}
@@ -1112,6 +1188,165 @@ export default function BulkResponsesPage() {
           ))}
         </div>
       )}
+
+      {/* Customer Profile Selector Modal */}
+      {showCustomerSelector && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setShowCustomerSelector(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: "12px",
+              padding: "24px",
+              maxWidth: "500px",
+              width: "90%",
+              maxHeight: "80vh",
+              overflow: "auto",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 8px 0" }}>Link Customer Profiles</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 16px 0" }}>
+              Select which customer profiles are associated with this project.
+            </p>
+
+            {allCustomerProfiles.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
+                <p>No customer profiles available.</p>
+                <Link href="/customers" style={{ color: "#2563eb" }}>
+                  Build your first profile →
+                </Link>
+              </div>
+            ) : (
+              <CustomerProfileSelector
+                profiles={allCustomerProfiles}
+                selectedIds={(project.customerProfiles || []).map((cp) => cp.id)}
+                onSave={handleSaveCustomerProfiles}
+                onCancel={() => setShowCustomerSelector(false)}
+                saving={savingCustomers}
+              />
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Customer Profile Selector Component
+function CustomerProfileSelector({
+  profiles,
+  selectedIds,
+  onSave,
+  onCancel,
+  saving,
+}: {
+  profiles: CustomerProfile[];
+  selectedIds: string[];
+  onSave: (ids: string[]) => void;
+  onCancel: () => void;
+  saving: boolean;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(selectedIds));
+
+  const toggle = (id: string) => {
+    const newSet = new Set(selected);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelected(newSet);
+  };
+
+  return (
+    <div>
+      <div style={{ maxHeight: "300px", overflowY: "auto", marginBottom: "16px" }}>
+        {profiles.map((profile) => (
+          <div
+            key={profile.id}
+            onClick={() => toggle(profile.id)}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "12px",
+              padding: "12px",
+              marginBottom: "8px",
+              backgroundColor: selected.has(profile.id) ? "#eff6ff" : "#f8fafc",
+              borderRadius: "8px",
+              border: selected.has(profile.id) ? "1px solid #3b82f6" : "1px solid #e2e8f0",
+              cursor: "pointer",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={selected.has(profile.id)}
+              onChange={() => toggle(profile.id)}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600 }}>{profile.name}</div>
+              {profile.industry && (
+                <span style={{
+                  display: "inline-block",
+                  padding: "2px 6px",
+                  backgroundColor: "#f0fdf4",
+                  color: "#166534",
+                  borderRadius: "4px",
+                  fontSize: "11px",
+                  marginTop: "4px",
+                }}>
+                  {profile.industry}
+                </span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          style={{
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "1px solid #e2e8f0",
+            backgroundColor: "#fff",
+            cursor: "pointer",
+          }}
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={() => onSave(Array.from(selected))}
+          disabled={saving}
+          style={{
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            backgroundColor: saving ? "#94a3b8" : "#3b82f6",
+            color: "#fff",
+            fontWeight: 600,
+            cursor: saving ? "not-allowed" : "pointer",
+          }}
+        >
+          {saving ? "Saving..." : "Save"}
+        </button>
+      </div>
     </div>
   );
 }

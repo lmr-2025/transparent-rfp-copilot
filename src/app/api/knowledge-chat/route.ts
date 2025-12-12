@@ -12,6 +12,16 @@ type SkillContext = {
   tags: string[];
 };
 
+type CustomerProfileContext = {
+  id: string;
+  name: string;
+  industry?: string;
+  overview: string;
+  products?: string;
+  challenges?: string;
+  keyFacts: { label: string; value: string }[];
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -20,6 +30,7 @@ type ChatMessage = {
 type ChatRequestBody = {
   message: string;
   skills: SkillContext[];
+  customerProfiles?: CustomerProfileContext[];
   conversationHistory?: ChatMessage[];
   chatSections?: EditableChatSection[];
 };
@@ -27,10 +38,12 @@ type ChatRequestBody = {
 type ChatResponse = {
   response: string;
   skillsUsed: { id: string; title: string }[];
+  customersUsed: { id: string; name: string }[];
   // Transparency data
   transparency: {
     systemPrompt: string;
     knowledgeContext: string;
+    customerContext: string;
     model: string;
     maxTokens: number;
     temperature: number;
@@ -51,6 +64,7 @@ export async function POST(request: NextRequest) {
   }
 
   const skills = Array.isArray(body?.skills) ? body.skills : [];
+  const customerProfiles = Array.isArray(body?.customerProfiles) ? body.customerProfiles : [];
   const conversationHistory = Array.isArray(body?.conversationHistory) ? body.conversationHistory : [];
   const chatSections = Array.isArray(body?.chatSections) && body.chatSections.length > 0
     ? body.chatSections
@@ -71,8 +85,30 @@ export async function POST(request: NextRequest) {
         ).join("\n\n---\n\n")
       : "No knowledge base documents provided.";
 
+    // Build customer context from profiles
+    const customerContext = customerProfiles.length > 0
+      ? customerProfiles.map((profile) => {
+          const keyFactsText = profile.keyFacts.length > 0
+            ? `Key Facts:\n${profile.keyFacts.map(f => `  - ${f.label}: ${f.value}`).join("\n")}`
+            : "";
+          return `=== CUSTOMER PROFILE: ${profile.name} ===
+Industry: ${profile.industry || "Not specified"}
+
+Overview:
+${profile.overview}
+${profile.products ? `\nProducts & Services:\n${profile.products}` : ""}
+${profile.challenges ? `\nChallenges & Needs:\n${profile.challenges}` : ""}
+${keyFactsText}`;
+        }).join("\n\n---\n\n")
+      : "";
+
+    // Build combined context
+    const combinedKnowledgeContext = customerContext
+      ? `${knowledgeContext}\n\n=== CUSTOMER INTELLIGENCE ===\n\n${customerContext}`
+      : knowledgeContext;
+
     // Build system prompt from configured sections
-    const systemPrompt = buildChatPromptFromSections(chatSections, knowledgeContext);
+    const systemPrompt = buildChatPromptFromSections(chatSections, combinedKnowledgeContext);
 
     // Build messages array with conversation history
     const messages: { role: "user" | "assistant"; content: string }[] = [
@@ -101,12 +137,22 @@ export async function POST(request: NextRequest) {
       )
       .map(skill => ({ id: skill.id, title: skill.title }));
 
+    // Determine which customer profiles were likely used
+    const customersUsed = customerProfiles
+      .filter(profile =>
+        content.text.toLowerCase().includes(profile.name.toLowerCase()) ||
+        (profile.industry && content.text.toLowerCase().includes(profile.industry.toLowerCase()))
+      )
+      .map(profile => ({ id: profile.id, name: profile.name }));
+
     const result: ChatResponse = {
       response: content.text,
       skillsUsed,
+      customersUsed,
       transparency: {
         systemPrompt,
         knowledgeContext,
+        customerContext,
         model: CLAUDE_MODEL,
         maxTokens: 4000,
         temperature: 0.3,

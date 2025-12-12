@@ -324,7 +324,28 @@ function ProjectsListContent() {
                 return (
                   <tr key={project.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/projects/${project.id}`)}>
                     <td style={styles.td}>
-                      <strong>{project.customerName || "—"}</strong>
+                      {project.customerProfiles && project.customerProfiles.length > 0 ? (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+                          {project.customerProfiles.map((cp) => (
+                            <span
+                              key={cp.id}
+                              style={{
+                                display: "inline-block",
+                                padding: "2px 8px",
+                                backgroundColor: "#e0e7ff",
+                                color: "#4338ca",
+                                borderRadius: "4px",
+                                fontSize: "0.8rem",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {cp.name}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ color: "#94a3b8" }}>{project.customerName || "—"}</span>
+                      )}
                     </td>
                     <td style={styles.td}>{project.name}</td>
                     <td style={styles.td}>{project.ownerName || "—"}</td>

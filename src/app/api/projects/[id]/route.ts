@@ -36,6 +36,17 @@ export async function GET(request: NextRequest, context: RouteContext) {
             rowNumber: "asc",
           },
         },
+        customerProfiles: {
+          include: {
+            profile: {
+              select: {
+                id: true,
+                name: true,
+                industry: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -46,7 +57,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json({ project }, { status: 200 });
+    // Transform customerProfiles to a simpler format
+    const transformedProject = {
+      ...project,
+      customerProfiles: project.customerProfiles.map((cp) => cp.profile),
+    };
+
+    return NextResponse.json({ project: transformedProject }, { status: 200 });
   } catch (error) {
     console.error("Error fetching project:", error);
     return NextResponse.json(
@@ -65,13 +82,31 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const {
       name, sheetName, columns, rows, ownerName, customerName, notes, status,
-      reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy
+      reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy,
+      customerProfileIds
     } = body;
 
     // Map status string to enum
     const projectStatus: ProjectStatus | undefined = status
       ? (status.toUpperCase().replace(/-/g, "_") as ProjectStatus)
       : undefined;
+
+    // Handle customer profile associations if provided
+    if (customerProfileIds !== undefined) {
+      // Delete existing associations
+      await prisma.projectCustomerProfile.deleteMany({
+        where: { projectId: id },
+      });
+      // Create new associations
+      if (Array.isArray(customerProfileIds) && customerProfileIds.length > 0) {
+        await prisma.projectCustomerProfile.createMany({
+          data: customerProfileIds.map((profileId: string) => ({
+            projectId: id,
+            profileId,
+          })),
+        });
+      }
+    }
 
     // Delete all existing rows and create new ones to handle updates
     const project = await prisma.bulkProject.update({
@@ -115,10 +150,27 @@ export async function PUT(request: NextRequest, context: RouteContext) {
             rowNumber: "asc",
           },
         },
+        customerProfiles: {
+          include: {
+            profile: {
+              select: {
+                id: true,
+                name: true,
+                industry: true,
+              },
+            },
+          },
+        },
       },
     });
 
-    return NextResponse.json({ project }, { status: 200 });
+    // Transform customerProfiles to a simpler format
+    const transformedProject = {
+      ...project,
+      customerProfiles: project.customerProfiles.map((cp) => cp.profile),
+    };
+
+    return NextResponse.json({ project: transformedProject }, { status: 200 });
   } catch (error) {
     console.error("Error updating project:", error);
     return NextResponse.json(

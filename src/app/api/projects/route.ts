@@ -24,13 +24,30 @@ export async function GET() {
     const projects = await prisma.bulkProject.findMany({
       include: {
         rows: true, // Include all rows with the project
+        customerProfiles: {
+          include: {
+            profile: {
+              select: {
+                id: true,
+                name: true,
+                industry: true,
+              },
+            },
+          },
+        },
       },
       orderBy: {
         lastModifiedAt: "desc", // Most recently modified first
       },
     });
 
-    return NextResponse.json({ projects }, { status: 200 });
+    // Transform customerProfiles to a simpler format
+    const transformedProjects = projects.map((project) => ({
+      ...project,
+      customerProfiles: project.customerProfiles.map((cp) => cp.profile),
+    }));
+
+    return NextResponse.json({ projects: transformedProjects }, { status: 200 });
   } catch (error) {
     console.error("Error fetching projects:", error);
     return NextResponse.json(
