@@ -3,11 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true && next dev",
-    "dev:clean": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true && rm -rf .next && next dev",
+    "dev": "next dev",
+    "dev:clean": "rm -rf .next && next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "stop": "lsof -ti:3000 | xargs kill 2>/dev/null && echo 'Server stopped' || echo 'No server running on port 3000'",
+    "restart": "npm run stop && npm run dev"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
