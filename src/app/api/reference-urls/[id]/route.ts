@@ -43,7 +43,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         url: body.url,
         title: body.title,
         description: body.description,
-        category: body.category,
+        categories: body.categories,
         lastUsedAt: body.lastUsedAt,
         usageCount: body.usageCount,
       },

@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Trash2, FileText, File, Loader2 } from "lucide-react";
+import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown } from "lucide-react";
+import { loadCategories } from "@/lib/categoryStorage";
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 interface DocumentMeta {
   id: string;
@@ -11,6 +18,7 @@ interface DocumentMeta {
   fileSize: number;
   uploadedAt: string;
   description?: string;
+  categories?: string[];
 }
 
 export default function DocumentsPage() {
@@ -22,10 +30,16 @@ export default function DocumentsPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<CategoryItem[]>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadDocuments();
+    // Load categories
+    const cats = loadCategories();
+    setAvailableCategories(cats);
   }, []);
 
   const loadDocuments = async () => {
@@ -70,6 +84,9 @@ export default function DocumentsPage() {
       if (description.trim()) {
         formData.append("description", description.trim());
       }
+      if (selectedCategories.length > 0) {
+        formData.append("categories", JSON.stringify(selectedCategories));
+      }
 
       const response = await fetch("/api/documents", {
         method: "POST",
@@ -112,10 +129,20 @@ export default function DocumentsPage() {
     setTitle("");
     setDescription("");
     setSelectedFile(null);
+    setSelectedCategories([]);
+    setShowCategoryDropdown(false);
     setUploadError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
+  };
+
+  const toggleCategory = (categoryName: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryName)
+        ? prev.filter((c) => c !== categoryName)
+        : [...prev, categoryName]
+    );
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -255,6 +282,123 @@ export default function DocumentsPage() {
             />
           </div>
 
+          {/* Categories */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>
+              Categories (optional)
+            </label>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  backgroundColor: "#fff",
+                  fontSize: "0.95rem",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ color: selectedCategories.length === 0 ? "#9ca3af" : "inherit" }}>
+                  {selectedCategories.length === 0
+                    ? "Select categories..."
+                    : `${selectedCategories.length} selected`}
+                </span>
+                <ChevronDown size={16} style={{ color: "#64748b" }} />
+              </button>
+
+              {showCategoryDropdown && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    marginTop: "4px",
+                    backgroundColor: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "6px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    zIndex: 50,
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                  }}
+                >
+                  {availableCategories.map((cat) => (
+                    <label
+                      key={cat.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        borderBottom: "1px solid #f1f5f9",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(cat.name)}
+                        onChange={() => toggleCategory(cat.name)}
+                        style={{ width: "16px", height: "16px" }}
+                      />
+                      <span>{cat.name}</span>
+                    </label>
+                  ))}
+                  {availableCategories.length === 0 && (
+                    <div style={{ padding: "10px 12px", color: "#64748b", fontSize: "0.9rem" }}>
+                      No categories available. Create some in the Categories page.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected categories pills */}
+            {selectedCategories.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                {selectedCategories.map((cat) => (
+                  <span
+                    key={cat}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 10px",
+                      backgroundColor: "#e0f2fe",
+                      color: "#0369a1",
+                      borderRadius: "999px",
+                      fontSize: "0.8rem",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {cat}
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(cat)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <X size={14} style={{ color: "#0369a1" }} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               onClick={handleUpload}
@@ -351,6 +495,26 @@ export default function DocumentsPage() {
                     <p style={{ fontSize: "0.85rem", color: "#64748b", margin: 0 }}>
                       {doc.description}
                     </p>
+                  )}
+                  {doc.categories && doc.categories.length > 0 && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>
+                      {doc.categories.map((cat) => (
+                        <span
+                          key={cat}
+                          style={{
+                            display: "inline-block",
+                            padding: "2px 8px",
+                            backgroundColor: "#e0f2fe",
+                            color: "#0369a1",
+                            borderRadius: "999px",
+                            fontSize: "0.75rem",
+                            fontWeight: 500,
+                          }}
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                    </div>
                   )}
                   <div style={{ fontSize: "0.8rem", color: "#94a3b8", marginTop: "4px" }}>
                     Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}

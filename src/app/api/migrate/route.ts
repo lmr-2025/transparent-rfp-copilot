@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
               url,
               title: typeof urlData === "object" ? urlData.title : undefined,
               description: typeof urlData === "object" ? urlData.description : undefined,
-              category: typeof urlData === "object" ? urlData.category : undefined,
+              categories: typeof urlData === "object" && urlData.category ? [urlData.category] : [],
             },
             update: {},
           });

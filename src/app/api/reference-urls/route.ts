@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
 
-    const where = category ? { category } : {};
+    // Filter by category if provided (check if category is in the categories array)
+    const where = category ? { categories: { has: category } } : {};
 
     const urls = await prisma.referenceUrl.findMany({
       where,
@@ -34,7 +35,7 @@ export async function POST(request: NextRequest) {
         url: body.url,
         title: body.title,
         description: body.description,
-        category: body.category,
+        categories: body.categories || [],
       },
     });
 
@@ -56,7 +57,7 @@ export async function PUT(request: NextRequest) {
       url: string;
       title?: string;
       description?: string;
-      category?: string;
+      categories?: string[];
     }>;
 
     if (!Array.isArray(urls)) {
@@ -75,12 +76,12 @@ export async function PUT(request: NextRequest) {
             url: u.url,
             title: u.title,
             description: u.description,
-            category: u.category,
+            categories: u.categories || [],
           },
           update: {
             title: u.title || undefined,
             description: u.description || undefined,
-            category: u.category || undefined,
+            categories: u.categories || undefined,
           },
         })
       )

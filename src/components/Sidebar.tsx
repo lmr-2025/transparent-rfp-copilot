@@ -5,31 +5,44 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+};
+
+type NavSection = {
+  section: string;
+  items: NavItem[];
+  adminOnly?: boolean;
+};
+
+const navItems: NavSection[] = [
   {
     section: "Knowledge Gremlin",
     items: [
       { href: "/knowledge", label: "Build Skills" },
-      { href: "/knowledge/bulk", label: "Bulk URL Import" },
-      { href: "/knowledge/import", label: "Import from Docs" },
-      { href: "/knowledge/library", label: "Library" },
-      { href: "/knowledge/categories", label: "Categories" },
-      { href: "/knowledge/documents", label: "Documents" },
-      { href: "/knowledge/urls", label: "Reference URLs" },
+      { href: "/knowledge/unified-library", label: "Library" },
     ],
   },
   {
-    section: "The Rolodex",
+    section: "Rolodex",
     items: [
       { href: "/customers", label: "Build Profile" },
       { href: "/customers/library", label: "Library" },
     ],
   },
   {
-    section: "The Oracle",
+    section: "Oracle",
     items: [
       { href: "/chat", label: "Chat" },
       { href: "/prompts/library", label: "Prompt Library" },
+    ],
+  },
+  {
+    section: "Clause Checker",
+    items: [
+      { href: "/contracts", label: "Upload Contract" },
+      { href: "/contracts/library", label: "Library" },
     ],
   },
   {
@@ -43,13 +56,15 @@ const navItems = [
     items: [
       { href: "/projects", label: "All Projects" },
       { href: "/projects/upload", label: "Upload New" },
-      { href: "/projects?filter=needs_review", label: "Needs Review" },
     ],
   },
   {
-    section: "TruthTeller",
+    section: "Backstage",
+    adminOnly: true,
     items: [
       { href: "/prompts", label: "System Prompts" },
+      { href: "/knowledge/categories", label: "Categories" },
+      { href: "/usage", label: "API Usage" },
     ],
   },
 ];
@@ -57,6 +72,12 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
+  // Filter nav items based on user role
+  const visibleNavItems = navItems.filter(
+    (section) => !section.adminOnly || isAdmin
+  );
 
   return (
     <aside style={{
@@ -94,7 +115,7 @@ export default function Sidebar() {
       </div>
 
       <nav style={{ flex: 1 }}>
-        {navItems.map((section) => (
+        {visibleNavItems.map((section) => (
           <div key={section.section} style={{ marginBottom: "24px" }}>
             <div style={{
               padding: "0 20px",

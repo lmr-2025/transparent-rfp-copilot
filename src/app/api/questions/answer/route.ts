@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { answerQuestionWithPrompt } from "@/lib/llm";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
+import { logUsage } from "@/lib/usageTracking";
 
 type QuestionRequestBody = {
   question?: string;
@@ -27,7 +30,25 @@ export async function POST(request: NextRequest) {
   const fallbackContent = Array.isArray(body?.fallbackContent) ? body.fallbackContent : undefined;
 
   try {
+    const session = await getServerSession(authOptions);
     const result = await answerQuestionWithPrompt(question, promptText, skills, fallbackContent);
+
+    // Log usage asynchronously (don't block the response)
+    if (result.usage) {
+      logUsage({
+        userId: session?.user?.id,
+        userEmail: session?.user?.email,
+        feature: "questions",
+        model: result.usage.model,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        metadata: {
+          skillCount: skills?.length || 0,
+          hasFallback: result.usedFallback,
+        },
+      });
+    }
+
     return NextResponse.json({
       answer: result.answer,
       conversationHistory: result.conversationHistory,

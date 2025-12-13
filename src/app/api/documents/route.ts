@@ -15,6 +15,7 @@ export async function GET() {
         filename: true,
         fileType: true,
         fileSize: true,
+        categories: true,
         uploadedAt: true,
         description: true,
         // Don't include content in list - it's too large
@@ -38,6 +39,8 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const title = formData.get("title") as string | null;
     const description = formData.get("description") as string | null;
+    const categoriesRaw = formData.get("categories") as string | null;
+    const categories = categoriesRaw ? JSON.parse(categoriesRaw) as string[] : [];
 
     if (!file) {
       return NextResponse.json({ error: "File is required" }, { status: 400 });
@@ -95,6 +98,7 @@ export async function POST(request: NextRequest) {
         fileType,
         content,
         fileSize: file.size,
+        categories,
         description: description?.trim() || null,
       },
     });
@@ -106,6 +110,7 @@ export async function POST(request: NextRequest) {
         filename: document.filename,
         fileType: document.fileType,
         fileSize: document.fileSize,
+        categories: document.categories,
         uploadedAt: document.uploadedAt,
         description: document.description,
         contentLength: content.length,
@@ -123,14 +128,11 @@ export async function POST(request: NextRequest) {
 async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
   switch (fileType) {
     case "pdf": {
-      // Dynamic import for pdf-parse
-      const pdfParseModule = await import("pdf-parse");
-      // Handle both ESM and CJS module formats
-      const pdfParse = typeof pdfParseModule === "function"
-        ? pdfParseModule
-        : (pdfParseModule as { default?: unknown }).default || pdfParseModule;
-      const pdfData = await (pdfParse as (buffer: Buffer) => Promise<{ text: string }>)(buffer);
-      return pdfData.text;
+      // Dynamic import for pdf-parse (new API)
+      const { PDFParse } = await import("pdf-parse");
+      const parser = new PDFParse({ data: buffer });
+      const textResult = await parser.getText();
+      return textResult.text;
     }
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });

@@ -33,6 +33,7 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     const lineLower = line.toLowerCase();
 
     // Check for Answer: or Response: section header (handle both for backwards compatibility)
+    // Also handle markdown ## headers
     if (
       lineLower.startsWith("answer:") ||
       lineLower.startsWith("**answer:**") ||
@@ -41,7 +42,9 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("response:") ||
       lineLower.startsWith("**response:**") ||
       lineLower === "response" ||
-      lineLower === "**response**"
+      lineLower === "**response**" ||
+      lineLower.startsWith("## answer:") ||
+      lineLower.startsWith("## response:")
     ) {
       currentSection = "answer";
       const colonIndex = line.indexOf(":");
@@ -58,7 +61,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("confidence:") ||
       lineLower.startsWith("**confidence:**") ||
       lineLower === "confidence" ||
-      lineLower === "**confidence**"
+      lineLower === "**confidence**" ||
+      lineLower.startsWith("## confidence:")
     ) {
       currentSection = "confidence";
       const colonIndex = line.indexOf(":");
@@ -75,7 +79,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("sources:") ||
       lineLower.startsWith("**sources:**") ||
       lineLower === "sources" ||
-      lineLower === "**sources**"
+      lineLower === "**sources**" ||
+      lineLower.startsWith("## sources:")
     ) {
       currentSection = "sources";
       const colonIndex = line.indexOf(":");
@@ -92,7 +97,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("reasoning:") ||
       lineLower.startsWith("**reasoning:**") ||
       lineLower === "reasoning" ||
-      lineLower === "**reasoning**"
+      lineLower === "**reasoning**" ||
+      lineLower.startsWith("## reasoning:")
     ) {
       currentSection = "reasoning";
       const colonIndex = line.indexOf(":");
@@ -109,7 +115,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("inference:") ||
       lineLower.startsWith("**inference:**") ||
       lineLower === "inference" ||
-      lineLower === "**inference**"
+      lineLower === "**inference**" ||
+      lineLower.startsWith("## inference:")
     ) {
       currentSection = "inference";
       const colonIndex = line.indexOf(":");
@@ -126,7 +133,8 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       lineLower.startsWith("remarks:") ||
       lineLower.startsWith("**remarks:**") ||
       lineLower === "remarks" ||
-      lineLower === "**remarks**"
+      lineLower === "**remarks**" ||
+      lineLower.startsWith("## remarks:")
     ) {
       currentSection = "remarks";
       const colonIndex = line.indexOf(":");

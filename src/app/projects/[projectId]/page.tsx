@@ -13,11 +13,11 @@ import ConversationalRefinement from "@/components/ConversationalRefinement";
 import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
-import { loadReferenceUrls } from "@/lib/referenceUrlStorage";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import { fetchMultipleUrls } from "@/lib/urlFetcher";
 import SkillRecommendation from "@/components/SkillRecommendation";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
+import TransparencyDetails from "@/components/TransparencyDetails";
 import {
   exportProjectToExcel,
   exportCompletedOnly,
@@ -200,7 +200,11 @@ export default function BulkResponsesPage() {
   // Load skills, reference URLs, and customer profiles on mount
   useEffect(() => {
     loadSkillsFromApi().then(setAvailableSkills).catch(console.error);
-    setReferenceUrls(loadReferenceUrls());
+    // Load reference URLs from database API
+    fetch("/api/reference-urls")
+      .then(res => res.json())
+      .then(data => setReferenceUrls(data.urls || []))
+      .catch(err => console.error("Failed to load reference URLs:", err));
     fetchActiveProfiles()
       .then(profiles => setAllCustomerProfiles(profiles))
       .catch(err => console.error("Failed to load customer profiles:", err));
@@ -1026,16 +1030,8 @@ export default function BulkResponsesPage() {
                     ...styles.label,
                     fontSize: "0.9rem",
                     marginTop: "0",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center"
                   }}>
-                    <span>Response</span>
-                    {row.confidence && (
-                      <span style={{ fontSize: "0.85rem", fontWeight: 400, color: "#475569" }}>
-                        Confidence: {row.confidence}
-                      </span>
-                    )}
+                    Response
                   </label>
                   <textarea
                     value={row.response}
@@ -1050,85 +1046,42 @@ export default function BulkResponsesPage() {
                     }}
                   />
 
-                  {/* Reasoning section */}
-                  {row.reasoning && (
-                    <div style={{
-                      marginTop: "12px",
-                      padding: "10px 12px",
-                      backgroundColor: "#eff6ff",
-                      borderRadius: "6px",
-                      borderLeft: "3px solid #3b82f6"
-                    }}>
-                      <strong style={{ fontSize: "0.85rem", color: "#1e40af" }}>
-                        Reasoning
-                      </strong>
-                      <div style={{
-                        fontSize: "0.85rem",
-                        color: "#1e3a8a",
-                        marginTop: "6px",
-                        whiteSpace: "pre-wrap",
-                        lineHeight: "1.5"
-                      }}>
-                        {row.reasoning}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Inference section - always show when reasoning exists */}
-                  {row.reasoning && (
-                    <div style={{
-                      marginTop: "8px",
-                      padding: "10px 12px",
-                      backgroundColor: row.inference && row.inference.toLowerCase() !== "none" ? "#fef3c7" : "#f0fdf4",
-                      borderRadius: "6px",
-                      borderLeft: `3px solid ${row.inference && row.inference.toLowerCase() !== "none" ? "#f59e0b" : "#22c55e"}`
-                    }}>
-                      <strong style={{ fontSize: "0.85rem", color: row.inference && row.inference.toLowerCase() !== "none" ? "#92400e" : "#166534" }}>
-                        Inference
-                      </strong>
-                      <div style={{
-                        fontSize: "0.85rem",
-                        color: row.inference && row.inference.toLowerCase() !== "none" ? "#78350f" : "#14532d",
-                        marginTop: "6px",
-                        whiteSpace: "pre-wrap",
-                        lineHeight: "1.5"
-                      }}>
-                        {row.inference || "None"}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Structured sections - Compact display */}
-                  {(row.sources || row.remarks) && (
-                    <div style={{ marginTop: "12px", display: "grid", gap: "8px" }}>
-                      {row.sources && (
-                        <div>
-                          <strong style={{ fontSize: "0.85rem", color: "#475569" }}>Sources:</strong>
-                          <div style={{
-                            fontSize: "0.85rem",
-                            color: "#64748b",
-                            marginTop: "2px",
-                            whiteSpace: "pre-wrap"
-                          }}>
-                            {renderTextWithLinks(row.sources)}
-                          </div>
-                        </div>
-                      )}
-                      {row.remarks && row.remarks.toLowerCase() !== "none" && (
-                        <div>
-                          <strong style={{ fontSize: "0.85rem", color: "#475569" }}>Remarks:</strong>
-                          <div style={{
-                            fontSize: "0.85rem",
-                            color: "#64748b",
-                            marginTop: "2px",
-                            whiteSpace: "pre-wrap"
-                          }}>
-                            {row.remarks}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  {/* Transparency section - Collapsible with confidence always visible */}
+                  <TransparencyDetails
+                    data={{
+                      confidence: row.confidence,
+                      reasoning: row.reasoning,
+                      inference: row.inference,
+                      remarks: row.remarks,
+                      sources: row.sources,
+                    }}
+                    defaultExpanded={row.detailsExpanded}
+                    onToggle={(expanded) => updateRow(row.id, { detailsExpanded: expanded })}
+                    knowledgeReferences={(row.usedSkills || [])
+                      .filter((s): s is { id: string; title: string } => typeof s === "object" && s !== null)
+                      .map(s => ({ id: s.id, title: s.title, type: "skill" as const }))
+                    }
+                    renderClarifyButton={!row.conversationOpen ? () => (
+                      <button
+                        type="button"
+                        onClick={() => updateRow(row.id, { conversationOpen: true })}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 12px",
+                          fontSize: "0.8rem",
+                          backgroundColor: "#0ea5e9",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: 500,
+                        }}
+                      >
+                        Clarify
+                      </button>
+                    ) : undefined}
+                  />
                 </div>
               )}
 
@@ -1145,43 +1098,27 @@ export default function BulkResponsesPage() {
                 />
               )}
 
-              {/* Ask GRC Conversational Interface */}
-              {row.response && (
-                <div style={{ marginTop: "12px" }}>
-                  {!row.conversationOpen ? (
-                    <button
-                      type="button"
-                      onClick={() => updateRow(row.id, { conversationOpen: true })}
-                      style={{
-                        ...styles.button,
-                        backgroundColor: "#0ea5e9",
-                        color: "#fff",
-                        padding: "6px 12px",
-                        fontSize: "0.9rem",
-                      }}
-                    >
-                      💬 Ask GRC about this response
-                    </button>
-                  ) : (
-                    <ConversationalRefinement
-                      originalQuestion={row.question}
-                      currentResponse={`${row.response}\n\nConfidence: ${row.confidence || 'N/A'}\nSources: ${row.sources || 'N/A'}\nReasoning: ${row.reasoning || 'N/A'}\nInference: ${row.inference || 'None'}\nRemarks: ${row.remarks || 'N/A'}`}
-                      onResponseUpdate={(newResponse) => {
-                        const parsed = parseAnswerSections(newResponse);
-                        updateRow(row.id, {
-                          response: parsed.response,
-                          confidence: parsed.confidence,
-                          sources: parsed.sources,
-                          reasoning: parsed.reasoning,
-                          inference: parsed.inference,
-                          remarks: parsed.remarks
-                        });
-                      }}
-                      onClose={() => updateRow(row.id, { conversationOpen: false })}
-                      promptText={promptText}
-                      originalConversationHistory={row.conversationHistory}
-                    />
-                  )}
+              {/* Clarify - Conversational Interface */}
+              {row.response && row.conversationOpen && (
+                <div style={{ marginTop: "8px" }}>
+                  <ConversationalRefinement
+                    originalQuestion={row.question}
+                    currentResponse={`${row.response}\n\nConfidence: ${row.confidence || 'N/A'}\nSources: ${row.sources || 'N/A'}\nReasoning: ${row.reasoning || 'N/A'}\nInference: ${row.inference || 'None'}\nRemarks: ${row.remarks || 'N/A'}`}
+                    onResponseUpdate={(newResponse) => {
+                      const parsed = parseAnswerSections(newResponse);
+                      updateRow(row.id, {
+                        response: parsed.response,
+                        confidence: parsed.confidence,
+                        sources: parsed.sources,
+                        reasoning: parsed.reasoning,
+                        inference: parsed.inference,
+                        remarks: parsed.remarks
+                      });
+                    }}
+                    onClose={() => updateRow(row.id, { conversationOpen: false })}
+                    promptText={promptText}
+                    originalConversationHistory={row.conversationHistory}
+                  />
                 </div>
               )}
             </div>

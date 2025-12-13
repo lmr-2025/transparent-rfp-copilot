@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { generateSkillDraftFromMessages } from "@/lib/llm";
 import { defaultSkillPrompt } from "@/lib/skillPrompt";
 import { ConversationFeedback } from "@/types/conversation";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
+import { logUsage } from "@/lib/usageTracking";
 
 type SuggestRequestBody = {
   sourceText?: string;
@@ -54,13 +57,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const authSession = await getServerSession(authOptions);
     const promptText = (body?.prompt ?? "").trim() || defaultSkillPrompt;
 
     // If we have an existing skill, use update mode
     if (existingSkill && (sourceText || sourceUrls.length > 0)) {
       const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
       // Use the new simpler draft-based approach
-      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls);
+      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession);
       return NextResponse.json({
         updateMode: true,
         draftMode: true,
@@ -73,6 +77,18 @@ export async function POST(request: NextRequest) {
     // Original create mode
     if (conversationMessages.length > 0) {
       const draft = await generateSkillDraftFromMessages(conversationMessages, promptText);
+      // Log usage
+      if (draft.usage) {
+        logUsage({
+          userId: authSession?.user?.id,
+          userEmail: authSession?.user?.email,
+          feature: "skills-suggest",
+          model: draft.usage.model,
+          inputTokens: draft.usage.inputTokens,
+          outputTokens: draft.usage.outputTokens,
+          metadata: { mode: "create-conversation" },
+        });
+      }
       return NextResponse.json({ draft });
     }
 
@@ -82,6 +98,18 @@ export async function POST(request: NextRequest) {
       [{ role: "user", content: initialMessage }],
       promptText,
     );
+    // Log usage
+    if (draft.usage) {
+      logUsage({
+        userId: authSession?.user?.id,
+        userEmail: authSession?.user?.email,
+        feature: "skills-suggest",
+        model: draft.usage.model,
+        inputTokens: draft.usage.inputTokens,
+        outputTokens: draft.usage.outputTokens,
+        metadata: { mode: "create-source", urlCount: sourceUrls.length },
+      });
+    }
     return NextResponse.json({ draft, initialMessage });
   } catch (error) {
     console.error("Failed to generate skill draft:", error);
@@ -100,7 +128,8 @@ export async function POST(request: NextRequest) {
 async function generateDraftUpdate(
   existingSkill: { title: string; content: string; tags: string[] },
   newSourceContent: string,
-  sourceUrls: string[]
+  sourceUrls: string[],
+  authSession: { user?: { id?: string; email?: string | null } } | null
 ): Promise<DraftUpdateResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -194,6 +223,18 @@ Return ONLY the JSON object.`;
   }
 
   const parsed = JSON.parse(jsonText) as DraftUpdateResponse;
+
+  // Log usage
+  logUsage({
+    userId: authSession?.user?.id,
+    userEmail: authSession?.user?.email,
+    feature: "skills-suggest",
+    model: CLAUDE_MODEL,
+    inputTokens: response.usage?.input_tokens || 0,
+    outputTokens: response.usage?.output_tokens || 0,
+    metadata: { mode: "update", urlCount: sourceUrls.length },
+  });
+
   return parsed;
 }
 

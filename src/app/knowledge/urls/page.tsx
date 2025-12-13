@@ -1,23 +1,51 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, Trash2, ExternalLink, Globe } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Plus, Trash2, ExternalLink, Globe, ChevronDown, X } from "lucide-react";
 import { ReferenceUrl } from "@/types/referenceUrl";
-import {
-  loadReferenceUrls,
-  addReferenceUrl,
-  deleteReferenceUrl,
-} from "@/lib/referenceUrlStorage";
+import { loadCategoriesFromApi } from "@/lib/categoryStorage";
+
+interface CategoryItem {
+  id: string;
+  name: string;
+  description?: string;
+}
 
 export default function ReferenceUrlsPage() {
-  const [urls, setUrls] = useState<ReferenceUrl[]>(() => loadReferenceUrls());
+  const [urls, setUrls] = useState<ReferenceUrl[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [newUrl, setNewUrl] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDescription, setNewDescription] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [availableCategories, setAvailableCategories] = useState<CategoryItem[]>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleAdd = () => {
+  // Load URLs from database API on mount
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/reference-urls").then(res => res.json()),
+      loadCategoriesFromApi(),
+    ])
+      .then(([urlData, cats]) => {
+        setUrls(urlData.urls || []);
+        setAvailableCategories(cats);
+      })
+      .catch(err => console.error("Failed to load data:", err))
+      .finally(() => setIsLoading(false));
+  }, []);
+
+  const toggleCategory = (categoryName: string) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryName)
+        ? prev.filter((c) => c !== categoryName)
+        : [...prev, categoryName]
+    );
+  };
+
+  const handleAdd = async () => {
     setError(null);
 
     if (!newUrl.trim()) {
@@ -38,22 +66,50 @@ export default function ReferenceUrlsPage() {
       return;
     }
 
-    const added = addReferenceUrl({
-      url: newUrl.trim(),
-      title: newTitle.trim(),
-      description: newDescription.trim() || undefined,
-    });
+    try {
+      const response = await fetch("/api/reference-urls", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: newUrl.trim(),
+          title: newTitle.trim(),
+          description: newDescription.trim() || undefined,
+          categories: selectedCategories,
+        }),
+      });
 
-    setUrls([...urls, added]);
-    setNewUrl("");
-    setNewTitle("");
-    setNewDescription("");
-    setShowForm(false);
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to add URL");
+      }
+
+      const added = await response.json();
+      setUrls([...urls, added]);
+      setNewUrl("");
+      setNewTitle("");
+      setNewDescription("");
+      setSelectedCategories([]);
+      setShowCategoryDropdown(false);
+      setShowForm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to add URL");
+    }
   };
 
-  const handleDelete = (id: string) => {
-    deleteReferenceUrl(id);
-    setUrls(urls.filter((u) => u.id !== id));
+  const handleDelete = async (id: string) => {
+    try {
+      const response = await fetch(`/api/reference-urls/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete URL");
+      }
+
+      setUrls(urls.filter((u) => u.id !== id));
+    } catch (err) {
+      console.error("Failed to delete URL:", err);
+    }
   };
 
   return (
@@ -176,6 +232,123 @@ export default function ReferenceUrlsPage() {
             />
           </div>
 
+          {/* Categories */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", marginBottom: "4px", fontWeight: 500 }}>
+              Categories (optional)
+            </label>
+            <div style={{ position: "relative" }}>
+              <button
+                type="button"
+                onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                style={{
+                  width: "100%",
+                  padding: "10px 12px",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  backgroundColor: "#fff",
+                  fontSize: "0.95rem",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <span style={{ color: selectedCategories.length === 0 ? "#9ca3af" : "inherit" }}>
+                  {selectedCategories.length === 0
+                    ? "Select categories..."
+                    : `${selectedCategories.length} selected`}
+                </span>
+                <ChevronDown size={16} style={{ color: "#64748b" }} />
+              </button>
+
+              {showCategoryDropdown && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "100%",
+                    left: 0,
+                    right: 0,
+                    marginTop: "4px",
+                    backgroundColor: "#fff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "6px",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+                    zIndex: 50,
+                    maxHeight: "200px",
+                    overflowY: "auto",
+                  }}
+                >
+                  {availableCategories.map((cat) => (
+                    <label
+                      key={cat.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        padding: "10px 12px",
+                        cursor: "pointer",
+                        borderBottom: "1px solid #f1f5f9",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.includes(cat.name)}
+                        onChange={() => toggleCategory(cat.name)}
+                        style={{ width: "16px", height: "16px" }}
+                      />
+                      <span>{cat.name}</span>
+                    </label>
+                  ))}
+                  {availableCategories.length === 0 && (
+                    <div style={{ padding: "10px 12px", color: "#64748b", fontSize: "0.9rem" }}>
+                      No categories available. Create some in the Categories page.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Selected categories pills */}
+            {selectedCategories.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "8px" }}>
+                {selectedCategories.map((cat) => (
+                  <span
+                    key={cat}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      padding: "4px 10px",
+                      backgroundColor: "#e0f2fe",
+                      color: "#0369a1",
+                      borderRadius: "999px",
+                      fontSize: "0.8rem",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {cat}
+                    <button
+                      type="button"
+                      onClick={() => toggleCategory(cat)}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                      }}
+                    >
+                      <X size={14} style={{ color: "#0369a1" }} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               onClick={handleAdd}
@@ -198,6 +371,8 @@ export default function ReferenceUrlsPage() {
                 setNewUrl("");
                 setNewTitle("");
                 setNewDescription("");
+                setSelectedCategories([]);
+                setShowCategoryDropdown(false);
               }}
               style={{
                 padding: "10px 20px",
@@ -216,7 +391,11 @@ export default function ReferenceUrlsPage() {
       )}
 
       {/* URL List */}
-      {urls.length === 0 ? (
+      {isLoading ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
+          Loading reference URLs...
+        </div>
+      ) : urls.length === 0 ? (
         <div
           style={{
             padding: "40px",
@@ -272,6 +451,26 @@ export default function ReferenceUrlsPage() {
                   <p style={{ color: "#64748b", fontSize: "0.85rem", margin: 0 }}>
                     {url.description}
                   </p>
+                )}
+                {url.categories && url.categories.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "4px", marginTop: "8px" }}>
+                    {url.categories.map((cat) => (
+                      <span
+                        key={cat}
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          backgroundColor: "#e0f2fe",
+                          color: "#0369a1",
+                          borderRadius: "999px",
+                          fontSize: "0.75rem",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {cat}
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
               <button

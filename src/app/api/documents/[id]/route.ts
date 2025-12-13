@@ -57,13 +57,14 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description } = body;
+    const { title, description, categories } = body;
 
     const document = await prisma.knowledgeDocument.update({
       where: { id },
       data: {
         ...(title && { title: title.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
+        ...(categories !== undefined && { categories }),
       },
     });
 
@@ -74,6 +75,7 @@ export async function PATCH(
         filename: document.filename,
         fileType: document.fileType,
         fileSize: document.fileSize,
+        categories: document.categories,
         uploadedAt: document.uploadedAt,
         description: document.description,
       },

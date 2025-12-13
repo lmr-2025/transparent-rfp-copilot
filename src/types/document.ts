@@ -7,4 +7,5 @@ export interface KnowledgeDocument {
   fileSize: number; // bytes
   uploadedAt: string;
   description?: string;
+  categories: string[]; // Uses same categories as Skills
 }

@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import {
@@ -6,6 +8,7 @@ import {
   loadCustomerProfileSections,
 } from "@/lib/customerProfilePromptSections";
 import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
+import { logUsage } from "@/lib/usageTracking";
 
 type SuggestRequestBody = {
   sourceUrls: string[];
@@ -60,6 +63,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const authSession = await getServerSession(authOptions);
     const sourceContent = await buildSourceMaterial(sourceUrls, documentContent);
 
     // Use provided prompt or build from default sections
@@ -72,7 +76,8 @@ export async function POST(request: NextRequest) {
         body.existingProfile,
         sourceContent,
         sourceUrls,
-        promptText
+        promptText,
+        authSession
       );
       return NextResponse.json({
         updateMode: true,
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create mode
-    const result = await generateProfileDraft(sourceContent, sourceUrls, promptText, documentNames);
+    const result = await generateProfileDraft(sourceContent, sourceUrls, promptText, documentNames, authSession);
     return NextResponse.json({ draft: result.draft, sourceUrls, transparency: result.transparency });
   } catch (error) {
     console.error("Failed to generate customer profile:", error);
@@ -109,7 +114,8 @@ async function generateProfileDraft(
   sourceContent: string,
   sourceUrls: string[],
   promptText: string,
-  documentNames: string[] = []
+  documentNames: string[] = [],
+  authSession: { user?: { id?: string; email?: string | null } } | null = null
 ): Promise<GenerateResult> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
@@ -160,6 +166,17 @@ Return ONLY the JSON object.`;
     jsonText = lines.join("\n");
   }
 
+  // Log usage
+  logUsage({
+    userId: authSession?.user?.id,
+    userEmail: authSession?.user?.email,
+    feature: "customers-suggest",
+    model: CLAUDE_MODEL,
+    inputTokens: response.usage?.input_tokens || 0,
+    outputTokens: response.usage?.output_tokens || 0,
+    metadata: { mode: "create", urlCount: sourceUrls.length },
+  });
+
   return {
     draft: JSON.parse(jsonText) as CustomerProfileDraft,
     transparency: {
@@ -183,7 +200,8 @@ async function generateProfileUpdate(
   },
   sourceContent: string,
   sourceUrls: string[],
-  promptText: string
+  promptText: string,
+  authSession: { user?: { id?: string; email?: string | null } } | null = null
 ): Promise<{
   draft: CustomerProfileDraft;
   hasChanges: boolean;
@@ -283,6 +301,17 @@ Return ONLY the JSON object.`;
     hasChanges: boolean;
     changeHighlights: string[];
   } & CustomerProfileDraft;
+
+  // Log usage
+  logUsage({
+    userId: authSession?.user?.id,
+    userEmail: authSession?.user?.email,
+    feature: "customers-suggest",
+    model: CLAUDE_MODEL,
+    inputTokens: response.usage?.input_tokens || 0,
+    outputTokens: response.usage?.output_tokens || 0,
+    metadata: { mode: "update", urlCount: sourceUrls.length },
+  });
 
   return {
     hasChanges: parsed.hasChanges,

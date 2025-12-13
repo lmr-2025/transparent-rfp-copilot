@@ -3,11 +3,18 @@ import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "./config";
 
+export type UsageInfo = {
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+};
+
 export type SkillDraft = {
   title: string;
   tags: string[];
   content: string;
   sourceMapping?: string[];
+  usage?: UsageInfo;
 };
 
 export type ConversationFeedback = {
@@ -52,6 +59,11 @@ export async function generateSkillDraftFromMessages(
 
     const parsed = parseJsonContent(content.text.trim());
     const draft = normalizeSkillDraft(parsed);
+    draft.usage = {
+      inputTokens: response.usage?.input_tokens || 0,
+      outputTokens: response.usage?.output_tokens || 0,
+      model: CLAUDE_MODEL,
+    };
     return draft;
   } catch (error) {
     if (error instanceof Error) {
@@ -65,6 +77,7 @@ export type AnswerResult = {
   answer: string;
   conversationHistory: { role: string; content: string }[];
   usedFallback: boolean;
+  usage?: UsageInfo;
 };
 
 export type FallbackContent = {
@@ -187,6 +200,11 @@ export async function answerQuestionWithPrompt(
       answer: answerText,
       conversationHistory,
       usedFallback: usedFallback || false,
+      usage: {
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        model: CLAUDE_MODEL,
+      },
     };
   } catch (error) {
     if (error instanceof Error) {

@@ -13,17 +13,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// User roles
+enum UserRole {
+  USER
+  ADMIN
+}
+
 // NextAuth.js models
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id               String            @id @default(cuid())
+  name             String?
+  email            String?           @unique
+  emailVerified    DateTime?
+  image            String?
+  role             UserRole          @default(USER)
+  accounts         Account[]
+  sessions         Session[]
+  questionHistory  QuestionHistory[]
+  chatSessions     ChatSession[]
+  apiUsage         ApiUsage[]
+  ownedProjects    BulkProject[]     @relation("ProjectOwner")
+  ownedSkills      Skill[]           @relation("SkillOwner")
+  ownedCustomers   CustomerProfile[] @relation("CustomerOwner")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 }
 
 model Account {
@@ -69,6 +82,9 @@ model BulkProject {
   createdAt      DateTime @default(now())
   lastModifiedAt DateTime @updatedAt
   ownerName      String?
+  ownerId        String?  // Foreign key to User
+  owner          User?    @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  assignedUsers  Json?    // Array of user IDs who can access this project
   customerName   String?
   status         ProjectStatus @default(DRAFT)
   notes          String?
@@ -84,6 +100,7 @@ model BulkProject {
 
   @@index([status])
   @@index([lastModifiedAt])
+  @@index([ownerId])
 }
 
 model BulkRow {
@@ -136,6 +153,7 @@ model KnowledgeDocument {
   fileType    String   // pdf, doc, docx, txt
   content     String   @db.Text // Extracted text content
   fileSize    Int      // bytes
+  categories  String[] // Uses same categories as Skills
   uploadedAt  DateTime @default(now())
   description String?  @db.Text
 
@@ -159,6 +177,8 @@ model CustomerProfile {
   updatedAt       DateTime @updatedAt
   lastRefreshedAt DateTime?
   createdBy       String?
+  ownerId         String?  // Foreign key to User
+  owner           User?    @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   owners          Json?    // Array of {name, email}
   history         Json?    // Audit trail entries
 
@@ -166,6 +186,7 @@ model CustomerProfile {
 
   @@index([isActive, updatedAt])
   @@index([industry])
+  @@index([ownerId])
 }
 
 // Join table for Projects <-> CustomerProfiles (many-to-many)
@@ -198,10 +219,13 @@ model Skill {
   updatedAt       DateTime @updatedAt
   lastRefreshedAt DateTime?
   createdBy       String?
-  owners          Json?    // Array of {name, email}
+  ownerId         String?  // Foreign key to User
+  owner           User?    @relation("SkillOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owners          Json?    // Array of {name, email} - legacy/additional owners
   history         Json?    // Audit trail entries
 
   @@index([isActive, updatedAt])
+  @@index([ownerId])
 }
 
 // Skill Categories
@@ -235,12 +259,11 @@ model ReferenceUrl {
   url         String   @unique
   title       String?
   description String?
-  category    String?
+  categories  String[] // Uses same categories as Skills
   addedAt     DateTime @default(now())
   lastUsedAt  DateTime?
   usageCount  Int      @default(0)
 
-  @@index([category])
   @@index([addedAt])
 }
 
@@ -271,4 +294,100 @@ model ChatPromptCategory {
   createdAt   DateTime @default(now())
 
   @@index([sortOrder])
+}
+
+// Contract Reviews (The Clause Checker)
+model ContractReview {
+  id              String   @id @default(uuid())
+  name            String   // Contract/document name
+  filename        String   // Original filename
+  fileType        String   // pdf, docx
+  customerName    String?  // Who the contract is with
+  contractType    String?  // e.g., "MSA", "DPA", "NDA", "SaaS Agreement"
+  extractedText   String   @db.Text // Full extracted text
+  status          ContractReviewStatus @default(PENDING)
+  overallRating   String?  // "compliant", "mostly_compliant", "needs_review", "high_risk"
+  summary         String?  @db.Text // AI-generated executive summary
+  findings        Json?    // Array of ContractFinding objects
+  skillsUsed      Json?    // Array of skill IDs used for analysis
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  analyzedAt      DateTime?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  notes           String?  @db.Text
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([customerName])
+}
+
+enum ContractReviewStatus {
+  PENDING      // Uploaded, not yet analyzed
+  ANALYZING    // Analysis in progress
+  ANALYZED     // Analysis complete, awaiting review
+  REVIEWED     // Human reviewed
+  ARCHIVED     // No longer active
+}
+
+// Question History - tracks quick questions from the home page
+model QuestionHistory {
+  id              String   @id @default(uuid())
+  userId          String?  // Optional - null for anonymous users
+  userEmail       String?  // For display purposes
+  question        String   @db.Text
+  response        String   @db.Text
+  confidence      String?
+  sources         String?  @db.Text
+  reasoning       String?  @db.Text
+  inference       String?  @db.Text
+  remarks         String?  @db.Text
+  skillsUsed      Json?    // Array of {id, title}
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// Chat Session - tracks full chat conversations in The Oracle
+model ChatSession {
+  id              String   @id @default(uuid())
+  userId          String?  // Optional - null for anonymous users
+  userEmail       String?  // For display purposes
+  title           String?  // Auto-generated or user-editable title
+  messages        Json     // Array of {id, role, content, timestamp, skillsUsed?, documentsUsed?, urlsUsed?, customersUsed?}
+  skillsUsed      Json?    // Skills selected for this session
+  documentsUsed   Json?    // Documents selected
+  customersUsed   Json?    // Customer profiles selected
+  urlsUsed        Json?    // Reference URLs selected
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, updatedAt])
+  @@index([createdAt])
+}
+
+// API Usage Tracking - logs token usage and costs per API call
+model ApiUsage {
+  id              String   @id @default(uuid())
+  userId          String?  // Optional - null for anonymous users
+  userEmail       String?  // For display purposes
+  feature         String   // e.g., "questions", "chat", "skills-suggest", "projects"
+  model           String   // e.g., "claude-sonnet-4-20250514"
+  inputTokens     Int
+  outputTokens    Int
+  totalTokens     Int
+  estimatedCost   Float    // Calculated cost in USD
+  metadata        Json?    // Additional context (e.g., skill count, question length)
+  createdAt       DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+  @@index([createdAt])
 }

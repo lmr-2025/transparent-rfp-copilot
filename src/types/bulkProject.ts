@@ -27,6 +27,7 @@ export type BulkRow = {
   challengeError?: string;
   conversationOpen?: boolean;
   selected?: boolean;
+  detailsExpanded?: boolean; // Toggle for showing reasoning/inference/remarks/sources
 };
 
 // Simplified customer profile reference for projects

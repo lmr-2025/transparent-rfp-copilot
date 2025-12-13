@@ -2,6 +2,7 @@ import { NextAuthOptions } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import GoogleProvider from "next-auth/providers/google";
 import prisma from "./prisma";
+import { UserRole } from "@prisma/client";
 
 // Build providers array conditionally
 const providers: NextAuthOptions["providers"] = [];
@@ -28,12 +29,38 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session.user && token.sub) {
         session.user.id = token.sub;
+        session.user.role = (token.role as UserRole) || "USER";
       }
       return session;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.sub = user.id;
+
+        // Check if this is the first user - make them admin
+        const userCount = await prisma.user.count();
+        if (userCount === 1) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { role: "ADMIN" },
+          });
+          token.role = "ADMIN";
+        } else {
+          // Fetch role from database
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { role: true },
+          });
+          token.role = dbUser?.role || "USER";
+        }
+      }
+      // Refresh role on session update
+      if (trigger === "update" && token.sub) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.sub },
+          select: { role: true },
+        });
+        token.role = dbUser?.role || "USER";
       }
       return token;
     },
