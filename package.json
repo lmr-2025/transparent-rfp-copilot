@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "stop": "lsof -ti:3000 | xargs kill 2>/dev/null && echo 'Server stopped' || echo 'No server running on port 3000'",
     "restart": "npm run stop && npm run dev"
   },
@@ -37,6 +39,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^5.1.2",
+    "vitest": "^2.0.5"
   }
 }
