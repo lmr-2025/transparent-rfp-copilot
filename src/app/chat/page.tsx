@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, Suspense } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill, SkillCategoryItem } from "@/types/skill";
@@ -17,14 +18,15 @@ import {
   getEffectiveCategories,
   CategoryConfig,
 } from "@/lib/chatPromptLibrary";
-import {
-  defaultChatSections,
-  EditableChatSection,
-  buildChatPromptFromSections,
-} from "@/lib/promptSections";
-import { CHAT_PROMPT_SECTIONS_KEY } from "@/lib/promptStorage";
+// User instructions are stored locally (separate from system prompts)
+const USER_INSTRUCTIONS_STORAGE_KEY = "grc-minion-user-instructions";
+const defaultUserInstructions = `You are a helpful assistant. Be professional but conversational. Use bullet points or numbered lists for complex information. Be concise but thorough.`;
 import { CLAUDE_MODEL } from "@/lib/config";
+import { getDefaultPrompt } from "@/lib/promptBlocks";
 import TransparencyModal from "@/components/TransparencyModal";
+import ChatProjectSelector from "@/components/ChatProjectSelector";
+import SuggestedPrompts from "@/components/SuggestedPrompts";
+import { ChatProjectTemplate } from "@/lib/chatProjectTemplates";
 
 // Document type for chat context
 type DocumentMeta = {
@@ -57,7 +59,8 @@ type UrlSelection = {
 };
 
 type TransparencyData = {
-  systemPrompt: string;
+  systemPrompt: string; // Full prompt sent to API (with context embedded)
+  baseSystemPrompt: string; // Just the system instructions (without context)
   knowledgeContext: string;
   customerContext: string;
   documentContext: string;
@@ -94,12 +97,33 @@ type CustomerSelection = {
   selected: boolean;
 };
 
-type SidebarTab = "prompts" | "knowledge" | "customers";
+type SidebarTab = "instructions" | "prompts" | "knowledge" | "customers";
+
+// Instruction preset type
+type InstructionPreset = {
+  id: string;
+  name: string;
+  content: string;
+  description?: string;
+  isShared: boolean;
+  isDefault: boolean;
+  shareStatus: "PRIVATE" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  rejectionReason?: string;
+  createdBy?: string;
+  createdByEmail?: string;
+};
+
+// Stored message format from API (timestamps are strings in JSON)
+type StoredMessage = {
+  role: "user" | "assistant";
+  content: string;
+  timestamp?: string;
+};
 
 type ChatSessionItem = {
   id: string;
   title: string;
-  messages: ChatMessage[];
+  messages: StoredMessage[];
   skillsUsed?: { id: string; title: string }[];
   documentsUsed?: { id: string; title: string }[];
   customersUsed?: { id: string; name: string }[];
@@ -123,29 +147,6 @@ const formatSessionDate = (dateString: string) => {
   return date.toLocaleDateString();
 };
 
-// Helper to load chat sections from localStorage
-const loadChatSections = (): EditableChatSection[] => {
-  if (typeof window === "undefined") {
-    return defaultChatSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-  }
-  try {
-    const raw = window.localStorage.getItem(CHAT_PROMPT_SECTIONS_KEY);
-    if (!raw) {
-      return defaultChatSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-    }
-    const parsed = JSON.parse(raw) as EditableChatSection[];
-    if (!Array.isArray(parsed)) {
-      return defaultChatSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-    }
-    return parsed.map(section => ({
-      ...section,
-      enabled: section.enabled ?? true,
-      text: section.text ?? section.defaultText ?? "",
-    }));
-  } catch {
-    return defaultChatSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-  }
-};
 
 const styles = {
   container: {
@@ -329,10 +330,10 @@ const styles = {
   },
 };
 
-export default function ChatPage() {
+function ChatPageContent() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [skillSelections, setSkillSelections] = useState<SkillSelection[]>([]);
-  const [documents, setDocuments] = useState<DocumentMeta[]>([]);
+  const [, setDocuments] = useState<DocumentMeta[]>([]);
   const [documentSelections, setDocumentSelections] = useState<DocumentSelection[]>([]);
   const [urls, setUrls] = useState<ReferenceUrl[]>([]);
   const [urlSelections, setUrlSelections] = useState<UrlSelection[]>([]);
@@ -344,7 +345,18 @@ export default function ChatPage() {
   const [inputValue, setInputValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("prompts");
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("instructions");
+  const [userInstructions, setUserInstructions] = useState<string>(() => {
+    if (typeof window === "undefined") return defaultUserInstructions;
+    const stored = localStorage.getItem(USER_INSTRUCTIONS_STORAGE_KEY);
+    return stored || defaultUserInstructions;
+  });
+  const [instructionPresets, setInstructionPresets] = useState<InstructionPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [showSavePreset, setShowSavePreset] = useState(false);
+  const [newPresetName, setNewPresetName] = useState("");
+  const [newPresetDescription, setNewPresetDescription] = useState("");
+  const [newPresetIsShared, setNewPresetIsShared] = useState(false);
   const [prompts, setPrompts] = useState<ChatPrompt[]>([]);
   const [categories, setCategories] = useState<CategoryConfig[]>([]);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
@@ -353,15 +365,27 @@ export default function ChatPage() {
   const [showTransparency, setShowTransparency] = useState(false);
   const [selectedTransparency, setSelectedTransparency] = useState<TransparencyData | null>(null);
   const [showPreviewPrompt, setShowPreviewPrompt] = useState(false);
-  const [chatSections] = useState<EditableChatSection[]>(() => loadChatSections());
   const [chatHistory, setChatHistory] = useState<ChatSessionItem[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedProjectTemplate, setSelectedProjectTemplate] = useState<ChatProjectTemplate | null>(null);
+  const [usedPrompts, setUsedPrompts] = useState<Set<string>>(new Set());
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+
+  // Handle query parameter from suggested queries
+  useEffect(() => {
+    const query = searchParams.get("query");
+    if (query && !inputValue) {
+      setInputValue(query);
+      // Focus the textarea
+      setTimeout(() => textareaRef.current?.focus(), 100);
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch chat history
   const fetchChatHistory = useCallback(async () => {
@@ -465,10 +489,9 @@ export default function ChatPage() {
   // Load a chat session
   const loadSession = (item: ChatSessionItem) => {
     // Convert stored messages back to ChatMessage format
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const loadedMessages: ChatMessage[] = ((item.messages as any[]) || []).map((m, idx: number) => ({
+    const loadedMessages: ChatMessage[] = (item.messages || []).map((m, idx) => ({
       id: `loaded-${idx}`,
-      role: m.role as "user" | "assistant",
+      role: m.role,
       content: m.content,
       timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
     }));
@@ -482,6 +505,8 @@ export default function ChatPage() {
     setMessages([]);
     setCurrentSessionId(null);
     setShowHistory(false);
+    setSelectedProjectTemplate(null);
+    setUsedPrompts(new Set());
   };
 
   // Load skills, customer profiles, documents, URLs, and prompts on mount
@@ -546,6 +571,21 @@ export default function ChatPage() {
     setPrompts(getAllPrompts());
     setCategories(getEffectiveCategories());
 
+    // Load instruction presets
+    fetch("/api/instruction-presets")
+      .then(res => res.json())
+      .then(data => {
+        const presets = data.presets || [];
+        setInstructionPresets(presets);
+        // If there's a default preset, load its content
+        const defaultPreset = presets.find((p: InstructionPreset) => p.isDefault);
+        if (defaultPreset) {
+          setSelectedPresetId(defaultPreset.id);
+          setUserInstructions(defaultPreset.content);
+        }
+      })
+      .catch(err => console.error("Failed to load instruction presets:", err));
+
     // Load customer profiles from database
     fetchActiveProfiles()
       .then(profiles => {
@@ -588,14 +628,6 @@ export default function ChatPage() {
     setSkillSelections(prev =>
       prev.map(s => (s.id === skillId ? { ...s, selected: !s.selected } : s))
     );
-  };
-
-  const selectAll = () => {
-    setSkillSelections(prev => prev.map(s => ({ ...s, selected: true })));
-  };
-
-  const selectNone = () => {
-    setSkillSelections(prev => prev.map(s => ({ ...s, selected: false })));
   };
 
   const selectedCount = skillSelections.filter(s => s.selected).length;
@@ -777,6 +809,11 @@ export default function ChatPage() {
         content: m.content,
       }));
 
+      // Combine user instructions with project template if selected
+      const effectiveInstructions = selectedProjectTemplate
+        ? `${selectedProjectTemplate.systemPrompt}\n\n${userInstructions}`.trim()
+        : userInstructions;
+
       const response = await fetch("/api/knowledge-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -787,7 +824,7 @@ export default function ChatPage() {
           documentIds: selectedDocIds,
           referenceUrls: selectedUrls,
           conversationHistory,
-          chatSections: chatSections.filter(s => s.enabled),
+          userInstructions: effectiveInstructions,
         }),
       });
 
@@ -837,6 +874,19 @@ export default function ChatPage() {
   const clearChat = () => {
     setMessages([]);
     setCurrentSessionId(null);
+    setUsedPrompts(new Set());
+  };
+
+  // Handle selecting a suggested prompt
+  const handleSuggestedPrompt = (prompt: string) => {
+    setUsedPrompts(prev => new Set([...prev, prompt]));
+    handleSend(prompt);
+  };
+
+  // Get available suggested prompts (not yet used)
+  const getAvailableSuggestedPrompts = (): string[] => {
+    if (!selectedProjectTemplate) return [];
+    return selectedProjectTemplate.suggestedPrompts.filter(p => !usedPrompts.has(p));
   };
 
   const applyPrompt = (prompt: ChatPrompt) => {
@@ -930,12 +980,18 @@ ${keyFactsText}`;
       combinedKnowledgeContext = "No knowledge base documents provided.";
     }
 
-    // Use configured chat sections from localStorage
-    const systemPrompt = buildChatPromptFromSections(chatSections, combinedKnowledgeContext);
+    // Build preview system prompt using the block-based system (matches server-side)
+    const blockSystemPrompt = getDefaultPrompt("chat");
+    const baseSystemPrompt = userInstructions
+      ? `${blockSystemPrompt}\n\n## User Instructions\n${userInstructions}`
+      : blockSystemPrompt;
+
+    const systemPrompt = `${baseSystemPrompt}\n\n## Knowledge Base\n${combinedKnowledgeContext}`;
 
     return {
       systemPrompt,
-      knowledgeContext,
+      baseSystemPrompt,
+      knowledgeContext: combinedKnowledgeContext,
       customerContext,
       documentContext,
       urlContext,
@@ -963,13 +1019,13 @@ ${keyFactsText}`;
       <div style={styles.sidebar}>
         <div style={styles.sidebarTabs}>
           <button
-            onClick={() => setSidebarTab("prompts")}
+            onClick={() => setSidebarTab("instructions")}
             style={{
               ...styles.sidebarTab,
-              ...(sidebarTab === "prompts" ? styles.sidebarTabActive : {}),
+              ...(sidebarTab === "instructions" ? styles.sidebarTabActive : {}),
             }}
           >
-            Prompts
+            Instructions
           </button>
           <button
             onClick={() => setSidebarTab("knowledge")}
@@ -1075,7 +1131,7 @@ ${keyFactsText}`;
               {/* Link to Customer Library */}
               <div style={{ padding: "12px 0", borderTop: "1px solid #e2e8f0", marginTop: "8px" }}>
                 <Link
-                  href="/customers/library"
+                  href="/customers"
                   style={{
                     display: "block",
                     padding: "10px 12px",
@@ -1338,7 +1394,7 @@ ${keyFactsText}`;
                 </div>
                 {urlSelections.length === 0 ? (
                   <p style={{ fontSize: "12px", color: "#94a3b8", textAlign: "center", margin: "8px 0" }}>
-                    No URLs yet. <a href="/knowledge/unified-library" style={{ color: "#3b82f6" }}>Add some</a>
+                    No URLs yet. <a href="/knowledge" style={{ color: "#3b82f6" }}>Add some</a>
                   </p>
                 ) : (
                   urlSelections.map(url => (
@@ -1393,7 +1449,7 @@ ${keyFactsText}`;
               {/* Link to Library */}
               <div style={{ padding: "12px 0", borderTop: "1px solid #e2e8f0" }}>
                 <Link
-                  href="/knowledge/unified-library"
+                  href="/knowledge"
                   style={{
                     display: "block",
                     padding: "10px 12px",
@@ -1414,121 +1470,433 @@ ${keyFactsText}`;
           </>
         ) : (
           <>
+            {/* Instructions Tab */}
             <div style={styles.sidebarHeader}>
               <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#64748b" }}>
-                Click a prompt to use it, or save your own
+                Select a preset or write custom instructions
               </p>
+              {/* Preset Dropdown */}
               <select
-                value={promptFilter}
-                onChange={e => setPromptFilter(e.target.value)}
+                value={selectedPresetId || "custom"}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  if (value === "custom") {
+                    setSelectedPresetId(null);
+                    const stored = localStorage.getItem(USER_INSTRUCTIONS_STORAGE_KEY);
+                    setUserInstructions(stored || defaultUserInstructions);
+                  } else {
+                    const preset = instructionPresets.find(p => p.id === value);
+                    if (preset) {
+                      setSelectedPresetId(preset.id);
+                      setUserInstructions(preset.content);
+                    }
+                  }
+                }}
                 style={{
                   width: "100%",
-                  padding: "6px 8px",
-                  fontSize: "12px",
+                  padding: "8px 10px",
+                  fontSize: "13px",
                   border: "1px solid #e2e8f0",
-                  borderRadius: "4px",
+                  borderRadius: "6px",
                   backgroundColor: "#fff",
+                  marginBottom: "8px",
                 }}
               >
-                <option value="all">All Categories</option>
-                {categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
-                ))}
+                <option value="custom">Custom (local only)</option>
+                {instructionPresets.filter(p => p.isShared).length > 0 && (
+                  <optgroup label="Org Presets">
+                    {instructionPresets.filter(p => p.isShared).map(preset => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name} {preset.isDefault ? "(default)" : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {instructionPresets.filter(p => !p.isShared).length > 0 && (
+                  <optgroup label="My Presets">
+                    {instructionPresets.filter(p => !p.isShared).map(preset => (
+                      <option key={preset.id} value={preset.id}>
+                        {preset.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
-            </div>
-            <div style={styles.sidebarContent}>
-              {Object.entries(groupedPrompts).map(([category, categoryPrompts]) => {
-                const catConfig = getCategoryConfig(category);
-                const catLabel = catConfig?.label || category;
-                const catColor = catConfig?.color || { bg: "#f1f5f9", text: "#475569", border: "#cbd5e1" };
+              {/* Selected preset info and status */}
+              {selectedPresetId && (() => {
+                const preset = instructionPresets.find(p => p.id === selectedPresetId);
+                if (!preset) return null;
                 return (
-                <div key={category} style={{ marginBottom: "16px" }}>
-                  <div style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#64748b",
-                    textTransform: "uppercase",
-                    marginBottom: "8px",
-                    padding: "0 4px",
-                  }}>
-                    {catLabel}
+                  <div style={{ marginBottom: "8px" }}>
+                    {preset.description && (
+                      <div style={{ fontSize: "11px", color: "#64748b", fontStyle: "italic", marginBottom: "4px" }}>
+                        {preset.description}
+                      </div>
+                    )}
+                    {/* Status badge */}
+                    {preset.shareStatus === "PENDING_APPROVAL" && (
+                      <div style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        padding: "3px 8px",
+                        backgroundColor: "#fef3c7",
+                        color: "#92400e",
+                        borderRadius: "4px",
+                        fontSize: "11px",
+                        fontWeight: 500,
+                      }}>
+                        Pending approval
+                      </div>
+                    )}
+                    {preset.shareStatus === "REJECTED" && (
+                      <div style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                      }}>
+                        <div style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "3px 8px",
+                          backgroundColor: "#fee2e2",
+                          color: "#dc2626",
+                          borderRadius: "4px",
+                          fontSize: "11px",
+                          fontWeight: 500,
+                          width: "fit-content",
+                        }}>
+                          Share request rejected
+                        </div>
+                        {preset.rejectionReason && (
+                          <div style={{ fontSize: "11px", color: "#dc2626" }}>
+                            Reason: {preset.rejectionReason}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {categoryPrompts.map(prompt => {
-                    const promptCatConfig = getCategoryConfig(prompt.category);
-                    const colors = promptCatConfig?.color || catColor;
-                    return (
-                      <div
-                        key={prompt.id}
+                );
+              })()}
+            </div>
+            <div style={{ ...styles.sidebarContent, display: "flex", flexDirection: "column" }}>
+              <textarea
+                value={userInstructions}
+                onChange={(e) => {
+                  const newValue = e.target.value;
+                  setUserInstructions(newValue);
+                  // Only save to localStorage if using custom
+                  if (!selectedPresetId) {
+                    localStorage.setItem(USER_INSTRUCTIONS_STORAGE_KEY, newValue);
+                  }
+                }}
+                placeholder="Enter instructions for how the AI should behave..."
+                style={{
+                  flex: 1,
+                  minHeight: "180px",
+                  padding: "12px",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  fontSize: "13px",
+                  lineHeight: 1.5,
+                  resize: "none",
+                  fontFamily: "inherit",
+                  backgroundColor: "#fff",
+                }}
+              />
+              <div style={{
+                marginTop: "8px",
+                fontSize: "11px",
+                color: "#94a3b8",
+                display: "flex",
+                justifyContent: "space-between",
+              }}>
+                <span>{userInstructions.length.toLocaleString()} characters</span>
+                <span>{selectedPresetId ? "Using preset" : "Auto-saved locally"}</span>
+              </div>
+
+              {/* Save as Preset Button */}
+              {!showSavePreset ? (
+                <button
+                  onClick={() => setShowSavePreset(true)}
+                  disabled={!session?.user}
+                  style={{
+                    marginTop: "12px",
+                    padding: "8px 12px",
+                    fontSize: "12px",
+                    backgroundColor: session?.user ? "#f0fdf4" : "#f1f5f9",
+                    color: session?.user ? "#166534" : "#94a3b8",
+                    border: `1px solid ${session?.user ? "#86efac" : "#e2e8f0"}`,
+                    borderRadius: "6px",
+                    cursor: session?.user ? "pointer" : "not-allowed",
+                    fontWeight: 500,
+                  }}
+                >
+                  Save as Preset
+                </button>
+              ) : (
+                <div style={{
+                  marginTop: "12px",
+                  padding: "12px",
+                  backgroundColor: "#f0fdf4",
+                  borderRadius: "8px",
+                  border: "1px solid #86efac",
+                }}>
+                  <input
+                    type="text"
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    placeholder="Preset name..."
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "13px",
+                      border: "1px solid #86efac",
+                      borderRadius: "4px",
+                      marginBottom: "8px",
+                    }}
+                  />
+                  <input
+                    type="text"
+                    value={newPresetDescription}
+                    onChange={(e) => setNewPresetDescription(e.target.value)}
+                    placeholder="Description (optional)..."
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "13px",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "4px",
+                      marginBottom: "8px",
+                    }}
+                  />
+                  <label style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    fontSize: "12px",
+                    color: "#64748b",
+                    marginBottom: "8px",
+                    cursor: "pointer",
+                  }}>
+                    <input
+                      type="checkbox"
+                      checked={newPresetIsShared}
+                      onChange={(e) => setNewPresetIsShared(e.target.checked)}
+                    />
+                    {session?.user?.role === "ADMIN"
+                      ? "Share with organization"
+                      : "Request to share with organization"}
+                  </label>
+                  {newPresetIsShared && session?.user?.role !== "ADMIN" && (
+                    <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "8px", fontStyle: "italic" }}>
+                      An admin will review your request before it becomes visible to others.
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      onClick={async () => {
+                        if (!newPresetName.trim()) return;
+                        try {
+                          const res = await fetch("/api/instruction-presets", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              name: newPresetName,
+                              content: userInstructions,
+                              description: newPresetDescription || null,
+                              requestShare: newPresetIsShared,
+                            }),
+                          });
+                          if (res.ok) {
+                            const data = await res.json();
+                            setInstructionPresets(prev => [...prev, data.preset]);
+                            setSelectedPresetId(data.preset.id);
+                            setShowSavePreset(false);
+                            setNewPresetName("");
+                            setNewPresetDescription("");
+                            setNewPresetIsShared(false);
+                          }
+                        } catch (err) {
+                          console.error("Failed to save preset:", err);
+                        }
+                      }}
+                      disabled={!newPresetName.trim()}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        fontSize: "12px",
+                        backgroundColor: newPresetName.trim() ? "#22c55e" : "#94a3b8",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "4px",
+                        cursor: newPresetName.trim() ? "pointer" : "not-allowed",
+                        fontWeight: 500,
+                      }}
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowSavePreset(false);
+                        setNewPresetName("");
+                        setNewPresetDescription("");
+                        setNewPresetIsShared(false);
+                      }}
+                      style={{
+                        padding: "8px 12px",
+                        fontSize: "12px",
+                        backgroundColor: "transparent",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "4px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Preset actions (for owned presets) */}
+              {selectedPresetId && (() => {
+                const preset = instructionPresets.find(p => p.id === selectedPresetId);
+                if (!preset) return null;
+                const isOwner = preset.createdBy === session?.user?.id;
+                const isAdmin = session?.user?.role === "ADMIN";
+                const canDelete = isOwner || isAdmin;
+                const canRequestShare = isOwner && preset.shareStatus === "PRIVATE";
+                const canCancelRequest = isOwner && (preset.shareStatus === "PENDING_APPROVAL" || preset.shareStatus === "REJECTED");
+
+                return (
+                  <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {/* Request to share button */}
+                    {canRequestShare && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/instruction-presets/${selectedPresetId}`, {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ requestShare: true }),
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setInstructionPresets(prev =>
+                                prev.map(p => p.id === selectedPresetId ? data.preset : p)
+                              );
+                            }
+                          } catch (err) {
+                            console.error("Failed to request share:", err);
+                          }
+                        }}
                         style={{
-                          ...styles.promptItem,
-                          borderLeftColor: colors.border,
-                          borderLeftWidth: "3px",
-                        }}
-                        onClick={() => applyPrompt(prompt)}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.backgroundColor = "#f8fafc";
-                          e.currentTarget.style.borderColor = colors.border;
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.backgroundColor = "#fff";
-                          e.currentTarget.style.borderColor = "#e2e8f0";
-                          e.currentTarget.style.borderLeftColor = colors.border;
+                          padding: "6px 10px",
+                          fontSize: "11px",
+                          backgroundColor: "#f0fdf4",
+                          color: "#166534",
+                          border: "1px solid #86efac",
+                          borderRadius: "4px",
+                          cursor: "pointer",
                         }}
                       >
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{
-                              fontSize: "13px",
-                              fontWeight: 500,
-                              color: "#1e293b",
-                              marginBottom: "4px",
-                            }}>
-                              {prompt.title}
-                            </div>
-                            <div style={{
-                              fontSize: "11px",
-                              color: "#64748b",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              display: "-webkit-box",
-                              WebkitLineClamp: 2,
-                              WebkitBoxOrient: "vertical",
-                              lineHeight: 1.4,
-                            }}>
-                              {prompt.prompt}
-                            </div>
-                          </div>
-                          {!prompt.isBuiltIn && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeletePrompt(prompt.id);
-                              }}
-                              style={{
-                                padding: "2px 6px",
-                                fontSize: "10px",
-                                backgroundColor: "transparent",
-                                border: "none",
-                                color: "#94a3b8",
-                                cursor: "pointer",
-                                marginLeft: "8px",
-                              }}
-                              title="Delete prompt"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                        {isAdmin ? "Share with organization" : "Request to share with org"}
+                      </button>
+                    )}
+
+                    {/* Cancel share request */}
+                    {canCancelRequest && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/instruction-presets/${selectedPresetId}`, {
+                              method: "PUT",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ requestShare: false }),
+                            });
+                            if (res.ok) {
+                              const data = await res.json();
+                              setInstructionPresets(prev =>
+                                prev.map(p => p.id === selectedPresetId ? data.preset : p)
+                              );
+                            }
+                          } catch (err) {
+                            console.error("Failed to cancel request:", err);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          fontSize: "11px",
+                          backgroundColor: "#f1f5f9",
+                          color: "#64748b",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {preset.shareStatus === "PENDING_APPROVAL" ? "Cancel share request" : "Keep private"}
+                      </button>
+                    )}
+
+                    {/* Delete button */}
+                    {canDelete && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm("Delete this preset?")) return;
+                          try {
+                            const res = await fetch(`/api/instruction-presets/${selectedPresetId}`, {
+                              method: "DELETE",
+                            });
+                            if (res.ok) {
+                              setInstructionPresets(prev => prev.filter(p => p.id !== selectedPresetId));
+                              setSelectedPresetId(null);
+                              const stored = localStorage.getItem(USER_INSTRUCTIONS_STORAGE_KEY);
+                              setUserInstructions(stored || defaultUserInstructions);
+                            }
+                          } catch (err) {
+                            console.error("Failed to delete preset:", err);
+                          }
+                        }}
+                        style={{
+                          padding: "6px 10px",
+                          fontSize: "11px",
+                          backgroundColor: "transparent",
+                          color: "#dc2626",
+                          border: "1px solid #fecaca",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Delete this preset
+                      </button>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Tips section */}
+              <div style={{
+                marginTop: "16px",
+                padding: "12px",
+                backgroundColor: "#f8fafc",
+                borderRadius: "8px",
+                border: "1px solid #e2e8f0",
+              }}>
+                <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>
+                  TIPS
                 </div>
-              );
-              })}
-              {/* Link to Prompt Library */}
-              <div style={{ padding: "12px", borderTop: "1px solid #e2e8f0", marginTop: "8px" }}>
+                <ul style={{ margin: 0, paddingLeft: "16px", fontSize: "12px", color: "#64748b", lineHeight: 1.6 }}>
+                  <li>Define your role or persona</li>
+                  <li>Specify tone and style preferences</li>
+                  <li>Add formatting rules</li>
+                </ul>
+              </div>
+
+              {/* Link to Admin Prompts */}
+              <div style={{ padding: "12px 0", borderTop: "1px solid #e2e8f0", marginTop: "16px" }}>
                 <Link
-                  href="/prompts/library"
+                  href="/admin/prompt-blocks"
                   style={{
                     display: "block",
                     padding: "10px 12px",
@@ -1542,7 +1910,7 @@ ${keyFactsText}`;
                     border: "1px solid #e2e8f0",
                   }}
                 >
-                  Browse all prompts →
+                  Manage system prompts →
                 </Link>
               </div>
             </div>
@@ -1556,10 +1924,19 @@ ${keyFactsText}`;
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <div>
               <h2 style={{ margin: 0, fontSize: "18px", fontWeight: 600, color: "#1e293b" }}>
-                Chat with Knowledge Base
+                {selectedProjectTemplate ? (
+                  <span style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span>{selectedProjectTemplate.icon}</span>
+                    {selectedProjectTemplate.name}
+                  </span>
+                ) : (
+                  "Chat with Knowledge Base"
+                )}
               </h2>
               <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
-                Ask questions about your security documentation and policies
+                {selectedProjectTemplate
+                  ? selectedProjectTemplate.description
+                  : "Ask questions about your security documentation and policies"}
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px" }}>
@@ -1714,34 +2091,68 @@ ${keyFactsText}`;
 
         <div style={styles.messagesContainer}>
           {messages.length === 0 ? (
-            <div style={styles.emptyState}>
-              <div style={{ fontSize: "48px", marginBottom: "16px" }}>💬</div>
-              <h3 style={{ margin: "0 0 8px 0", color: "#1e293b" }}>Start a Conversation</h3>
-              <p style={{ maxWidth: "400px", lineHeight: 1.6 }}>
-                Ask questions about your knowledge base, or use a prompt from the library to get started.
-              </p>
-              <div style={{ marginTop: "24px", display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
-                {prompts.slice(0, 3).map(prompt => {
-                  const promptCat = getCategoryConfig(prompt.category);
-                  const promptColor = promptCat?.color || { bg: "#f1f5f9", text: "#475569", border: "#cbd5e1" };
-                  return (
-                  <button
-                    key={prompt.id}
-                    onClick={() => applyPrompt(prompt)}
-                    style={{
-                      padding: "8px 12px",
-                      fontSize: "12px",
-                      backgroundColor: promptColor.bg,
-                      color: promptColor.text,
-                      border: `1px solid ${promptColor.border}`,
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {prompt.title}
-                  </button>
-                  );
-                })}
+            <div style={{ ...styles.emptyState, justifyContent: "flex-start", paddingTop: "24px" }}>
+              {/* Project Template Selector */}
+              <div style={{ width: "100%", maxWidth: "600px", marginBottom: "24px" }}>
+                <ChatProjectSelector
+                  onSelectTemplate={setSelectedProjectTemplate}
+                  selectedTemplateId={selectedProjectTemplate?.id || null}
+                />
+              </div>
+
+              {/* Suggested prompts when template is selected */}
+              {selectedProjectTemplate && (
+                <div style={{ width: "100%", maxWidth: "600px", marginBottom: "24px" }}>
+                  <SuggestedPrompts
+                    prompts={getAvailableSuggestedPrompts()}
+                    onSelectPrompt={handleSuggestedPrompt}
+                    disabled={isLoading || totalKnowledgeSelected === 0}
+                    title={`Suggested questions for ${selectedProjectTemplate.name}`}
+                  />
+                </div>
+              )}
+
+              {/* Welcome message and quick prompts - always show */}
+              <div style={{ textAlign: "center" }}>
+                {!selectedProjectTemplate && (
+                  <>
+                    <div style={{ fontSize: "48px", marginBottom: "16px" }}>💬</div>
+                    <h3 style={{ margin: "0 0 8px 0", color: "#1e293b" }}>Start a Conversation</h3>
+                    <p style={{ maxWidth: "400px", lineHeight: 1.6, margin: "0 auto" }}>
+                      Choose a project template above for guided workflows, or ask questions directly.
+                    </p>
+                  </>
+                )}
+
+                {/* Quick prompt buttons - always visible */}
+                <div style={{ marginTop: "24px" }}>
+                  <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "12px" }}>
+                    {selectedProjectTemplate ? "Or try a quick prompt:" : "Quick prompts:"}
+                  </p>
+                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", justifyContent: "center" }}>
+                    {prompts.slice(0, 4).map(prompt => {
+                      const promptCat = getCategoryConfig(prompt.category);
+                      const promptColor = promptCat?.color || { bg: "#f1f5f9", text: "#475569", border: "#cbd5e1" };
+                      return (
+                      <button
+                        key={prompt.id}
+                        onClick={() => applyPrompt(prompt)}
+                        style={{
+                          padding: "8px 12px",
+                          fontSize: "12px",
+                          backgroundColor: promptColor.bg,
+                          color: promptColor.text,
+                          border: `1px solid ${promptColor.border}`,
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        {prompt.title}
+                      </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
@@ -1830,6 +2241,19 @@ ${keyFactsText}`;
                   </div>
                 </div>
               ))}
+
+              {/* Suggested follow-up prompts after conversation */}
+              {selectedProjectTemplate && !isLoading && messages.length > 0 && getAvailableSuggestedPrompts().length > 0 && (
+                <div style={{ marginTop: "8px", marginBottom: "16px" }}>
+                  <SuggestedPrompts
+                    prompts={getAvailableSuggestedPrompts().slice(0, 3)}
+                    onSelectPrompt={handleSuggestedPrompt}
+                    disabled={isLoading}
+                    compact
+                  />
+                </div>
+              )}
+
               {isLoading && (
                 <div style={styles.messageWrapper}>
                   <div style={styles.assistantMessage}>
@@ -2052,9 +2476,9 @@ ${keyFactsText}`;
             { label: "MAX TOKENS", value: selectedTransparency.maxTokens, color: "yellow" },
             { label: "TEMPERATURE", value: selectedTransparency.temperature, color: "green" },
           ]}
-          systemPrompt={selectedTransparency.systemPrompt}
+          systemPrompt={selectedTransparency.baseSystemPrompt || selectedTransparency.systemPrompt}
           userPrompt={selectedTransparency.knowledgeContext}
-          userPromptLabel="Knowledge Context (included in system prompt)"
+          userPromptLabel="Knowledge Context (appended to system prompt)"
           userPromptNote={`Total knowledge context: ${selectedTransparency.knowledgeContext.length.toLocaleString()} characters`}
         />
       )}
@@ -2066,5 +2490,23 @@ ${keyFactsText}`;
         }
       `}</style>
     </div>
+  );
+}
+
+export default function ChatPage() {
+  return (
+    <Suspense fallback={
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        height: "100vh",
+        color: "#64748b",
+      }}>
+        Loading chat...
+      </div>
+    }>
+      <ChatPageContent />
+    </Suspense>
   );
 }

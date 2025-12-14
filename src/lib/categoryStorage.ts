@@ -103,7 +103,7 @@ export function addCategory(name: string, description?: string): SkillCategoryIt
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: name.trim(), description: description?.trim() }),
-  }).catch(() => {});
+  }).catch((err) => console.error("Failed to sync category to API:", err));
 
   return newCategory;
 }
@@ -123,7 +123,7 @@ export function updateCategory(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
-  }).catch(() => {});
+  }).catch((err) => console.error("Failed to update category in API:", err));
 }
 
 // Delete a category
@@ -134,7 +134,7 @@ export function deleteCategory(id: string): void {
   // Fire and forget API call
   fetch(`/api/skill-categories/${id}`, {
     method: "DELETE",
-  }).catch(() => {});
+  }).catch((err) => console.error("Failed to delete category from API:", err));
 }
 
 // Get just the category names (for prompts)

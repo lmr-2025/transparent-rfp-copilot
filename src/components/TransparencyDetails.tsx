@@ -80,8 +80,8 @@ function renderTextWithKnowledgeLinks(
 
     if (matchedRef) {
       const href = matchedRef.type === "skill"
-        ? `/knowledge/library?highlight=${matchedRef.id}`
-        : `/knowledge/unified-library?highlight=${matchedRef.id}&tab=documents`;
+        ? `/knowledge?highlight=${matchedRef.id}`
+        : `/knowledge?highlight=${matchedRef.id}&tab=documents`;
 
       return (
         <Link

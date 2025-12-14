@@ -4,9 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { generateSkillDraftFromMessages } from "@/lib/llm";
 import { defaultSkillPrompt } from "@/lib/skillPrompt";
 import { ConversationFeedback } from "@/types/conversation";
-import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { logUsage } from "@/lib/usageTracking";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
 
 type SuggestRequestBody = {
   sourceText?: string;
@@ -58,7 +59,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const authSession = await getServerSession(authOptions);
-    const promptText = (body?.prompt ?? "").trim() || defaultSkillPrompt;
+
+    // Load prompt from database or use defaults
+    const promptText = body?.prompt?.trim() || await loadSystemPrompt("skills", defaultSkillPrompt);
 
     // If we have an existing skill, use update mode
     if (existingSkill && (sourceText || sourceUrls.length > 0)) {
@@ -131,12 +134,7 @@ async function generateDraftUpdate(
   sourceUrls: string[],
   authSession: { user?: { id?: string; email?: string | null } } | null
 ): Promise<DraftUpdateResponse> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAnthropicClient();
 
   const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
 
@@ -211,18 +209,7 @@ Return ONLY the JSON object.`;
     throw new Error("Unexpected response format");
   }
 
-  // Parse JSON response
-  let jsonText = content.text.trim();
-  if (jsonText.startsWith("```")) {
-    const lines = jsonText.split("\n");
-    lines.shift();
-    if (lines[lines.length - 1].trim() === "```") {
-      lines.pop();
-    }
-    jsonText = lines.join("\n");
-  }
-
-  const parsed = JSON.parse(jsonText) as DraftUpdateResponse;
+  const parsed = parseJsonResponse<DraftUpdateResponse>(content.text);
 
   // Log usage
   logUsage({
@@ -245,7 +232,7 @@ async function buildSourceMaterial(sourceText: string, sourceUrls: string[]): Pr
   }
 
   for (const url of sourceUrls) {
-    const text = await fetchUrlContent(url);
+    const text = await fetchUrlContent(url, { maxLength: 20000 });
     if (text) {
       sections.push(`Source: ${url}\n${text}`);
     }
@@ -281,39 +268,3 @@ function extractConversationMessages(
     .filter((message): message is ConversationFeedback => message.content.length > 0);
 }
 
-async function fetchUrlContent(urlString: string): Promise<string | null> {
-  let parsed: URL;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    console.warn(`Skipping invalid URL: ${urlString}`);
-    return null;
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    console.warn(`Skipping unsupported protocol: ${urlString}`);
-    return null;
-  }
-
-  try {
-    const response = await fetch(parsed.toString(), {
-      headers: { "User-Agent": "TransparentRfpSkillBot/1.0" },
-    });
-    if (!response.ok) {
-      console.warn(`Failed to fetch ${urlString}: ${response.statusText}`);
-      return null;
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("text")) {
-      console.warn(`Skipping non-text content from ${urlString}`);
-      return null;
-    }
-
-    const text = await response.text();
-    return text.slice(0, 20000);
-  } catch (error) {
-    console.warn(`Error fetching ${urlString}:`, error);
-    return null;
-  }
-}

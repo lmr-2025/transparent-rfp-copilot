@@ -1,3 +1,4 @@
-import { buildPromptFromSections, defaultQuestionSections } from "./promptSections";
+import { getDefaultPrompt } from "./promptBlocks";
 
-export const defaultQuestionPrompt = buildPromptFromSections(defaultQuestionSections);
+// Default question prompt built from the new block system
+export const defaultQuestionPrompt = getDefaultPrompt("questions");

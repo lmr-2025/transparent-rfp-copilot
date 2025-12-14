@@ -17,6 +17,7 @@ datasource db {
 enum UserRole {
   USER
   ADMIN
+  PROMPT_ADMIN  // Can edit all system prompts including sensitive ones
 }
 
 // NextAuth.js models
@@ -241,7 +242,7 @@ model SkillCategory {
   @@index([sortOrder])
 }
 
-// System Prompts (configurable prompts for various features)
+// System Prompts (DEPRECATED - use PromptBlock instead)
 model SystemPrompt {
   id        String   @id @default(uuid())
   key       String   @unique // e.g., "skill_builder", "chat", "customer_profile", "rfp_analysis"
@@ -251,6 +252,33 @@ model SystemPrompt {
   updatedBy String?
 
   @@index([key])
+}
+
+// Prompt Blocks - Reusable building blocks for composing prompts
+model PromptBlock {
+  id          String   @id @default(uuid())
+  blockId     String   @unique // e.g., "role_mission", "output_format"
+  name        String   // Human-readable name
+  description String?  // What this block is for
+  variants    Json     // { "default": "...", "questions": "...", "skills": "..." }
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@index([blockId])
+}
+
+// Prompt Modifiers - Runtime additions (mode, domain)
+model PromptModifier {
+  id        String   @id @default(uuid())
+  modifierId String  @unique // e.g., "mode_single", "domain_technical"
+  name      String   // Human-readable name
+  type      String   // "mode" or "domain"
+  content   String   // The prompt content
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+
+  @@index([modifierId])
+  @@index([type])
 }
 
 // Reference URLs (global URL store for knowledge building)
@@ -282,6 +310,38 @@ model ChatPrompt {
 
   @@index([category])
   @@index([isBuiltin])
+}
+
+// Instruction Presets (persona/behavior instructions for chat)
+model InstructionPreset {
+  id               String                  @id @default(uuid())
+  name             String
+  content          String                  @db.Text // The instruction text
+  description      String?                 // Brief description of what this preset is for
+  isShared         Boolean                 @default(false) // If true, visible to all org users
+  isDefault        Boolean                 @default(false) // If true, auto-selected for new chats
+  shareStatus      InstructionShareStatus  @default(PRIVATE) // Approval workflow status
+  shareRequestedAt DateTime?               // When share was requested
+  approvedAt       DateTime?               // When approved
+  approvedBy       String?                 // Admin who approved
+  rejectedAt       DateTime?               // When rejected (if applicable)
+  rejectedBy       String?                 // Admin who rejected
+  rejectionReason  String?                 // Why it was rejected
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+  createdBy        String?                 // User ID who created it
+  createdByEmail   String?                 // For display
+
+  @@index([isShared])
+  @@index([shareStatus])
+  @@index([createdBy])
+}
+
+enum InstructionShareStatus {
+  PRIVATE           // Personal only, not shared
+  PENDING_APPROVAL  // User requested to share, awaiting admin approval
+  APPROVED          // Admin approved, now shared with org
+  REJECTED          // Admin rejected the share request
 }
 
 // Chat Prompt Categories
@@ -390,4 +450,138 @@ model ApiUsage {
   @@index([userId, createdAt])
   @@index([feature, createdAt])
   @@index([createdAt])
+}
+
+// App Settings - key-value store for admin-configurable settings
+// NOTE: Security engineer should implement encryption for sensitive values
+model AppSetting {
+  key         String   @id // e.g., "SALESFORCE_CLIENT_ID"
+  value       String   @db.Text // The setting value (TODO: encrypt sensitive values)
+  description String?  // Human-readable description
+  isSecret    Boolean  @default(false) // Whether this is a sensitive value
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  // Email of user who last updated
+}
+
+// Audit Log - tracks all changes across entities
+model AuditLog {
+  id            String         @id @default(uuid())
+  entityType    AuditEntityType // skill, customer, project, document, etc.
+  entityId      String         // ID of the affected entity
+  entityTitle   String?        // Human-readable title/name of the entity
+  action        AuditAction    // created, updated, deleted, etc.
+  userId        String?        // User who performed the action
+  userEmail     String?        // For display purposes
+  userName      String?        // For display purposes
+  changes       Json?          // Detailed changes: {field: {from, to}}
+  metadata      Json?          // Additional context
+  ipAddress     String?        // IP address if available
+  userAgent     String?        // Browser/client info
+  createdAt     DateTime       @default(now())
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt])
+  @@index([entityType, createdAt])
+  @@index([createdAt])
+}
+
+enum AuditEntityType {
+  SKILL
+  CUSTOMER
+  PROJECT
+  DOCUMENT
+  REFERENCE_URL
+  CONTRACT
+  USER
+  SETTING
+}
+
+enum AuditAction {
+  CREATED
+  UPDATED
+  DELETED
+  VIEWED
+  EXPORTED
+  OWNER_ADDED
+  OWNER_REMOVED
+  STATUS_CHANGED
+  REFRESHED
+  MERGED
+}
+
+enum ItemCategory {
+  ELECTRONICS
+  CLOTHING
+  TOYS
+  PRACTICAL
+}
+
+enum ItemPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Retailer {
+  AMAZON
+  WALMART
+  TARGET
+  BESTBUY
+  SAMS
+  OTHER
+}
+
+model Item {
+  id              String         @id @default(uuid())
+  name            String
+  category        ItemCategory
+  ageRange        String?
+  priority        ItemPriority   @default(MEDIUM)
+  targetBuyPrice  Decimal        @db.Decimal(10, 2)
+  normalPrice     Decimal?       @db.Decimal(10, 2)
+  lowestSeenPrice Decimal?       @db.Decimal(10, 2)
+  quantityGoal    Int            @default(1)
+  notes           String?        @db.Text
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  listings        Listing[]
+  purchases       Purchase[]
+
+  @@index([category])
+  @@index([priority])
+}
+
+model Listing {
+  id              String    @id @default(uuid())
+  itemId          String
+  retailer        Retailer
+  url             String
+  currentPrice    Decimal?  @db.Decimal(10, 2)
+  lowestSeenPrice Decimal?  @db.Decimal(10, 2)
+  lastCheckedAt   DateTime?
+  active          Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([retailer])
+  @@index([lastCheckedAt])
+}
+
+model Purchase {
+  id               String   @id @default(uuid())
+  itemId           String
+  retailer         String
+  unitPrice        Decimal  @db.Decimal(10, 2)
+  quantity         Int      @default(1)
+  purchasedAt      DateTime
+  storageLocation  String?
+  notes            String?  @db.Text
+  createdAt        DateTime @default(now())
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([purchasedAt])
 }

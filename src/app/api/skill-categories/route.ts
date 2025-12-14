@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SKILL_CATEGORIES } from "@/types/skill";
+import { requireAuth } from "@/lib/apiAuth";
+import { createCategorySchema, validateBody } from "@/lib/validations";
 
 // GET /api/skill-categories - List all categories
 export async function GET() {
@@ -37,8 +39,20 @@ export async function GET() {
 
 // POST /api/skill-categories - Create a new category
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
+
+    const validation = validateBody(createCategorySchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const data = validation.data;
 
     // Get current max sortOrder
     const maxOrder = await prisma.skillCategory.aggregate({
@@ -47,9 +61,9 @@ export async function POST(request: NextRequest) {
 
     const category = await prisma.skillCategory.create({
       data: {
-        name: body.name,
-        description: body.description,
-        color: body.color,
+        name: data.name,
+        description: data.description,
+        color: data.color,
         sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
       },
     });
@@ -66,6 +80,11 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/skill-categories - Bulk update (for reordering)
 export async function PUT(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
     const categories = body.categories as Array<{

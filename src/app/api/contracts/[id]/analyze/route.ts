@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { ContractFinding, FindingCategory, AlignmentRating } from "@/types/contractReview";
 import { logUsage } from "@/lib/usageTracking";
+import {
+  defaultContractAnalysisSections,
+  buildContractAnalysisPromptFromSections,
+  EditableContractAnalysisSection,
+} from "@/lib/contractAnalysisPromptSections";
+import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 
 export const maxDuration = 120; // 2 minutes for analysis
 
@@ -60,19 +65,7 @@ export async function POST(
       },
     });
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      await prisma.contractReview.update({
-        where: { id },
-        data: { status: "PENDING" },
-      });
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY not configured" },
-        { status: 500 }
-      );
-    }
-
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = getAnthropicClient();
 
     // Build skills context - focus on security-related content
     const skillsContext = skills.length > 0
@@ -85,54 +78,37 @@ export async function POST(
       ? contract.extractedText.substring(0, maxContractLength) + "\n\n[Contract text truncated for analysis]"
       : contract.extractedText;
 
-    const systemPrompt = `You are a security and compliance expert reviewing customer contracts. Your task is to analyze security-related clauses and assess whether the organization can meet the requirements based on their documented capabilities.
+    // Load prompt sections from database or use defaults
+    let promptSections: EditableContractAnalysisSection[];
+    try {
+      const savedPrompt = await prisma.systemPrompt.findUnique({
+        where: { key: "contract_analysis" },
+      });
+      if (savedPrompt?.sections && Array.isArray(savedPrompt.sections)) {
+        promptSections = savedPrompt.sections as EditableContractAnalysisSection[];
+      } else {
+        promptSections = defaultContractAnalysisSections.map(s => ({
+          ...s,
+          enabled: true,
+          text: s.defaultText,
+        }));
+      }
+    } catch {
+      promptSections = defaultContractAnalysisSections.map(s => ({
+        ...s,
+        enabled: true,
+        text: s.defaultText,
+      }));
+    }
 
-ANALYSIS CATEGORIES:
-- data_protection: Data handling, privacy, GDPR, personal data requirements
-- security_controls: Technical security measures, encryption, access controls
-- certifications: SOC 2, ISO 27001, PCI DSS, HIPAA compliance requirements
-- incident_response: Breach notification, incident handling, response times
-- audit_rights: Customer audit rights, third-party assessments, penetration testing
-- subprocessors: Third-party/subcontractor requirements and approvals
-- data_retention: Data storage duration, deletion requirements
-- insurance: Cyber liability, professional liability coverage requirements
-- liability: Limitation of liability, indemnification related to security
-- confidentiality: NDA terms, information handling
-- other: Other security or compliance related items
+    // Build the prompt from sections
+    const basePrompt = buildContractAnalysisPromptFromSections(promptSections);
 
-RATING SCALE:
-- can_comply: The organization fully meets this requirement based on their documented capabilities
-- partial: The organization partially meets this; may need adjustments or clarification
-- gap: The organization does not currently support this requirement
-- risk: This clause poses a potential risk or unreasonable obligation
-- info_only: Informational clause, no specific action needed
+    // Add skills context to the prompt
+    const systemPrompt = `${basePrompt}
 
 YOUR CAPABILITIES (use these to assess compliance):
-${skillsContext}
-
-OUTPUT FORMAT:
-Return a JSON object with this exact structure:
-{
-  "overallRating": "compliant" | "mostly_compliant" | "needs_review" | "high_risk",
-  "summary": "Executive summary of the contract analysis (2-3 paragraphs)",
-  "findings": [
-    {
-      "category": "category_name",
-      "clauseText": "The exact or summarized clause text from the contract",
-      "rating": "can_comply" | "partial" | "gap" | "risk" | "info_only",
-      "rationale": "Why this rating was given, referencing your capabilities",
-      "suggestedResponse": "Optional: How to respond or negotiate if needed"
-    }
-  ]
-}
-
-GUIDELINES:
-1. Focus on security, privacy, and compliance clauses
-2. Extract 5-20 key findings (don't list every clause, focus on important ones)
-3. Be specific about which of your capabilities support each finding
-4. For gaps or risks, suggest concrete responses or negotiation points
-5. The overall rating should reflect the aggregate risk level
-6. Return ONLY valid JSON, no markdown or explanatory text`;
+${skillsContext}`;
 
     const userPrompt = `Analyze this ${contract.contractType || "contract"} from ${contract.customerName || "the customer"}:
 
@@ -169,17 +145,7 @@ Identify and rate security-related clauses against our documented capabilities. 
     // Parse the JSON response
     let result: AnalysisResult;
     try {
-      let jsonText = content.text.trim();
-      // Extract JSON from markdown code blocks if present
-      if (jsonText.startsWith("```")) {
-        const lines = jsonText.split("\n");
-        lines.shift();
-        if (lines[lines.length - 1].trim() === "```") {
-          lines.pop();
-        }
-        jsonText = lines.join("\n");
-      }
-      result = JSON.parse(jsonText);
+      result = parseJsonResponse<AnalysisResult>(content.text);
     } catch {
       console.error("Failed to parse LLM response:", content.text);
       await prisma.contractReview.update({

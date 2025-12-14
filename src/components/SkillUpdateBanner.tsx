@@ -93,7 +93,7 @@ export default function SkillUpdateBanner({ skills }: SkillUpdateBannerProps) {
         </div>
         <div style={{ marginTop: "12px" }}>
           <Link
-            href="/knowledge/library"
+            href="/knowledge"
             style={{
               display: "inline-block",
               padding: "8px 16px",

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
+import { validateUrlForSSRF } from "@/lib/ssrfProtection";
+import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 
 type ExistingSkillInfo = {
   id: string;
@@ -16,6 +17,7 @@ type ExistingSkillInfo = {
 type AnalyzeRequestBody = {
   sourceUrls: string[];
   existingSkills: ExistingSkillInfo[];
+  groupUrls?: boolean; // If true, return grouped skill recommendations for all URLs at once
 };
 
 type SkillSuggestion = {
@@ -51,6 +53,20 @@ type AnalyzeResponse = {
   };
 };
 
+// For grouped URL analysis
+type SkillGroup = {
+  action: "create" | "update_existing";
+  skillTitle: string;
+  existingSkillId?: string;
+  urls: string[];
+  reason: string;
+};
+
+type GroupedAnalyzeResponse = {
+  skillGroups: SkillGroup[];
+  summary: string;
+};
+
 export async function POST(request: NextRequest) {
   let body: AnalyzeRequestBody;
   try {
@@ -68,8 +84,16 @@ export async function POST(request: NextRequest) {
   }
 
   const existingSkills: ExistingSkillInfo[] = Array.isArray(body?.existingSkills) ? body.existingSkills : [];
+  const groupUrls = body?.groupUrls === true;
 
   try {
+    // For grouped analysis (bulk import), use the dedicated grouped analysis function
+    if (groupUrls && sourceUrls.length > 1) {
+      const groupedAnalysis = await analyzeAndGroupUrls(sourceUrls, existingSkills);
+      return NextResponse.json(groupedAnalysis);
+    }
+
+    // Single URL analysis (original behavior)
     // First, check if any URLs are already used in existing skills
     const urlMatches = findUrlMatches(sourceUrls, existingSkills);
 
@@ -149,6 +173,13 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 
   for (const url of urls.slice(0, 10)) { // Limit to 10 URLs
     try {
+      // SSRF protection: validate URL before fetching
+      const ssrfCheck = await validateUrlForSSRF(url);
+      if (!ssrfCheck.valid) {
+        console.warn(`SSRF check failed for URL ${url}: ${ssrfCheck.error}`);
+        continue;
+      }
+
       const parsed = new URL(url);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
 
@@ -177,12 +208,7 @@ async function analyzeContent(
   sourceUrls: string[],
   existingSkills: { id: string; title: string; category?: SkillCategory; tags: string[]; contentPreview: string }[]
 ): Promise<AnalyzeResponse> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAnthropicClient();
 
   const skillsSummary = existingSkills.length > 0
     ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || "Uncategorized"}\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
@@ -282,16 +308,129 @@ Return ONLY the JSON object.`;
     throw new Error("Unexpected response format");
   }
 
-  // Parse JSON response
-  let jsonText = content.text.trim();
-  if (jsonText.startsWith("```")) {
-    const lines = jsonText.split("\n");
-    lines.shift();
-    if (lines[lines.length - 1].trim() === "```") {
-      lines.pop();
+  return parseJsonResponse<AnalyzeResponse>(content.text);
+}
+
+// Analyze multiple URLs and group them into skill recommendations
+async function analyzeAndGroupUrls(
+  sourceUrls: string[],
+  existingSkills: ExistingSkillInfo[]
+): Promise<GroupedAnalyzeResponse> {
+  const anthropic = getAnthropicClient();
+
+  // Fetch content from all URLs (with limits)
+  const urlContents: { url: string; content: string }[] = [];
+  for (const url of sourceUrls.slice(0, 20)) { // Limit to 20 URLs
+    try {
+      const ssrfCheck = await validateUrlForSSRF(url);
+      if (!ssrfCheck.valid) continue;
+
+      const parsed = new URL(url);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+
+      const response = await fetch(parsed.toString(), {
+        headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
+      });
+      if (!response.ok) continue;
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text")) continue;
+
+      const text = await response.text();
+      // Take first 3000 chars per URL to fit more in context
+      urlContents.push({ url, content: text.slice(0, 3000) });
+    } catch {
+      // Include URL even if we couldn't fetch it
+      urlContents.push({ url, content: "[Could not fetch content]" });
     }
-    jsonText = lines.join("\n");
   }
 
-  return JSON.parse(jsonText) as AnalyzeResponse;
+  const skillsSummary = existingSkills.length > 0
+    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 150)}...`).join("\n")
+    : "No existing skills in the knowledge base.";
+
+  const urlSummary = urlContents.map((u, i) =>
+    `[URL ${i + 1}] ${u.url}\nContent preview: ${u.content.substring(0, 500)}...`
+  ).join("\n\n");
+
+  const systemPrompt = `You are a knowledge management expert helping organize documentation URLs into skills.
+
+Your task is to analyze multiple URLs and GROUP them into skill recommendations. Each group becomes one skill.
+
+GOAL: Group related URLs together so each skill is comprehensive. A skill should cover a BROAD CAPABILITY AREA.
+
+RULES:
+1. Group URLs by TOPIC SIMILARITY - URLs about the same feature/capability go together
+2. PREFER updating existing skills over creating new ones
+3. Each URL must appear in exactly one group
+4. A group can have 1 or many URLs
+5. Skills should be broad (like book chapters, not individual pages)
+
+OUTPUT FORMAT:
+Return a JSON object:
+{
+  "skillGroups": [
+    {
+      "action": "create" | "update_existing",
+      "skillTitle": "Name of the skill",
+      "existingSkillId": "ID if updating existing skill",
+      "urls": ["array of URLs in this group"],
+      "reason": "Why these URLs belong together and why this action"
+    }
+  ],
+  "summary": "Brief overall summary of how URLs were organized"
+}
+
+GROUPING GUIDELINES:
+- URLs from the same documentation section → same group
+- URLs about the same product feature → same group
+- If a URL clearly relates to an existing skill → update_existing
+- Only create new skills for genuinely new topics`;
+
+  const userPrompt = `EXISTING SKILLS:
+${skillsSummary}
+
+---
+
+URLs TO ANALYZE (${sourceUrls.length} total):
+${urlSummary}
+
+---
+
+Group these URLs into skill recommendations. Each group will become or update one skill.
+Related URLs should be grouped together.
+URLs that match existing skills should update those skills.
+
+Return ONLY the JSON object.`;
+
+  const response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 4000,
+    temperature: 0.1,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const content = response.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response format");
+  }
+
+  const parsed = parseJsonResponse<GroupedAnalyzeResponse>(content.text);
+
+  // Ensure all URLs are accounted for (add any missing ones)
+  const groupedUrls = new Set(parsed.skillGroups.flatMap(g => g.urls));
+  const missingUrls = sourceUrls.filter(url => !groupedUrls.has(url));
+
+  if (missingUrls.length > 0) {
+    // Add missing URLs to a "Miscellaneous" group
+    parsed.skillGroups.push({
+      action: "create",
+      skillTitle: "Miscellaneous Documentation",
+      urls: missingUrls,
+      reason: "URLs that couldn't be categorized into other groups",
+    });
+  }
+
+  return parsed;
 }

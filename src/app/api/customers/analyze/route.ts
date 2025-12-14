@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { validateUrlForSSRF } from "@/lib/ssrfProtection";
+import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
 type ExistingProfileInfo = {
   id: string;
@@ -188,6 +190,13 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 
   for (const url of urls.slice(0, 10)) {
     try {
+      // SSRF protection: validate URL before fetching
+      const ssrfCheck = await validateUrlForSSRF(url);
+      if (!ssrfCheck.valid) {
+        console.warn(`SSRF check failed for URL ${url}: ${ssrfCheck.error}`);
+        continue;
+      }
+
       const parsed = new URL(url);
       if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
 
@@ -216,12 +225,7 @@ async function analyzeContent(
   existingProfiles: ExistingProfileInfo[],
   documentNames: string[] = []
 ): Promise<AnalyzeResponse> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAnthropicClient();
 
   const profilesSummary =
     existingProfiles.length > 0
@@ -233,7 +237,11 @@ async function analyzeContent(
           .join("\n\n")
       : "No existing customer profiles in the system.";
 
-  const systemPrompt = `You are helping identify and organize customer information.
+  // Load the base system prompt from the block system (editable via /admin/prompt-blocks)
+  const baseSystemPrompt = await loadSystemPrompt("customer_profile", "You are helping identify and organize customer information.");
+
+  // Add task-specific context for analysis/matching
+  const analyzeContext = `
 
 Your task is to analyze source material (likely a company website, press release, or case study) and determine:
 1. Which company/customer this is about
@@ -248,15 +256,10 @@ Return a JSON object:
 {
   "suggestion": {
     "action": "create_new" | "update_existing",
-
-    // For update_existing:
-    "existingProfileId": "id of the profile to update",
-    "existingProfileName": "name of the company",
-
-    // For create_new:
-    "suggestedName": "Official company name",
-    "suggestedIndustry": "Primary industry category",
-
+    "existingProfileId": "id of the profile to update (for update_existing)",
+    "existingProfileName": "name of the company (for update_existing)",
+    "suggestedName": "Official company name (for create_new)",
+    "suggestedIndustry": "Primary industry category (for create_new)",
     "reason": "Brief explanation"
   },
   "sourcePreview": "2-3 sentence summary of what company and content this is about"
@@ -266,6 +269,8 @@ MATCHING RULES:
 - Match on company name (accounting for variations like "Inc", "Corp", etc.)
 - Match on website domain
 - When in doubt, suggest update_existing to avoid duplicates`;
+
+  const systemPrompt = baseSystemPrompt + analyzeContext;
 
   // Build source summary
   const sourceSummary = [];
@@ -305,17 +310,7 @@ Return ONLY the JSON object.`;
     throw new Error("Unexpected response format");
   }
 
-  let jsonText = content.text.trim();
-  if (jsonText.startsWith("```")) {
-    const lines = jsonText.split("\n");
-    lines.shift();
-    if (lines[lines.length - 1].trim() === "```") {
-      lines.pop();
-    }
-    jsonText = lines.join("\n");
-  }
-
-  const parsed = JSON.parse(jsonText) as AnalyzeResponse;
+  const parsed = parseJsonResponse<AnalyzeResponse>(content.text);
 
   // Add transparency data
   return {

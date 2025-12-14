@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/apiAuth";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -33,6 +34,11 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // PUT /api/skill-categories/[id] - Update a category
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
     const body = await request.json();
@@ -59,6 +65,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 // DELETE /api/skill-categories/[id] - Delete a category
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
 

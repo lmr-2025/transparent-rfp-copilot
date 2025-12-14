@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/apiAuth";
+import { createCustomerSchema, validateBody } from "@/lib/validations";
+import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/customers - Get all customer profiles
 export async function GET(request: NextRequest) {
@@ -49,54 +52,55 @@ export async function GET(request: NextRequest) {
 
 // POST /api/customers - Create new customer profile
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
-    const {
-      name,
-      industry,
-      website,
-      overview,
-      products,
-      challenges,
-      keyFacts,
-      tags,
-      sourceUrls,
-      isActive,
-      createdBy,
-      owners,
-    } = body;
 
-    if (!name || !overview) {
-      return NextResponse.json(
-        { error: "Missing required fields: name, overview" },
-        { status: 400 }
-      );
+    const validation = validateBody(createCustomerSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    const data = validation.data;
     const profile = await prisma.customerProfile.create({
       data: {
-        name,
-        industry: industry || null,
-        website: website || null,
-        overview,
-        products: products || null,
-        challenges: challenges || null,
-        keyFacts: keyFacts || [],
-        tags: tags || [],
-        sourceUrls: sourceUrls || [],
-        isActive: isActive ?? true,
-        createdBy: createdBy || null,
-        owners: owners || null,
+        name: data.name,
+        industry: data.industry || null,
+        website: data.website || null,
+        overview: data.overview,
+        products: data.products || null,
+        challenges: data.challenges || null,
+        keyFacts: data.keyFacts,
+        tags: data.tags,
+        sourceUrls: data.sourceUrls,
+        isActive: data.isActive,
+        createdBy: auth.session.user.email || null,
+        ownerId: auth.session.user.id,
+        owners: data.owners || undefined,
         history: [
           {
             date: new Date().toISOString(),
             action: "created",
             summary: "Profile created",
-            user: createdBy || undefined,
+            user: auth.session.user.email,
           },
         ],
       },
     });
+
+    // Audit log
+    await logCustomerChange(
+      "CREATED",
+      profile.id,
+      profile.name,
+      getUserFromSession(auth.session),
+      undefined,
+      { industry: data.industry, tags: data.tags }
+    );
 
     return NextResponse.json({ profile }, { status: 201 });
   } catch (error) {

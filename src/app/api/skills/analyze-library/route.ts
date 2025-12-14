@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
-import {
-  EditableLibraryAnalysisSection,
-  defaultLibraryAnalysisSections,
-  buildLibraryAnalysisPromptFromSections,
-} from "@/lib/promptSections";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { LibraryRecommendation, AnalyzeLibraryResponse } from "@/types/libraryAnalysis";
 
 export const maxDuration = 120;
@@ -19,7 +15,6 @@ type SkillSummary = {
 
 type AnalyzeLibraryRequest = {
   skills: SkillSummary[];
-  analysisSections?: EditableLibraryAnalysisSection[];
 };
 
 export async function POST(request: NextRequest) {
@@ -72,12 +67,8 @@ export async function POST(request: NextRequest) {
 
     const anthropic = new Anthropic({ apiKey });
 
-    // Use custom sections if provided, otherwise use defaults
-    const sections = Array.isArray(body?.analysisSections) && body.analysisSections.length > 0
-      ? body.analysisSections
-      : defaultLibraryAnalysisSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-
-    const systemPrompt = buildLibraryAnalysisPromptFromSections(sections);
+    // Load system prompt from the new block-based system
+    const systemPrompt = await loadSystemPrompt("analysis", "You are a knowledge library analyst.");
 
     const skillsContext = skills.map((s, idx) =>
       `[${idx + 1}] ID: ${s.id}\nTitle: ${s.title}\nTags: ${s.tags.join(", ") || "none"}\nContent Preview: ${s.contentPreview}`

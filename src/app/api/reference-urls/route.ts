@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/apiAuth";
+import { createReferenceUrlSchema, bulkImportUrlsSchema, validateBody } from "@/lib/validations";
 
 // GET /api/reference-urls - List all reference URLs
 export async function GET(request: NextRequest) {
@@ -27,15 +29,26 @@ export async function GET(request: NextRequest) {
 
 // POST /api/reference-urls - Create a new reference URL
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
 
+    const validation = validateBody(createReferenceUrlSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
+
+    const data = validation.data;
     const url = await prisma.referenceUrl.create({
       data: {
-        url: body.url,
-        title: body.title,
-        description: body.description,
-        categories: body.categories || [],
+        url: data.url,
+        title: data.title,
+        description: data.description,
+        categories: data.categories,
       },
     });
 
@@ -51,21 +64,20 @@ export async function POST(request: NextRequest) {
 
 // PUT /api/reference-urls - Bulk import URLs
 export async function PUT(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
-    const urls = body.urls as Array<{
-      url: string;
-      title?: string;
-      description?: string;
-      categories?: string[];
-    }>;
 
-    if (!Array.isArray(urls)) {
-      return NextResponse.json(
-        { error: "urls array required" },
-        { status: 400 }
-      );
+    const validation = validateBody(bulkImportUrlsSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
+
+    const { urls } = validation.data;
 
     // Upsert each URL (skip duplicates)
     const results = await Promise.all(

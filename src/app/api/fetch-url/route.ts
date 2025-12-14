@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 
 export const maxDuration = 30;
 
@@ -9,6 +10,7 @@ type FetchUrlRequest = {
 /**
  * Server-side URL fetcher to avoid CORS issues.
  * Fetches a URL and extracts readable text content.
+ * Protected against SSRF attacks.
  */
 export async function POST(request: NextRequest) {
   let body: FetchUrlRequest;
@@ -23,11 +25,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "URL is required" }, { status: 400 });
   }
 
-  // Validate URL
-  try {
-    new URL(url);
-  } catch {
-    return NextResponse.json({ error: "Invalid URL format" }, { status: 400 });
+  // Validate URL for SSRF vulnerabilities
+  const ssrfCheck = await validateUrlForSSRF(url);
+  if (!ssrfCheck.valid) {
+    return NextResponse.json(
+      { error: ssrfCheck.error || "URL validation failed" },
+      { status: 400 }
+    );
   }
 
   try {

@@ -4,10 +4,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
+import { useBranding } from "@/lib/branding";
 
 type NavItem = {
   href: string;
   label: string;
+  adminOnly?: boolean;
 };
 
 type NavSection = {
@@ -18,53 +20,48 @@ type NavSection = {
 
 const navItems: NavSection[] = [
   {
-    section: "Knowledge Gremlin",
+    section: "Home",
     items: [
-      { href: "/knowledge", label: "Build Skills" },
-      { href: "/knowledge/unified-library", label: "Library" },
+      { href: "/", label: "Dashboard" },
     ],
   },
   {
-    section: "Rolodex",
+    section: "RFP Projects",
     items: [
-      { href: "/customers", label: "Build Profile" },
-      { href: "/customers/library", label: "Library" },
+      { href: "/projects/questions", label: "Quick Questions" },
+      { href: "/projects", label: "All Projects" },
+    ],
+  },
+  {
+    section: "Knowledge Base",
+    items: [
+      { href: "/knowledge", label: "Library" },
+      { href: "/knowledge/add", label: "Add Knowledge" },
     ],
   },
   {
     section: "Oracle",
     items: [
       { href: "/chat", label: "Chat" },
-      { href: "/prompts/library", label: "Prompt Library" },
+      { href: "/chat/instruction-presets", label: "Instruction Presets", adminOnly: true },
     ],
   },
   {
-    section: "Clause Checker",
+    section: "Contract Review",
     items: [
-      { href: "/contracts", label: "Upload Contract" },
-      { href: "/contracts/library", label: "Library" },
-    ],
-  },
-  {
-    section: "GRC Minion",
-    items: [
-      { href: "/questions", label: "Ask Questions" },
-    ],
-  },
-  {
-    section: "Answer Goblin",
-    items: [
-      { href: "/projects", label: "All Projects" },
-      { href: "/projects/upload", label: "Upload New" },
+      { href: "/contracts", label: "Library" },
+      { href: "/contracts/upload", label: "Upload" },
     ],
   },
   {
     section: "Backstage",
     adminOnly: true,
     items: [
-      { href: "/prompts", label: "System Prompts" },
-      { href: "/knowledge/categories", label: "Categories" },
-      { href: "/usage", label: "API Usage" },
+      { href: "/admin/prompt-blocks", label: "Prompt Builder" },
+      { href: "/admin/categories", label: "Categories" },
+      { href: "/admin/usage", label: "API Usage" },
+      { href: "/audit-log", label: "Audit Log" },
+      { href: "/admin/settings", label: "Settings" },
     ],
   },
 ];
@@ -72,6 +69,7 @@ const navItems: NavSection[] = [
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
+  const { branding } = useBranding();
   const isAdmin = session?.user?.role === "ADMIN";
 
   // Filter nav items based on user role
@@ -95,14 +93,14 @@ export default function Sidebar() {
       flexDirection: "column",
     }}>
       <div style={{ padding: "0 20px", marginBottom: "32px" }}>
-        <Link href="/knowledge" style={{
+        <Link href="/" style={{
           fontSize: "20px",
           fontWeight: 700,
           color: "#fff",
           textDecoration: "none",
           display: "block",
         }}>
-          Transparent Trust
+          {branding.appName}
         </Link>
         <p style={{
           fontSize: "12px",
@@ -128,7 +126,9 @@ export default function Sidebar() {
             }}>
               {section.section}
             </div>
-            {section.items.map((item) => {
+            {section.items
+              .filter((item) => !item.adminOnly || isAdmin)
+              .map((item) => {
               const isActive = pathname === item.href;
               return (
                 <Link
@@ -142,7 +142,7 @@ export default function Sidebar() {
                     textDecoration: "none",
                     fontSize: "14px",
                     fontWeight: isActive ? 600 : 400,
-                    borderLeft: isActive ? "3px solid #3b82f6" : "3px solid transparent",
+                    borderLeft: isActive ? `3px solid ${branding.primaryColor}` : "3px solid transparent",
                     transition: "all 0.2s",
                   }}
                   onMouseEnter={(e) => {
@@ -237,7 +237,7 @@ export default function Sidebar() {
             style={{
               width: "100%",
               padding: "10px",
-              backgroundColor: "#3b82f6",
+              backgroundColor: branding.primaryColor,
               border: "none",
               borderRadius: "6px",
               color: "#fff",

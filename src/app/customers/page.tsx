@@ -1,55 +1,17 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createProfile } from "@/lib/customerProfileApi";
 import {
-  loadCustomerProfileSections,
-  buildCustomerProfilePromptFromSections,
-} from "@/lib/customerProfilePromptSections";
-import {
-  CustomerProfileDraft,
-  CustomerProfileKeyFact,
-  CustomerProfileSourceUrl,
-} from "@/types/customerProfile";
-import TransparencyModal from "@/components/TransparencyModal";
-import { CLAUDE_MODEL } from "@/lib/config";
-
-type UploadedDocument = {
-  name: string;
-  content: string;
-  size: number;
-};
-
-type TransparencyData = {
-  systemPrompt: string;
-  userPrompt: string;
-  model: string;
-  maxTokens: number;
-  temperature: number;
-};
-
-type AnalysisResult = {
-  suggestion: {
-    action: "create_new" | "update_existing";
-    existingProfileId?: string;
-    existingProfileName?: string;
-    suggestedName?: string;
-    suggestedIndustry?: string;
-    reason: string;
-  };
-  sourcePreview: string;
-  urlAlreadyUsed?: {
-    profileId: string;
-    profileName: string;
-    matchedUrls: string[];
-  };
-  transparency?: TransparencyData;
-};
+  fetchAllProfiles,
+  updateProfile,
+  deleteProfile,
+} from "@/lib/customerProfileApi";
+import { CustomerProfile, CustomerProfileKeyFact } from "@/types/customerProfile";
 
 const styles = {
   container: {
-    maxWidth: "820px",
+    maxWidth: "1100px",
     margin: "0 auto",
     padding: "24px",
     fontFamily:
@@ -59,39 +21,46 @@ const styles = {
     border: "1px solid #e2e8f0",
     borderRadius: "10px",
     padding: "16px",
-    marginBottom: "16px",
+    marginBottom: "12px",
     backgroundColor: "#fff",
+    cursor: "pointer",
+    transition: "border-color 0.15s",
+  },
+  cardExpanded: {
+    border: "1px solid #6366f1",
   },
   label: {
     display: "block",
     fontWeight: 600,
     marginTop: "12px",
     marginBottom: "4px",
+    fontSize: "13px",
+    color: "#475569",
   },
   input: {
     width: "100%",
-    padding: "10px 12px",
+    padding: "8px 10px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     fontSize: "14px",
   },
   textarea: {
     width: "100%",
-    padding: "10px 12px",
+    padding: "8px 10px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     fontSize: "14px",
     fontFamily: "inherit",
     resize: "vertical" as const,
-    minHeight: "100px",
+    minHeight: "80px",
   },
   button: {
-    padding: "10px 16px",
+    padding: "8px 14px",
     borderRadius: "6px",
     border: "none",
     cursor: "pointer",
     fontWeight: 600,
-    fontSize: "14px",
+    fontSize: "13px",
   },
   primaryButton: {
     backgroundColor: "#6366f1",
@@ -102,21 +71,10 @@ const styles = {
     color: "#475569",
     border: "1px solid #cbd5e1",
   },
-  error: {
+  dangerButton: {
     backgroundColor: "#fee2e2",
     color: "#b91c1c",
     border: "1px solid #fecaca",
-    borderRadius: "6px",
-    padding: "10px 12px",
-    marginTop: "12px",
-  },
-  success: {
-    backgroundColor: "#dcfce7",
-    color: "#166534",
-    border: "1px solid #86efac",
-    borderRadius: "6px",
-    padding: "10px 12px",
-    marginTop: "12px",
   },
   tag: {
     display: "inline-block",
@@ -124,765 +82,544 @@ const styles = {
     backgroundColor: "#e0e7ff",
     color: "#4338ca",
     borderRadius: "4px",
-    fontSize: "12px",
+    fontSize: "11px",
     marginRight: "4px",
     marginBottom: "4px",
   },
-  keyFact: {
+  industryBadge: {
+    display: "inline-block",
+    padding: "2px 8px",
+    backgroundColor: "#f0fdf4",
+    color: "#166534",
+    borderRadius: "4px",
+    fontSize: "11px",
+    fontWeight: 600,
+  },
+  statusBadge: {
+    display: "inline-block",
+    padding: "2px 8px",
+    borderRadius: "4px",
+    fontSize: "11px",
+    fontWeight: 600,
+  },
+  searchBar: {
     display: "flex",
-    gap: "8px",
+    gap: "12px",
+    marginBottom: "20px",
     alignItems: "center",
-    marginBottom: "8px",
+  },
+  emptyState: {
+    textAlign: "center" as const,
+    padding: "60px 20px",
+    color: "#64748b",
   },
 };
 
-export default function CustomerProfileBuilderPage() {
-  const [urlInput, setUrlInput] = useState("");
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [isBuilding, setIsBuilding] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+export default function CustomerProfileLibraryPage() {
+  const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<CustomerProfile | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(
-    null
-  );
-  const [draft, setDraft] = useState<CustomerProfileDraft | null>(null);
-  const [sourceUrls, setSourceUrls] = useState<string[]>([]);
 
-  // Document upload state
-  const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Load profiles
+  useEffect(() => {
+    loadProfiles();
+  }, []);
 
-  // Transparency state
-  const [analyzeTransparency, setAnalyzeTransparency] = useState<TransparencyData | null>(null);
-  const [buildTransparency, setBuildTransparency] = useState<TransparencyData | null>(null);
-  const [showTransparencyModal, setShowTransparencyModal] = useState<"analyze" | "build" | "preview" | null>(null);
-
-  // Get current prompt for preview
-  const getCurrentPrompt = () => {
-    const promptSections = loadCustomerProfileSections();
-    return buildCustomerProfilePromptFromSections(promptSections);
-  };
-
-  // Handle file upload
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setError(null);
-    setIsUploading(true);
-
-    const newDocs: UploadedDocument[] = [];
-
-    for (const file of Array.from(files)) {
-      const filename = file.name.toLowerCase();
-
-      // Check supported types
-      if (
-        !filename.endsWith(".pdf") &&
-        !filename.endsWith(".docx") &&
-        !filename.endsWith(".doc") &&
-        !filename.endsWith(".txt")
-      ) {
-        setError(`Unsupported file type: ${file.name}. Please upload PDF, DOC, DOCX, or TXT files.`);
-        continue;
-      }
-
-      try {
-        // Upload to document API to extract text
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("title", file.name);
-
-        const response = await fetch("/api/documents", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Failed to process ${file.name}`);
-        }
-
-        const data = await response.json();
-
-        // Fetch the full content
-        const contentResponse = await fetch(`/api/documents/${data.document.id}`);
-        if (contentResponse.ok) {
-          const contentData = await contentResponse.json();
-          newDocs.push({
-            name: file.name,
-            content: contentData.document.content,
-            size: file.size,
-          });
-
-          // Delete the temporary document from the database
-          await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
-      }
-    }
-
-    if (newDocs.length > 0) {
-      setUploadedDocs((prev) => [...prev, ...newDocs]);
-    }
-
-    setIsUploading(false);
-
-    // Clear the file input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-  };
-
-  // Remove an uploaded document
-  const removeDocument = (index: number) => {
-    setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  // Step 1: Analyze URLs and Documents
-  const handleAnalyze = async () => {
-    setError(null);
-    setSuccessMessage(null);
-    setAnalysisResult(null);
-    setDraft(null);
-
-    const urls = urlInput
-      .split("\n")
-      .map((u) => u.trim())
-      .filter((u) => u.length > 0);
-
-    if (urls.length === 0 && uploadedDocs.length === 0) {
-      setError("Please enter at least one URL or upload a document");
-      return;
-    }
-
-    setIsAnalyzing(true);
+  const loadProfiles = async () => {
     try {
-      // Combine document content for analysis
-      const documentContent = uploadedDocs.length > 0
-        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
-        : undefined;
-
-      const response = await fetch("/api/customers/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceUrls: urls,
-          documentContent,
-          documentNames: uploadedDocs.map((d) => d.name),
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to analyze sources");
-      }
-
-      const data = (await response.json()) as AnalysisResult;
-      setAnalysisResult(data);
-      setSourceUrls(urls);
-      // Store transparency data
-      if (data.transparency) {
-        setAnalyzeTransparency(data.transparency);
-      }
+      setLoading(true);
+      const data = await fetchAllProfiles();
+      setProfiles(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to analyze sources");
+      setError(e instanceof Error ? e.message : "Failed to load profiles");
     } finally {
-      setIsAnalyzing(false);
+      setLoading(false);
     }
   };
 
-  // Step 2: Build profile
-  const handleBuild = async (forUpdate?: { profileId: string }) => {
+  // Filter profiles
+  const filteredProfiles = profiles.filter((p) => {
+    const matchesSearch =
+      search === "" ||
+      p.name.toLowerCase().includes(search.toLowerCase()) ||
+      p.industry?.toLowerCase().includes(search.toLowerCase()) ||
+      p.tags.some((t) => t.includes(search.toLowerCase()));
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && p.isActive) ||
+      (statusFilter === "inactive" && !p.isActive);
+    return matchesSearch && matchesStatus;
+  });
+
+  // Toggle expand
+  const toggleExpand = (id: string) => {
+    if (expandedId === id) {
+      setExpandedId(null);
+      setEditingProfile(null);
+    } else {
+      setExpandedId(id);
+      setEditingProfile(null);
+    }
+    setConfirmingDeleteId(null);
+  };
+
+  // Start editing
+  const startEdit = (profile: CustomerProfile) => {
+    setEditingProfile({ ...profile });
+  };
+
+  // Save edit
+  const saveEdit = async () => {
+    if (!editingProfile) return;
+    setSaving(true);
     setError(null);
-    setIsBuilding(true);
-
     try {
-      const promptSections = loadCustomerProfileSections();
-      const prompt = buildCustomerProfilePromptFromSections(promptSections);
-
-      // Combine document content for building
-      const documentContent = uploadedDocs.length > 0
-        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
-        : undefined;
-
-      const response = await fetch("/api/customers/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceUrls,
-          prompt,
-          documentContent,
-          documentNames: uploadedDocs.map((d) => d.name),
-          ...(forUpdate && {
-            existingProfile: {
-              // Would need to fetch existing profile here for update mode
-              // For now, just create new
-            },
-          }),
-        }),
+      const updated = await updateProfile(editingProfile.id, {
+        name: editingProfile.name,
+        industry: editingProfile.industry,
+        website: editingProfile.website,
+        overview: editingProfile.overview,
+        products: editingProfile.products,
+        challenges: editingProfile.challenges,
+        keyFacts: editingProfile.keyFacts,
+        tags: editingProfile.tags,
+        isActive: editingProfile.isActive,
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || "Failed to build profile");
-      }
-
-      const data = await response.json();
-      setDraft(data.draft);
-      setAnalysisResult(null);
-      // Store transparency data
-      if (data.transparency) {
-        setBuildTransparency(data.transparency);
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to build profile");
-    } finally {
-      setIsBuilding(false);
-    }
-  };
-
-  // Step 3: Save profile
-  const handleSave = async () => {
-    if (!draft) return;
-
-    setError(null);
-    setIsSaving(true);
-
-    try {
-      const now = new Date().toISOString();
-      const sourceUrlsToSave: CustomerProfileSourceUrl[] = sourceUrls.map(
-        (url) => ({
-          url,
-          addedAt: now,
-          lastFetchedAt: now,
-        })
+      setProfiles((prev) =>
+        prev.map((p) => (p.id === updated.id ? updated : p))
       );
-
-      await createProfile({
-        name: draft.name,
-        industry: draft.industry,
-        website: draft.website,
-        overview: draft.overview,
-        products: draft.products,
-        challenges: draft.challenges,
-        keyFacts: draft.keyFacts || [],
-        tags: draft.tags || [],
-        sourceUrls: sourceUrlsToSave,
-        isActive: true,
-      });
-
-      setSuccessMessage(`Profile "${draft.name}" created successfully!`);
-      setDraft(null);
-      setUrlInput("");
-      setSourceUrls([]);
-      setUploadedDocs([]);
+      setEditingProfile(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save profile");
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
-  // Update draft field
-  const updateDraft = (field: keyof CustomerProfileDraft, value: unknown) => {
-    if (!draft) return;
-    setDraft({ ...draft, [field]: value });
+  // Delete profile
+  const handleDelete = async (id: string) => {
+    try {
+      await deleteProfile(id);
+      setProfiles((prev) => prev.filter((p) => p.id !== id));
+      setExpandedId(null);
+      setConfirmingDeleteId(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete profile");
+    }
   };
 
-  // Add key fact
+  // Toggle active status
+  const toggleActive = async (profile: CustomerProfile) => {
+    try {
+      const updated = await updateProfile(profile.id, {
+        isActive: !profile.isActive,
+      });
+      setProfiles((prev) =>
+        prev.map((p) => (p.id === updated.id ? updated : p))
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update profile");
+    }
+  };
+
+  // Update editing field
+  const updateEditField = (field: keyof CustomerProfile, value: unknown) => {
+    if (!editingProfile) return;
+    setEditingProfile({ ...editingProfile, [field]: value });
+  };
+
+  // Key facts helpers
   const addKeyFact = () => {
-    if (!draft) return;
+    if (!editingProfile) return;
     const newFact: CustomerProfileKeyFact = { label: "", value: "" };
-    updateDraft("keyFacts", [...(draft.keyFacts || []), newFact]);
+    updateEditField("keyFacts", [...editingProfile.keyFacts, newFact]);
   };
 
-  // Update key fact
-  const updateKeyFact = (
-    index: number,
-    field: "label" | "value",
-    value: string
-  ) => {
-    if (!draft) return;
-    const facts = [...(draft.keyFacts || [])];
-    facts[index] = { ...facts[index], [field]: value };
-    updateDraft("keyFacts", facts);
+  const updateKeyFact = (idx: number, field: "label" | "value", value: string) => {
+    if (!editingProfile) return;
+    const facts = [...editingProfile.keyFacts];
+    facts[idx] = { ...facts[idx], [field]: value };
+    updateEditField("keyFacts", facts);
   };
 
-  // Remove key fact
-  const removeKeyFact = (index: number) => {
-    if (!draft) return;
-    const facts = (draft.keyFacts || []).filter((_, i) => i !== index);
-    updateDraft("keyFacts", facts);
+  const removeKeyFact = (idx: number) => {
+    if (!editingProfile) return;
+    updateEditField(
+      "keyFacts",
+      editingProfile.keyFacts.filter((_, i) => i !== idx)
+    );
   };
+
+  if (loading) {
+    return (
+      <div style={styles.container}>
+        <div style={{ textAlign: "center", padding: "60px" }}>
+          <p style={{ color: "#64748b" }}>Loading profiles...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
       <h1 style={{ marginBottom: "8px" }}>
         The Rolodex{" "}
-        <span style={{ fontWeight: 400, color: "#64748b" }}>
-          (Build Customer Profile)
-        </span>
+        <span style={{ fontWeight: 400, color: "#64748b" }}>(Library)</span>
       </h1>
       <p style={{ color: "#64748b", marginBottom: "24px" }}>
-        Build customer intelligence from company websites, press releases, and
-        case studies.{" "}
+        Manage your customer profiles.{" "}
         <Link
-          href="/customers/library"
+          href="/customers"
           style={{ color: "#6366f1", textDecoration: "none" }}
         >
-          View Library →
+          Build New Profile →
         </Link>
       </p>
 
-      {error && <div style={styles.error}>{error}</div>}
-      {successMessage && <div style={styles.success}>{successMessage}</div>}
-
-      {/* Step 1: URL and Document Input */}
-      {!draft && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0, marginBottom: "12px" }}>
-            Add Customer Sources
-          </h3>
-          <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "12px" }}>
-            Paste URLs to the customer&apos;s website, about page, press releases, or
-            case studies. One URL per line.
-          </p>
-          <textarea
-            style={{ ...styles.textarea, minHeight: "100px" }}
-            placeholder="https://example.com/about&#10;https://example.com/press/funding-announcement&#10;https://example.com/customers/case-study"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            disabled={isAnalyzing || isBuilding || isUploading}
-          />
-
-          {/* Document Upload Section */}
-          <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #e2e8f0" }}>
-            <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "12px" }}>
-              Or upload documents (PDF, DOC, DOCX, TXT)
-            </p>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.doc,.docx,.txt"
-              multiple
-              onChange={handleFileUpload}
-              style={{ display: "none" }}
-              disabled={isAnalyzing || isBuilding || isUploading}
-            />
-
-            <button
-              style={{ ...styles.button, ...styles.secondaryButton }}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isAnalyzing || isBuilding || isUploading}
-            >
-              {isUploading ? "Processing..." : "Upload Documents"}
-            </button>
-
-            {/* Show uploaded documents */}
-            {uploadedDocs.length > 0 && (
-              <div style={{ marginTop: "12px" }}>
-                {uploadedDocs.map((doc, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "8px 12px",
-                      backgroundColor: "#f1f5f9",
-                      borderRadius: "6px",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    <span style={{ fontSize: "14px", color: "#475569" }}>
-                      📄 {doc.name}{" "}
-                      <span style={{ color: "#94a3b8", fontSize: "12px" }}>
-                        ({Math.round(doc.size / 1024)} KB)
-                      </span>
-                    </span>
-                    <button
-                      style={{
-                        background: "none",
-                        border: "none",
-                        cursor: "pointer",
-                        color: "#94a3b8",
-                        fontSize: "16px",
-                        padding: "0 4px",
-                      }}
-                      onClick={() => removeDocument(idx)}
-                      disabled={isAnalyzing || isBuilding}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
-            <button
-              style={{ ...styles.button, ...styles.primaryButton }}
-              onClick={handleAnalyze}
-              disabled={isAnalyzing || isBuilding || isUploading || (!urlInput.trim() && uploadedDocs.length === 0)}
-            >
-              {isAnalyzing ? "Analyzing..." : "Analyze Sources"}
-            </button>
-            <button
-              style={{
-                ...styles.button,
-                ...styles.secondaryButton,
-                fontSize: "12px",
-                padding: "6px 10px",
-              }}
-              onClick={() => setShowTransparencyModal("preview")}
-            >
-              View Prompt
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Step 2: Analysis Result */}
-      {analysisResult && !draft && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0, marginBottom: "12px" }}>Analysis Result</h3>
-          <p style={{ color: "#475569", marginBottom: "12px" }}>
-            {analysisResult.sourcePreview}
-          </p>
-
-          {analysisResult.urlAlreadyUsed && (
-            <div
-              style={{
-                backgroundColor: "#fef3c7",
-                border: "1px solid #fcd34d",
-                borderRadius: "6px",
-                padding: "12px",
-                marginBottom: "12px",
-              }}
-            >
-              <strong style={{ color: "#92400e" }}>⚠️ URLs Already Used</strong>
-              <p style={{ color: "#78350f", fontSize: "14px", margin: "4px 0 0" }}>
-                These URLs were previously used to build &quot;
-                {analysisResult.urlAlreadyUsed.profileName}&quot;.
-              </p>
-            </div>
-          )}
-
-          <div
-            style={{
-              backgroundColor:
-                analysisResult.suggestion.action === "create_new"
-                  ? "#dcfce7"
-                  : "#e0e7ff",
-              border: `1px solid ${analysisResult.suggestion.action === "create_new" ? "#86efac" : "#a5b4fc"}`,
-              borderRadius: "6px",
-              padding: "12px",
-              marginBottom: "12px",
-            }}
-          >
-            <strong
-              style={{
-                color:
-                  analysisResult.suggestion.action === "create_new"
-                    ? "#166534"
-                    : "#3730a3",
-              }}
-            >
-              {analysisResult.suggestion.action === "create_new"
-                ? "✨ Create New Profile"
-                : "📝 Update Existing Profile"}
-            </strong>
-            {analysisResult.suggestion.suggestedName && (
-              <p style={{ margin: "4px 0 0", fontWeight: 600 }}>
-                {analysisResult.suggestion.suggestedName}
-              </p>
-            )}
-            <p style={{ color: "#475569", fontSize: "14px", margin: "4px 0 0" }}>
-              {analysisResult.suggestion.reason}
-            </p>
-          </div>
-
-          <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button
-                style={{ ...styles.button, ...styles.primaryButton }}
-                onClick={() =>
-                  handleBuild(
-                    analysisResult.suggestion.existingProfileId
-                      ? { profileId: analysisResult.suggestion.existingProfileId }
-                      : undefined
-                  )
-                }
-                disabled={isBuilding}
-              >
-                {isBuilding ? (
-                  <>
-                    Building...
-                  </>
-                ) : analysisResult.suggestion.action === "create_new" ? (
-                  "Build Profile"
-                ) : (
-                  "Update Profile"
-                )}
-              </button>
-              <button
-                style={{ ...styles.button, ...styles.secondaryButton }}
-                onClick={() => setAnalysisResult(null)}
-                disabled={isBuilding}
-              >
-                Cancel
-              </button>
-            </div>
-            {analyzeTransparency && (
-              <button
-                style={{
-                  ...styles.button,
-                  ...styles.secondaryButton,
-                  fontSize: "12px",
-                  padding: "6px 10px",
-                }}
-                onClick={() => setShowTransparencyModal("analyze")}
-              >
-                View Prompt
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Step 3: Edit Draft */}
-      {draft && (
-        <div style={styles.card}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-            <h3 style={{ margin: 0 }}>
-              Review & Edit Profile
-            </h3>
-            {buildTransparency && (
-              <button
-                style={{
-                  ...styles.button,
-                  ...styles.secondaryButton,
-                  fontSize: "12px",
-                  padding: "6px 10px",
-                }}
-                onClick={() => setShowTransparencyModal("build")}
-              >
-                View Prompt
-              </button>
-            )}
-          </div>
-
-          <label style={styles.label}>Company Name *</label>
-          <input
-            style={styles.input}
-            value={draft.name}
-            onChange={(e) => updateDraft("name", e.target.value)}
-          />
-
-          <div style={{ display: "flex", gap: "12px" }}>
-            <div style={{ flex: 1 }}>
-              <label style={styles.label}>Industry</label>
-              <input
-                style={styles.input}
-                value={draft.industry || ""}
-                onChange={(e) => updateDraft("industry", e.target.value)}
-                placeholder="e.g., Healthcare, FinTech"
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={styles.label}>Website</label>
-              <input
-                style={styles.input}
-                value={draft.website || ""}
-                onChange={(e) => updateDraft("website", e.target.value)}
-                placeholder="https://example.com"
-              />
-            </div>
-          </div>
-
-          <label style={styles.label}>Overview *</label>
-          <textarea
-            style={{ ...styles.textarea, minHeight: "150px" }}
-            value={draft.overview}
-            onChange={(e) => updateDraft("overview", e.target.value)}
-          />
-
-          <label style={styles.label}>Products & Services</label>
-          <textarea
-            style={styles.textarea}
-            value={draft.products || ""}
-            onChange={(e) => updateDraft("products", e.target.value)}
-            placeholder="Description of main products and services..."
-          />
-
-          <label style={styles.label}>Challenges & Needs</label>
-          <textarea
-            style={styles.textarea}
-            value={draft.challenges || ""}
-            onChange={(e) => updateDraft("challenges", e.target.value)}
-            placeholder="Known business challenges, pain points, or focus areas..."
-          />
-
-          <label style={styles.label}>Key Facts</label>
-          {(draft.keyFacts || []).map((fact, idx) => (
-            <div key={idx} style={styles.keyFact}>
-              <input
-                style={{ ...styles.input, width: "150px" }}
-                value={fact.label}
-                onChange={(e) => updateKeyFact(idx, "label", e.target.value)}
-                placeholder="Label"
-              />
-              <input
-                style={{ ...styles.input, flex: 1 }}
-                value={fact.value}
-                onChange={(e) => updateKeyFact(idx, "value", e.target.value)}
-                placeholder="Value"
-              />
-              <button
-                style={{
-                  ...styles.button,
-                  ...styles.secondaryButton,
-                  padding: "8px 12px",
-                }}
-                onClick={() => removeKeyFact(idx)}
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+      {error && (
+        <div
+          style={{
+            backgroundColor: "#fee2e2",
+            color: "#b91c1c",
+            padding: "10px 12px",
+            borderRadius: "6px",
+            marginBottom: "16px",
+          }}
+        >
+          {error}
           <button
-            style={{
-              ...styles.button,
-              ...styles.secondaryButton,
-              marginTop: "8px",
-            }}
-            onClick={addKeyFact}
+            onClick={() => setError(null)}
+            style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}
           >
-            + Add Fact
+            ✕
           </button>
-
-          <label style={styles.label}>Tags</label>
-          <input
-            style={styles.input}
-            value={(draft.tags || []).join(", ")}
-            onChange={(e) =>
-              updateDraft(
-                "tags",
-                e.target.value
-                  .split(",")
-                  .map((t) => t.trim().toLowerCase())
-                  .filter((t) => t)
-              )
-            }
-            placeholder="healthcare, saas, enterprise (comma separated)"
-          />
-          <div style={{ marginTop: "8px" }}>
-            {(draft.tags || []).map((tag, idx) => (
-              <span key={idx} style={styles.tag}>
-                {tag}
-              </span>
-            ))}
-          </div>
-
-          <div
-            style={{
-              marginTop: "20px",
-              display: "flex",
-              gap: "8px",
-              justifyContent: "flex-end",
-            }}
-          >
-            <button
-              style={{ ...styles.button, ...styles.secondaryButton }}
-              onClick={() => {
-                setDraft(null);
-                setSourceUrls([]);
-                setUploadedDocs([]);
-              }}
-              disabled={isSaving}
-            >
-              Cancel
-            </button>
-            <button
-              style={{ ...styles.button, ...styles.primaryButton }}
-              onClick={handleSave}
-              disabled={isSaving || !draft.name.trim() || !draft.overview.trim()}
-            >
-              {isSaving ? (
-                <>
-                  Saving...
-                </>
-              ) : (
-                "Save Profile"
-              )}
-            </button>
-          </div>
         </div>
       )}
 
-      {/* Transparency Modal */}
-      {showTransparencyModal === "analyze" && analyzeTransparency && (
-        <TransparencyModal
-          title="Analysis Prompt"
-          subtitle="The prompts used to analyze your sources and identify the customer"
-          headerColor="purple"
-          onClose={() => setShowTransparencyModal(null)}
-          configs={[
-            { label: "Model", value: analyzeTransparency.model, color: "purple" },
-            { label: "Max Tokens", value: analyzeTransparency.maxTokens, color: "blue" },
-            { label: "Temperature", value: analyzeTransparency.temperature, color: "yellow" },
-          ]}
-          systemPrompt={analyzeTransparency.systemPrompt}
-          systemPromptNote="This prompt instructs the AI on how to identify the customer and decide whether to create or update a profile."
-          userPrompt={analyzeTransparency.userPrompt}
-          userPromptLabel="User Prompt (with source content)"
-          userPromptNote="This includes your source URLs/documents and existing customer profiles for comparison."
+      {/* Search & Filter */}
+      <div style={styles.searchBar}>
+        <input
+          style={{ ...styles.input, maxWidth: "300px" }}
+          placeholder="Search by name, industry, or tag..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-      )}
+        <select
+          style={{ ...styles.input, maxWidth: "150px" }}
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "all" | "active" | "inactive")}
+        >
+          <option value="all">All Profiles</option>
+          <option value="active">Active Only</option>
+          <option value="inactive">Inactive Only</option>
+        </select>
+        <span style={{ color: "#64748b", fontSize: "14px" }}>
+          {filteredProfiles.length} profile{filteredProfiles.length !== 1 ? "s" : ""}
+        </span>
+      </div>
 
-      {showTransparencyModal === "build" && buildTransparency && (
-        <TransparencyModal
-          title="Profile Generation Prompt"
-          subtitle="The prompts used to extract and structure the customer profile"
-          headerColor="blue"
-          onClose={() => setShowTransparencyModal(null)}
-          configs={[
-            { label: "Model", value: buildTransparency.model, color: "purple" },
-            { label: "Max Tokens", value: buildTransparency.maxTokens, color: "blue" },
-            { label: "Temperature", value: buildTransparency.temperature, color: "yellow" },
-          ]}
-          systemPrompt={buildTransparency.systemPrompt}
-          systemPromptNote="This prompt defines the structure and content to extract for the customer profile."
-          userPrompt={buildTransparency.userPrompt}
-          userPromptLabel="User Prompt (with source material)"
-          userPromptNote="This includes all the source content from your URLs and documents."
-        />
-      )}
+      {/* Profiles List */}
+      {filteredProfiles.length === 0 ? (
+        <div style={styles.emptyState}>
+          <p style={{ fontSize: "18px", marginBottom: "8px" }}>No profiles found</p>
+          <p>
+            {profiles.length === 0 ? (
+              <>
+                Get started by{" "}
+                <Link href="/customers" style={{ color: "#6366f1" }}>
+                  building your first customer profile
+                </Link>
+                .
+              </>
+            ) : (
+              "Try adjusting your search or filter."
+            )}
+          </p>
+        </div>
+      ) : (
+        filteredProfiles.map((profile) => {
+          const isExpanded = expandedId === profile.id;
+          const isEditing = editingProfile?.id === profile.id;
 
-      {showTransparencyModal === "preview" && (
-        <TransparencyModal
-          title="Profile Extraction Prompt"
-          subtitle="This is the system prompt that will be sent to the LLM when building a customer profile"
-          headerColor="purple"
-          onClose={() => setShowTransparencyModal(null)}
-          configs={[
-            { label: "Model", value: CLAUDE_MODEL, color: "purple" },
-            { label: "Max Tokens", value: 4000, color: "blue" },
-            { label: "Temperature", value: 0.2, color: "yellow" },
-          ]}
-          systemPrompt={getCurrentPrompt()}
-          systemPromptNote={
-            <>
-              This prompt can be customized in the <a href="/prompts" style={{ color: "#6366f1" }}>Prompts</a> page under &quot;Customer Profile Extraction&quot;.
-            </>
-          }
-        />
+          return (
+            <div
+              key={profile.id}
+              style={{
+                ...styles.card,
+                ...(isExpanded ? styles.cardExpanded : {}),
+              }}
+            >
+              {/* Header Row */}
+              <div
+                onClick={() => toggleExpand(profile.id)}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <h3 style={{ margin: 0 }}>{profile.name}</h3>
+                    <span
+                      style={{
+                        ...styles.statusBadge,
+                        backgroundColor: profile.isActive ? "#dcfce7" : "#f1f5f9",
+                        color: profile.isActive ? "#166534" : "#64748b",
+                      }}
+                    >
+                      {profile.isActive ? "Active" : "Inactive"}
+                    </span>
+                  </div>
+                  <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
+                    {profile.industry && (
+                      <span style={styles.industryBadge}>{profile.industry}</span>
+                    )}
+                    {profile.tags.slice(0, 4).map((tag, idx) => (
+                      <span key={idx} style={styles.tag}>
+                        {tag}
+                      </span>
+                    ))}
+                    {profile.tags.length > 4 && (
+                      <span style={{ color: "#64748b", fontSize: "11px" }}>
+                        +{profile.tags.length - 4} more
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ color: "#94a3b8", fontSize: "12px", textAlign: "right" }}>
+                  <div>Updated {new Date(profile.updatedAt).toLocaleDateString()}</div>
+                  <div style={{ marginTop: "2px" }}>
+                    {profile.sourceUrls.length} source{profile.sourceUrls.length !== 1 ? "s" : ""}
+                  </div>
+                </div>
+              </div>
+
+              {/* Expanded Content */}
+              {isExpanded && (
+                <div
+                  style={{ marginTop: "16px", borderTop: "1px solid #e2e8f0", paddingTop: "16px" }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {isEditing ? (
+                    /* Edit Mode */
+                    <>
+                      <label style={styles.label}>Company Name</label>
+                      <input
+                        style={styles.input}
+                        value={editingProfile.name}
+                        onChange={(e) => updateEditField("name", e.target.value)}
+                      />
+
+                      <div style={{ display: "flex", gap: "12px" }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={styles.label}>Industry</label>
+                          <input
+                            style={styles.input}
+                            value={editingProfile.industry || ""}
+                            onChange={(e) => updateEditField("industry", e.target.value)}
+                          />
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={styles.label}>Website</label>
+                          <input
+                            style={styles.input}
+                            value={editingProfile.website || ""}
+                            onChange={(e) => updateEditField("website", e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <label style={styles.label}>Overview</label>
+                      <textarea
+                        style={{ ...styles.textarea, minHeight: "120px" }}
+                        value={editingProfile.overview}
+                        onChange={(e) => updateEditField("overview", e.target.value)}
+                      />
+
+                      <label style={styles.label}>Products & Services</label>
+                      <textarea
+                        style={styles.textarea}
+                        value={editingProfile.products || ""}
+                        onChange={(e) => updateEditField("products", e.target.value)}
+                      />
+
+                      <label style={styles.label}>Challenges & Needs</label>
+                      <textarea
+                        style={styles.textarea}
+                        value={editingProfile.challenges || ""}
+                        onChange={(e) => updateEditField("challenges", e.target.value)}
+                      />
+
+                      <label style={styles.label}>Key Facts</label>
+                      {editingProfile.keyFacts.map((fact, idx) => (
+                        <div key={idx} style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
+                          <input
+                            style={{ ...styles.input, width: "120px" }}
+                            value={fact.label}
+                            onChange={(e) => updateKeyFact(idx, "label", e.target.value)}
+                            placeholder="Label"
+                          />
+                          <input
+                            style={{ ...styles.input, flex: 1 }}
+                            value={fact.value}
+                            onChange={(e) => updateKeyFact(idx, "value", e.target.value)}
+                            placeholder="Value"
+                          />
+                          <button
+                            style={{ ...styles.button, ...styles.secondaryButton }}
+                            onClick={() => removeKeyFact(idx)}
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        style={{ ...styles.button, ...styles.secondaryButton, marginTop: "4px" }}
+                        onClick={addKeyFact}
+                      >
+                        + Add Fact
+                      </button>
+
+                      <label style={styles.label}>Tags (comma separated)</label>
+                      <input
+                        style={styles.input}
+                        value={editingProfile.tags.join(", ")}
+                        onChange={(e) =>
+                          updateEditField(
+                            "tags",
+                            e.target.value.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
+                          )
+                        }
+                      />
+
+                      <div style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+                        <button
+                          style={{ ...styles.button, ...styles.secondaryButton }}
+                          onClick={() => setEditingProfile(null)}
+                          disabled={saving}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          style={{ ...styles.button, ...styles.primaryButton }}
+                          onClick={saveEdit}
+                          disabled={saving}
+                        >
+                          {saving ? "Saving..." : "Save Changes"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    /* View Mode */
+                    <>
+                      <div style={{ marginBottom: "12px" }}>
+                        <strong style={{ color: "#475569", fontSize: "13px" }}>Overview</strong>
+                        <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
+                          {profile.overview}
+                        </p>
+                      </div>
+
+                      {profile.products && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <strong style={{ color: "#475569", fontSize: "13px" }}>Products & Services</strong>
+                          <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
+                            {profile.products}
+                          </p>
+                        </div>
+                      )}
+
+                      {profile.challenges && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <strong style={{ color: "#475569", fontSize: "13px" }}>Challenges & Needs</strong>
+                          <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
+                            {profile.challenges}
+                          </p>
+                        </div>
+                      )}
+
+                      {profile.keyFacts.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <strong style={{ color: "#475569", fontSize: "13px" }}>Key Facts</strong>
+                          <div style={{ marginTop: "4px" }}>
+                            {profile.keyFacts.map((fact, idx) => (
+                              <div key={idx} style={{ fontSize: "14px", marginBottom: "2px" }}>
+                                <strong>{fact.label}:</strong> {fact.value}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {profile.sourceUrls.length > 0 && (
+                        <div style={{ marginBottom: "12px" }}>
+                          <strong style={{ color: "#475569", fontSize: "13px" }}>Sources</strong>
+                          <div style={{ marginTop: "4px" }}>
+                            {profile.sourceUrls.map((source, idx) => (
+                              <div key={idx} style={{ fontSize: "13px", color: "#6366f1" }}>
+                                <a href={source.url} target="_blank" rel="noopener noreferrer">
+                                  {source.url}
+                                </a>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Actions */}
+                      <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          style={{ ...styles.button, ...styles.primaryButton }}
+                          onClick={() => startEdit(profile)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          style={{ ...styles.button, ...styles.secondaryButton }}
+                          onClick={() => toggleActive(profile)}
+                        >
+                          {profile.isActive ? "Deactivate" : "Activate"}
+                        </button>
+                        {confirmingDeleteId === profile.id ? (
+                          <>
+                            <span style={{ color: "#b91c1c", fontSize: "13px", alignSelf: "center" }}>
+                              Delete permanently?
+                            </span>
+                            <button
+                              style={{ ...styles.button, ...styles.dangerButton }}
+                              onClick={() => handleDelete(profile.id)}
+                            >
+                              Yes, Delete
+                            </button>
+                            <button
+                              style={{ ...styles.button, ...styles.secondaryButton }}
+                              onClick={() => setConfirmingDeleteId(null)}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            style={{ ...styles.button, ...styles.dangerButton }}
+                            onClick={() => setConfirmingDeleteId(profile.id)}
+                          >
+                            Delete
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );

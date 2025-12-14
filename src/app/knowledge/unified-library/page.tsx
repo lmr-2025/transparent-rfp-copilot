@@ -282,7 +282,7 @@ export default function UnifiedLibraryPage() {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
   const [urls, setUrls] = useState<ReferenceUrl[]>([]);
-  const [categories, setCategories] = useState<CategoryItem[]>([]);
+  const [, setCategories] = useState<CategoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Load all data on mount
@@ -449,14 +449,6 @@ export default function UnifiedLibraryPage() {
     }
   };
 
-  const getTypeBadgeStyle = (type: TabType) => {
-    switch (type) {
-      case "skills": return { ...styles.typeBadge, ...styles.typeBadgeSkill };
-      case "documents": return { ...styles.typeBadge, ...styles.typeBadgeDoc };
-      case "urls": return { ...styles.typeBadge, ...styles.typeBadgeUrl };
-    }
-  };
-
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -474,7 +466,7 @@ export default function UnifiedLibraryPage() {
               {getTypeIcon(item.type)}
               {item.type === "skills" ? (
                 <Link
-                  href={`/knowledge/library?skill=${item.id}`}
+                  href={`/knowledge?skill=${item.id}`}
                   style={{ color: "inherit", textDecoration: "none" }}
                 >
                   {item.title}
@@ -639,7 +631,7 @@ export default function UnifiedLibraryPage() {
           <div>
             <div style={{ fontWeight: 500, fontSize: "0.9rem", marginBottom: "4px", color: "#d97706" }}>Documents</div>
             <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b", lineHeight: 1.4 }}>
-              Searched when skills don't have the answer. Results cited in Reasoning section.
+              Searched when skills don&apos;t have the answer. Results cited in Reasoning section.
             </p>
           </div>
           <div>

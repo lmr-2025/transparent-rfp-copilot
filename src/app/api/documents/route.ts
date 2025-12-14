@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import * as mammoth from "mammoth";
+import { requireAuth } from "@/lib/apiAuth";
+import { logDocumentChange, getUserFromSession } from "@/lib/auditLog";
 
 export const maxDuration = 60;
 
@@ -34,6 +36,11 @@ export async function GET() {
 
 // POST - Upload a new document
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -102,6 +109,16 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || null,
       },
     });
+
+    // Audit log
+    await logDocumentChange(
+      "CREATED",
+      document.id,
+      document.title,
+      getUserFromSession(auth.session),
+      undefined,
+      { filename: file.name, fileType, fileSize: file.size, categories }
+    );
 
     return NextResponse.json({
       document: {

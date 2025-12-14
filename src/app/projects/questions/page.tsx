@@ -14,6 +14,7 @@ import SkillRecommendation from "@/components/SkillRecommendation";
 import TransparencyDetails from "@/components/TransparencyDetails";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import DomainSelector, { Domain } from "@/components/DomainSelector";
 
 type QuestionHistoryItem = {
   id: string;
@@ -104,6 +105,7 @@ export default function QuestionsPage() {
   const [questionHistory, setQuestionHistory] = useState<QuestionHistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
 
   const { data: session } = useSession();
 
@@ -252,7 +254,13 @@ export default function QuestionsPage() {
       const response = await fetch("/api/questions/answer", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, prompt: promptText, skills: skillsPayload }),
+        body: JSON.stringify({
+          question,
+          prompt: promptText,
+          skills: skillsPayload,
+          mode: "single",
+          domains: selectedDomains.length > 0 ? selectedDomains : undefined,
+        }),
       });
       const data = await response.json().catch(() => null);
       if (!response.ok || !data?.answer) {
@@ -300,65 +308,14 @@ export default function QuestionsPage() {
   return (
     <div style={styles.container}>
       {/* Hero Section */}
-      <div style={{ textAlign: "center", marginBottom: "32px" }}>
-        <h1 style={{ fontSize: "2rem", fontWeight: 700, marginBottom: "12px", color: "#0f172a" }}>
-          Transparent Trust
+      <div style={{ marginBottom: "32px" }}>
+        <h1 style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "8px", color: "#0f172a" }}>
+          RFP Quick Questions
         </h1>
-        <p style={{ fontSize: "1.1rem", color: "#475569", maxWidth: "600px", margin: "0 auto", lineHeight: 1.6 }}>
-          Turn your knowledge into trustworthy answers.
-          An LLM-powered assistant telling you not just the answer, but why.
+        <p style={{ fontSize: "1rem", color: "#475569", maxWidth: "700px", lineHeight: 1.6 }}>
+          Answer individual RFP and security questionnaire questions with AI-powered responses grounded in your knowledge base.
+          For bulk processing, use <Link href="/projects" style={{ color: "#0369a1" }}>Projects</Link>.
         </p>
-      </div>
-
-      {/* Quick Start Cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", marginBottom: "32px" }}>
-        <Link href="/projects" style={{ textDecoration: "none" }}>
-          <div style={{
-            ...styles.card,
-            borderColor: "#bae6fd",
-            backgroundColor: "#f0f9ff",
-            cursor: "pointer",
-            transition: "transform 0.2s, box-shadow 0.2s",
-          }}>
-            <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>Projects</div>
-            <h3 style={{ margin: "0 0 8px 0", color: "#0369a1" }}>Bulk Questionnaires</h3>
-            <p style={{ margin: 0, color: "#475569", fontSize: "0.9rem" }}>
-              Upload spreadsheets and process hundreds of questions at once with full audit trails.
-            </p>
-          </div>
-        </Link>
-
-        <Link href="/chat" style={{ textDecoration: "none" }}>
-          <div style={{
-            ...styles.card,
-            borderColor: "#bbf7d0",
-            backgroundColor: "#f0fdf4",
-            cursor: "pointer",
-            transition: "transform 0.2s, box-shadow 0.2s",
-          }}>
-            <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>The Oracle</div>
-            <h3 style={{ margin: "0 0 8px 0", color: "#166534" }}>Knowledge Chat</h3>
-            <p style={{ margin: 0, color: "#475569", fontSize: "0.9rem" }}>
-              Have a conversation with your knowledge base. Select skills and documents to include.
-            </p>
-          </div>
-        </Link>
-
-        <Link href="/knowledge" style={{ textDecoration: "none" }}>
-          <div style={{
-            ...styles.card,
-            borderColor: "#fde68a",
-            backgroundColor: "#fefce8",
-            cursor: "pointer",
-            transition: "transform 0.2s, box-shadow 0.2s",
-          }}>
-            <div style={{ fontSize: "1.5rem", marginBottom: "8px" }}>Knowledge Gremlin</div>
-            <h3 style={{ margin: "0 0 8px 0", color: "#a16207" }}>Build Skills</h3>
-            <p style={{ margin: 0, color: "#475569", fontSize: "0.9rem" }}>
-              Create structured knowledge from URLs and documents. AI extracts and organizes the content.
-            </p>
-          </div>
-        </Link>
       </div>
 
       <SkillUpdateBanner skills={availableSkills} />
@@ -533,6 +490,13 @@ export default function QuestionsPage() {
           </button>
         </div>
 
+        <DomainSelector
+          selectedDomains={selectedDomains}
+          onChange={setSelectedDomains}
+          disabled={isAnswering}
+          style={{ marginTop: "12px" }}
+        />
+
         {isAnswering && (
           <div style={{ marginTop: "16px" }}>
             <LoadingSpinner
@@ -632,37 +596,6 @@ export default function QuestionsPage() {
         )}
       </div>
 
-      {/* What Makes Us Different */}
-      <div style={styles.card}>
-        <h2 style={{ margin: "0 0 16px 0", fontSize: "1.25rem" }}>Full Transparency, Every Time</h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-          <div>
-            <h4 style={{ margin: "0 0 8px 0", color: "#0ea5e9" }}>Confidence Scores</h4>
-            <p style={{ margin: 0, color: "#64748b", fontSize: "0.9rem" }}>
-              Every answer includes a confidence level so you know when to trust it and when to verify.
-            </p>
-          </div>
-          <div>
-            <h4 style={{ margin: "0 0 8px 0", color: "#0ea5e9" }}>Source Citations</h4>
-            <p style={{ margin: 0, color: "#64748b", fontSize: "0.9rem" }}>
-              See exactly which skills, documents, and URLs were used to generate each response.
-            </p>
-          </div>
-          <div>
-            <h4 style={{ margin: "0 0 8px 0", color: "#0ea5e9" }}>Reasoning Visible</h4>
-            <p style={{ margin: 0, color: "#64748b", fontSize: "0.9rem" }}>
-              Understand the logic: what was found directly vs. what was inferred from context.
-            </p>
-          </div>
-          <div>
-            <h4 style={{ margin: "0 0 8px 0", color: "#0ea5e9" }}>Editable Prompts</h4>
-            <p style={{ margin: 0, color: "#64748b", fontSize: "0.9rem" }}>
-              No black boxes. View and customize the system prompts that guide AI responses.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Skills Count */}
       {availableSkills.length > 0 && (
         <div style={{
@@ -674,7 +607,7 @@ export default function QuestionsPage() {
           fontSize: "0.9rem",
         }}>
           Your knowledge base contains <strong style={{ color: "#0ea5e9" }}>{availableSkills.length} skills</strong>.{" "}
-          <Link href="/knowledge/library" style={{ color: "#0ea5e9" }}>Manage your library</Link>
+          <Link href="/knowledge" style={{ color: "#0ea5e9" }}>Manage your library</Link>
         </div>
       )}
     </div>

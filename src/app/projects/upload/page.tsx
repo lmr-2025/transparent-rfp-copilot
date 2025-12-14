@@ -353,16 +353,6 @@ export default function BulkUploadPage() {
     setPreviewRows((prev) => prev.map((row) => ({ ...row, selected: false })));
   };
 
-  // Legacy challenge prompt function - kept for future use
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const defaultChallengePrompt = (question: string) =>
-    [
-      "Challenge this answer for the question below.",
-      `Question: "${question}"`,
-      "Identify any weak claims, missing evidence, or compliance gaps.",
-      "Suggest what documentation or controls should be referenced to improve accuracy.",
-    ].join("\n");
-
   const handleSaveProject = async () => {
     // Validate based on mode
     if (mergeAllTabs && sheets.length > 1) {

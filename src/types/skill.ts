@@ -46,8 +46,10 @@ export type SourceUrl = {
 };
 
 export type SkillOwner = {
+  userId?: string; // Links to User table for SSO users
   name: string;
   email?: string;
+  image?: string; // User avatar URL
 };
 
 export type SkillHistoryEntry = {

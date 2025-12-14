@@ -254,7 +254,7 @@ export default function ImportRFPPage() {
 
     // Update local state
     setSkills((prev) => {
-      let updated = prev.map((s) => {
+      const updated = prev.map((s) => {
         const updatedVersion = updatedSkillsList.find((u) => u.id === s.id);
         return updatedVersion || s;
       });

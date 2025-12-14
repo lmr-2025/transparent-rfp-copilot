@@ -4,33 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
 import { loadCategories } from "@/lib/categoryStorage";
-import { defaultSkillSections, buildSkillPromptFromSections, EditableSkillSection } from "@/lib/promptSections";
-import { SKILL_PROMPT_SECTIONS_KEY } from "@/lib/promptStorage";
 import LoadingSpinner from "@/components/LoadingSpinner";
 
-// Helper to load skill sections from localStorage
-const loadSkillSections = (): EditableSkillSection[] => {
-  if (typeof window === "undefined") {
-    return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-  }
-  try {
-    const raw = window.localStorage.getItem(SKILL_PROMPT_SECTIONS_KEY);
-    if (!raw) {
-      return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-    }
-    const parsed = JSON.parse(raw) as EditableSkillSection[];
-    if (!Array.isArray(parsed)) {
-      return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-    }
-    return parsed.map(section => ({
-      ...section,
-      enabled: section.enabled ?? true,
-      text: section.text ?? section.defaultText ?? "",
-    }));
-  } catch {
-    return defaultSkillSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
-  }
-};
 
 type UploadStatus = {
   id: string;
@@ -137,12 +112,9 @@ export default function KnowledgeUploadPage() {
   const [generatedDraft, setGeneratedDraft] = useState<SkillDraft | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
-  const [showPrompt, setShowPrompt] = useState(false);
   const [selectedSplitIndex, setSelectedSplitIndex] = useState<number | null>(null);
   // Track the URLs used for the current build (to store in skill)
   const buildUrlsRef = useRef<string[]>([]);
-  // Load configured skill prompt sections
-  const [skillSections] = useState<EditableSkillSection[]>(() => loadSkillSections());
 
   // Load skills from API on mount
   useEffect(() => {
@@ -230,15 +202,11 @@ export default function KnowledgeUploadPage() {
           throw new Error("Skill not found");
         }
 
-        // Build the prompt from configured sections
-        const configuredPrompt = buildSkillPromptFromSections(skillSections);
-
         const response = await fetch("/api/skills/suggest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sourceUrls: urls,
-            prompt: configuredPrompt,
             existingSkill: {
               title: existingSkill.title,
               content: existingSkill.content,
@@ -288,12 +256,10 @@ export default function KnowledgeUploadPage() {
         }
       } else {
         // Create new skill
-        const configuredPrompt = buildSkillPromptFromSections(skillSections);
-
         const response = await fetch("/api/skills/suggest", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sourceUrls: urls, prompt: configuredPrompt }),
+          body: JSON.stringify({ sourceUrls: urls }),
         });
 
         if (!response.ok) {
@@ -770,57 +736,6 @@ export default function KnowledgeUploadPage() {
         )}
       </div>
 
-      {/* Skill Prompt Preview */}
-      <div style={{
-        ...styles.card,
-        backgroundColor: "#fafaf9",
-        borderColor: "#d6d3d1",
-      }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-          <h3 style={{ margin: 0 }}>Claude Prompt for Skill Generation</h3>
-          <button
-            onClick={() => setShowPrompt(!showPrompt)}
-            style={{
-              padding: "6px 12px",
-              backgroundColor: "#78716c",
-              color: "#fff",
-              border: "none",
-              borderRadius: "6px",
-              fontSize: "14px",
-              cursor: "pointer",
-              fontWeight: 500,
-            }}
-          >
-            {showPrompt ? "Hide Prompt" : "Show Prompt"}
-          </button>
-        </div>
-        <p style={{ color: "#78716c", fontSize: "14px", margin: "0 0 12px 0" }}>
-          This is the system prompt sent to Claude when building skills. To edit it, go to the{" "}
-          <a href="/prompts" style={{ color: "#2563eb", fontWeight: 600 }}>
-            Prompt Configuration
-          </a>{" "}
-          page.
-        </p>
-        {showPrompt && (
-          <textarea
-            value={buildSkillPromptFromSections(skillSections)}
-            readOnly
-            style={{
-              width: "100%",
-              minHeight: "400px",
-              padding: "12px",
-              border: "1px solid #d6d3d1",
-              borderRadius: "6px",
-              fontFamily: "monospace",
-              fontSize: "13px",
-              resize: "vertical",
-              backgroundColor: "#fff",
-              color: "#44403c",
-            }}
-          />
-        )}
-      </div>
-
       {/* Generated Draft Review */}
       {generatedDraft && (
         <div style={{
@@ -1012,7 +927,7 @@ export default function KnowledgeUploadPage() {
         )}
         <p style={{ marginTop: "12px" }}>
           Head to the{" "}
-          <a href="/knowledge/library" style={{ color: "#2563eb", fontWeight: 600 }}>
+          <a href="/knowledge" style={{ color: "#2563eb", fontWeight: 600 }}>
             Knowledge Library
           </a>{" "}
           to review, refresh, or delete uploads.

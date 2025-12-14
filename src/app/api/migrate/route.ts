@@ -1,9 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/apiAuth";
 
 // POST /api/migrate - Migrate localStorage data to database
-// This is called from the frontend with the localStorage data
+// Admin-only: This endpoint can bulk-insert data
 export async function POST(request: NextRequest) {
+  // Require admin access for bulk data migration
+  const auth = await requireAdmin();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
     const results = {

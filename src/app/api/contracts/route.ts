@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
+import { requireAuth } from "@/lib/apiAuth";
+import { logContractChange, getUserFromSession } from "@/lib/auditLog";
 
 export const maxDuration = 60;
 
@@ -68,6 +70,11 @@ export async function GET(request: NextRequest) {
 
 // POST /api/contracts - Upload and create a new contract review
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -123,6 +130,16 @@ export async function POST(request: NextRequest) {
         status: "PENDING",
       },
     });
+
+    // Audit log
+    await logContractChange(
+      "CREATED",
+      review.id,
+      review.name,
+      getUserFromSession(auth.session),
+      undefined,
+      { filename, fileType, customerName, contractType }
+    );
 
     return NextResponse.json({
       id: review.id,

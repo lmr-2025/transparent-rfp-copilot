@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { CustomerProfileHistoryEntry } from "@/types/customerProfile";
+import { requireAuth } from "@/lib/apiAuth";
+import { updateCustomerSchema, validateBody } from "@/lib/validations";
+import { logCustomerChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -48,10 +51,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // PUT /api/customers/[id] - Update customer profile
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const params = await context.params;
     const { id } = params;
     const body = await request.json();
+
+    const validation = validateBody(updateCustomerSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
+    }
 
     const {
       name,
@@ -65,14 +78,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       sourceUrls,
       isActive,
       owners,
-      lastRefreshedAt,
-      updatedBy,
-    } = body;
+    } = validation.data;
 
-    // Get existing profile to append to history
+    // lastRefreshedAt comes from body directly (not in schema - it's a system field)
+    const lastRefreshedAt = body.lastRefreshedAt;
+
+    // Get existing profile to append to history and compute changes
     const existing = await prisma.customerProfile.findUnique({
       where: { id },
-      select: { history: true },
     });
 
     if (!existing) {
@@ -89,7 +102,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       summary: lastRefreshedAt
         ? "Profile refreshed from sources"
         : "Profile updated",
-      user: updatedBy,
+      user: auth.session.user.email,
     };
 
     const existingHistory = (existing.history as CustomerProfileHistoryEntry[]) || [];
@@ -107,13 +120,29 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         ...(tags !== undefined && { tags }),
         ...(sourceUrls !== undefined && { sourceUrls }),
         ...(isActive !== undefined && { isActive }),
-        ...(owners !== undefined && { owners }),
+        ...(owners !== undefined && { owners: owners || undefined }),
         ...(lastRefreshedAt !== undefined && {
           lastRefreshedAt: new Date(lastRefreshedAt),
         }),
         history: [...existingHistory, historyEntry],
       },
     });
+
+    // Compute changes for audit log
+    const changes = computeChanges(
+      existing as unknown as Record<string, unknown>,
+      profile as unknown as Record<string, unknown>,
+      ["name", "industry", "website", "overview", "products", "challenges", "keyFacts", "tags", "sourceUrls", "isActive", "owners"]
+    );
+
+    // Audit log
+    await logCustomerChange(
+      lastRefreshedAt ? "REFRESHED" : "UPDATED",
+      profile.id,
+      profile.name,
+      getUserFromSession(auth.session),
+      Object.keys(changes).length > 0 ? changes : undefined
+    );
 
     return NextResponse.json({ profile }, { status: 200 });
   } catch (error) {
@@ -127,6 +156,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 // DELETE /api/customers/[id] - Delete customer profile
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const params = await context.params;
     const { id } = params;
@@ -145,9 +179,24 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
+    // Get profile before deleting for audit log
+    const profile = await prisma.customerProfile.findUnique({ where: { id } });
+
     await prisma.customerProfile.delete({
       where: { id },
     });
+
+    // Audit log
+    if (profile) {
+      await logCustomerChange(
+        "DELETED",
+        id,
+        profile.name,
+        getUserFromSession(auth.session),
+        undefined,
+        { deletedProfile: { name: profile.name, industry: profile.industry } }
+      );
+    }
 
     return NextResponse.json(
       { message: "Customer profile deleted successfully" },

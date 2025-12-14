@@ -26,7 +26,8 @@
     "prisma": "^6.19.1",
     "react": "19.2.1",
     "react-dom": "19.2.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.1.13"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
@@ -42,5 +43,8 @@
     "typescript": "^5",
     "vite-tsconfig-paths": "^5.1.2",
     "vitest": "^2.0.5"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.js"
   }
 }

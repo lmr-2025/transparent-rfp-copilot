@@ -1,0 +1,89 @@
+import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { requireAuth } from "@/lib/apiAuth";
+import { AuditEntityType, AuditAction } from "@prisma/client";
+
+// GET /api/audit-log - Get audit log entries with filtering
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
+    const entityType = searchParams.get("entityType") as AuditEntityType | null;
+    const entityId = searchParams.get("entityId");
+    const action = searchParams.get("action") as AuditAction | null;
+    const userId = searchParams.get("userId");
+    const search = searchParams.get("search");
+    const startDate = searchParams.get("startDate");
+    const endDate = searchParams.get("endDate");
+
+    // Build where clause
+    const where: Record<string, unknown> = {};
+
+    if (entityType) {
+      where.entityType = entityType;
+    }
+
+    if (entityId) {
+      where.entityId = entityId;
+    }
+
+    if (action) {
+      where.action = action;
+    }
+
+    if (userId) {
+      where.userId = userId;
+    }
+
+    if (search) {
+      where.OR = [
+        { entityTitle: { contains: search, mode: "insensitive" } },
+        { userName: { contains: search, mode: "insensitive" } },
+        { userEmail: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) {
+        (where.createdAt as Record<string, Date>).gte = new Date(startDate);
+      }
+      if (endDate) {
+        (where.createdAt as Record<string, Date>).lte = new Date(endDate);
+      }
+    }
+
+    // Get total count and entries
+    const [total, entries] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    return NextResponse.json({
+      entries,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to fetch audit log:", error);
+    return NextResponse.json(
+      { error: "Failed to fetch audit log" },
+      { status: 500 }
+    );
+  }
+}

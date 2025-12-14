@@ -100,8 +100,10 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
     ? (rawOwners as SkillOwner[])
         .filter((o) => o && typeof o.name === "string")
         .map((o) => ({
+          userId: typeof o.userId === "string" ? o.userId : undefined,
           name: o.name,
           email: typeof o.email === "string" ? o.email : undefined,
+          image: typeof o.image === "string" ? o.image : undefined,
         }))
     : undefined;
 

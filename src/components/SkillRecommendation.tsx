@@ -153,7 +153,7 @@ export default function SkillRecommendation({
             </Link>
           ) : (
             <Link
-              href="/knowledge/library"
+              href="/knowledge"
               style={{
                 display: "inline-block",
                 padding: "6px 14px",

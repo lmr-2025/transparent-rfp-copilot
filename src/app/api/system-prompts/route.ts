@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/apiAuth";
 
 // GET /api/system-prompts - List all system prompts
 export async function GET() {
@@ -19,7 +20,13 @@ export async function GET() {
 }
 
 // POST /api/system-prompts - Create a new system prompt
+// Admin-only: System prompts control LLM behavior
 export async function POST(request: NextRequest) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
 
@@ -28,7 +35,7 @@ export async function POST(request: NextRequest) {
         key: body.key,
         name: body.name,
         sections: body.sections,
-        updatedBy: body.updatedBy,
+        updatedBy: auth.session.user.email || auth.session.user.id,
       },
     });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -110,11 +110,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const [filterRating, setFilterRating] = useState<AlignmentRating | "all">("all");
   const [filterCategory, setFilterCategory] = useState<FindingCategory | "all">("all");
 
-  useEffect(() => {
-    fetchContract();
-  }, [id]);
-
-  const fetchContract = async () => {
+  const fetchContract = useCallback(async () => {
     try {
       const response = await fetch(`/api/contracts/${id}`);
       if (!response.ok) {
@@ -131,7 +127,11 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchContract();
+  }, [fetchContract]);
 
   const handleSaveNotes = async () => {
     if (!contract) return;

@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
-import {
-  buildCustomerProfilePromptFromSections,
-  loadCustomerProfileSections,
-} from "@/lib/customerProfilePromptSections";
 import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
 
 type SuggestRequestBody = {
   sourceUrls: string[];
@@ -22,21 +19,6 @@ type SuggestRequestBody = {
     challenges?: string;
     keyFacts: CustomerProfileKeyFact[];
     tags: string[];
-  };
-};
-
-type SuggestResponse = {
-  draft: CustomerProfileDraft;
-  sourceUrls: string[];
-  updateMode?: boolean;
-  hasChanges?: boolean;
-  changeHighlights?: string[];
-  transparency?: {
-    systemPrompt: string;
-    userPrompt: string;
-    model: string;
-    maxTokens: number;
-    temperature: number;
   };
 };
 
@@ -66,9 +48,8 @@ export async function POST(request: NextRequest) {
     const authSession = await getServerSession(authOptions);
     const sourceContent = await buildSourceMaterial(sourceUrls, documentContent);
 
-    // Use provided prompt or build from default sections
-    const promptText =
-      body?.prompt?.trim() || buildCustomerProfilePromptFromSections(loadCustomerProfileSections());
+    // Load prompt from database (block system) or use default
+    const promptText = body?.prompt?.trim() || await loadSystemPrompt("customer_profile", "You are creating a customer profile document.");
 
     if (body.existingProfile) {
       // Update mode
@@ -117,12 +98,7 @@ async function generateProfileDraft(
   documentNames: string[] = [],
   authSession: { user?: { id?: string; email?: string | null } } | null = null
 ): Promise<GenerateResult> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAnthropicClient();
 
   // Build source info
   const sourceInfo = [];
@@ -156,16 +132,6 @@ Return ONLY the JSON object.`;
     throw new Error("Unexpected response format");
   }
 
-  let jsonText = content.text.trim();
-  if (jsonText.startsWith("```")) {
-    const lines = jsonText.split("\n");
-    lines.shift();
-    if (lines[lines.length - 1].trim() === "```") {
-      lines.pop();
-    }
-    jsonText = lines.join("\n");
-  }
-
   // Log usage
   logUsage({
     userId: authSession?.user?.id,
@@ -178,7 +144,7 @@ Return ONLY the JSON object.`;
   });
 
   return {
-    draft: JSON.parse(jsonText) as CustomerProfileDraft,
+    draft: parseJsonResponse<CustomerProfileDraft>(content.text),
     transparency: {
       systemPrompt: promptText,
       userPrompt,
@@ -207,12 +173,7 @@ async function generateProfileUpdate(
   hasChanges: boolean;
   changeHighlights: string[];
 }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY not configured");
-  }
-
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAnthropicClient();
 
   const systemPrompt = `${promptText}
 
@@ -287,20 +248,10 @@ Return ONLY the JSON object.`;
     throw new Error("Unexpected response format");
   }
 
-  let jsonText = content.text.trim();
-  if (jsonText.startsWith("```")) {
-    const lines = jsonText.split("\n");
-    lines.shift();
-    if (lines[lines.length - 1].trim() === "```") {
-      lines.pop();
-    }
-    jsonText = lines.join("\n");
-  }
-
-  const parsed = JSON.parse(jsonText) as {
+  const parsed = parseJsonResponse<{
     hasChanges: boolean;
     changeHighlights: string[];
-  } & CustomerProfileDraft;
+  } & CustomerProfileDraft>(content.text);
 
   // Log usage
   logUsage({
@@ -349,41 +300,4 @@ async function buildSourceMaterial(sourceUrls: string[], documentContent: string
   }
 
   return sections.join("\n\n---\n\n").slice(0, 80000);
-}
-
-async function fetchUrlContent(urlString: string): Promise<string | null> {
-  let parsed: URL;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    console.warn(`Skipping invalid URL: ${urlString}`);
-    return null;
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    console.warn(`Skipping unsupported protocol: ${urlString}`);
-    return null;
-  }
-
-  try {
-    const response = await fetch(parsed.toString(), {
-      headers: { "User-Agent": "TransparentTrust/1.0" },
-    });
-    if (!response.ok) {
-      console.warn(`Failed to fetch ${urlString}: ${response.statusText}`);
-      return null;
-    }
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("text")) {
-      console.warn(`Skipping non-text content from ${urlString}`);
-      return null;
-    }
-
-    const text = await response.text();
-    return text.slice(0, 15000);
-  } catch (e) {
-    console.warn(`Error fetching ${urlString}:`, e);
-    return null;
-  }
 }

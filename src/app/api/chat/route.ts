@@ -1,42 +1,32 @@
 // Next.js API route for secure Claude API communication
 
-import Anthropic from '@anthropic-ai/sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { CLAUDE_MODEL } from '@/lib/config';
+import { simpleChatSchema, validateBody } from '@/lib/validations';
+import { getAnthropicClient } from '@/lib/apiHelpers';
+import { requireAuth } from '@/lib/apiAuth';
+import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
 
-type ChatRequestBody = {
-  messages?: Array<{ role: string; content: string }>;
-  systemPrompt?: string;
-};
-
 export async function POST(req: NextRequest) {
+  // Require authentication - this route gives access to Claude API
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
-    const body: ChatRequestBody = await req.json();
-    const { messages, systemPrompt } = body;
+    const body = await req.json();
 
-    // Validate required fields
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return NextResponse.json(
-        { error: 'messages array is required' },
-        { status: 400 }
-      );
+    const validation = validateBody(simpleChatSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
-    // Check API key is configured
-    if (!process.env.ANTHROPIC_API_KEY) {
-      console.error('ANTHROPIC_API_KEY not configured');
-      return NextResponse.json(
-        { error: 'API not configured' },
-        { status: 500 }
-      );
-    }
+    const { messages, systemPrompt } = validation.data;
 
-    // Initialize Anthropic client with API key from environment
-    const anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY,
-    });
+    const anthropic = getAnthropicClient();
 
     // Call Claude API
     const response = await anthropic.messages.create({

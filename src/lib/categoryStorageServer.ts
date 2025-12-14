@@ -4,7 +4,7 @@ import { DEFAULT_SKILL_CATEGORIES } from "@/types/skill";
 // Server-side function to get category names from database
 export async function getCategoryNamesFromDb(): Promise<string[]> {
   try {
-    let categories = await prisma.skillCategory.findMany({
+    const categories = await prisma.skillCategory.findMany({
       orderBy: { sortOrder: "asc" },
       select: { name: true },
     });

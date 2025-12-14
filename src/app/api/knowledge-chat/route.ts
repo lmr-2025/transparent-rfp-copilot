@@ -1,51 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import Anthropic from "@anthropic-ai/sdk";
-import { EditableChatSection, buildChatPromptFromSections, defaultChatSections } from "@/lib/promptSections";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { CLAUDE_MODEL } from "@/lib/config";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { logUsage } from "@/lib/usageTracking";
+import { knowledgeChatSchema, validateBody } from "@/lib/validations";
+import { getAnthropicClient } from "@/lib/apiHelpers";
 
 export const maxDuration = 60;
-
-type SkillContext = {
-  id: string;
-  title: string;
-  content: string;
-  tags: string[];
-};
-
-type CustomerProfileContext = {
-  id: string;
-  name: string;
-  industry?: string;
-  overview: string;
-  products?: string;
-  challenges?: string;
-  keyFacts: { label: string; value: string }[];
-};
-
-type ReferenceUrlContext = {
-  id: string;
-  url: string;
-  title: string;
-};
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
-
-type ChatRequestBody = {
-  message: string;
-  skills: SkillContext[];
-  customerProfiles?: CustomerProfileContext[];
-  documentIds?: string[];
-  referenceUrls?: ReferenceUrlContext[];
-  conversationHistory?: ChatMessage[];
-  chatSections?: EditableChatSection[];
-};
 
 type ChatResponse = {
   response: string;
@@ -56,6 +19,7 @@ type ChatResponse = {
   // Transparency data
   transparency: {
     systemPrompt: string;
+    baseSystemPrompt: string; // Just instructions/guidelines, without knowledge context
     knowledgeContext: string;
     customerContext: string;
     documentContext: string;
@@ -67,35 +31,34 @@ type ChatResponse = {
 };
 
 export async function POST(request: NextRequest) {
-  let body: ChatRequestBody;
+  let body;
   try {
-    body = (await request.json()) as ChatRequestBody;
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const message = body?.message?.trim();
+  const validation = validateBody(knowledgeChatSchema, body);
+  if (!validation.success) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
+  }
+
+  const data = validation.data;
+  const message = data.message.trim();
   if (!message) {
     return NextResponse.json({ error: "Message is required." }, { status: 400 });
   }
 
-  const skills = Array.isArray(body?.skills) ? body.skills : [];
-  const customerProfiles = Array.isArray(body?.customerProfiles) ? body.customerProfiles : [];
-  const documentIds = Array.isArray(body?.documentIds) ? body.documentIds : [];
-  const referenceUrls = Array.isArray(body?.referenceUrls) ? body.referenceUrls : [];
-  const conversationHistory = Array.isArray(body?.conversationHistory) ? body.conversationHistory : [];
-  const chatSections = Array.isArray(body?.chatSections) && body.chatSections.length > 0
-    ? body.chatSections
-    : defaultChatSections.map(s => ({ ...s, text: s.defaultText, enabled: true }));
+  const skills = data.skills;
+  const customerProfiles = data.customerProfiles || [];
+  const documentIds = data.documentIds || [];
+  const referenceUrls = data.referenceUrls || [];
+  const conversationHistory = data.conversationHistory || [];
+  const userInstructions = data.userInstructions || "";
 
   try {
     const authSession = await getServerSession(authOptions);
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY not configured");
-    }
-
-    const anthropic = new Anthropic({ apiKey });
+    const anthropic = getAnthropicClient();
 
     // Fetch documents content from database if any are selected
     let documents: { id: string; title: string; filename: string; content: string }[] = [];
@@ -144,7 +107,7 @@ ${keyFactsText}`;
         }).join("\n\n---\n\n")
       : "";
 
-    // Build combined context with priority order: Skills first, then Documents, then URLs
+    // Build combined knowledge context (skills, documents, URLs - NOT customer profiles)
     let combinedKnowledgeContext = "";
 
     // 1. Skills (highest priority - structured knowledge)
@@ -164,18 +127,27 @@ ${keyFactsText}`;
       combinedKnowledgeContext += `=== REFERENCE URLS ===\n\n${urlContext}`;
     }
 
-    // 4. Customer profiles
-    if (customerContext) {
-      if (combinedKnowledgeContext) combinedKnowledgeContext += "\n\n";
-      combinedKnowledgeContext += `=== CUSTOMER INTELLIGENCE ===\n\n${customerContext}`;
-    }
-
     if (!combinedKnowledgeContext) {
       combinedKnowledgeContext = "No knowledge base documents provided.";
     }
 
-    // Build system prompt from configured sections
-    const systemPrompt = buildChatPromptFromSections(chatSections, combinedKnowledgeContext);
+    // Load base system prompt from the new block-based system
+    const baseSystemPrompt = await loadSystemPrompt("chat", "You are a helpful assistant.");
+
+    // Build full system prompt by adding context sections
+    const contextParts: string[] = [baseSystemPrompt];
+
+    if (userInstructions) {
+      contextParts.push(`## User Instructions\n${userInstructions}`);
+    }
+
+    if (customerContext) {
+      contextParts.push(`## Customer Context\n${customerContext}`);
+    }
+
+    contextParts.push(`## Knowledge Base\n${combinedKnowledgeContext}`);
+
+    const systemPrompt = contextParts.join("\n\n");
 
     // Build messages array with conversation history
     const messages: { role: "user" | "assistant"; content: string }[] = [
@@ -253,7 +225,8 @@ ${keyFactsText}`;
       urlsUsed,
       transparency: {
         systemPrompt,
-        knowledgeContext,
+        baseSystemPrompt,
+        knowledgeContext: combinedKnowledgeContext, // Use combined context for display
         customerContext,
         documentContext,
         urlContext,

@@ -1,6 +1,4 @@
-import { buildPromptFromSections, defaultSkillSections } from "./promptSections";
+import { getDefaultPrompt } from "./promptBlocks";
 
-// Re-export for backwards compatibility
-export const defaultSkillPromptSections = defaultSkillSections;
-
-export const defaultSkillPrompt = buildPromptFromSections(defaultSkillSections);
+// Default skill prompt built from the new block system
+export const defaultSkillPrompt = getDefaultPrompt("skills");

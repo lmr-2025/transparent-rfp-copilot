@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/apiAuth";
 
 type RouteContext = {
   params: Promise<{ key: string }>;
@@ -32,7 +33,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
 }
 
 // PUT /api/system-prompts/[key] - Update or create a system prompt
+// Admin-only: System prompts control LLM behavior
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { key } = await context.params;
     const body = await request.json();
@@ -43,12 +50,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         key,
         name: body.name || key,
         sections: body.sections,
-        updatedBy: body.updatedBy,
+        updatedBy: auth.session.user.email || auth.session.user.id,
       },
       update: {
         name: body.name,
         sections: body.sections,
-        updatedBy: body.updatedBy,
+        updatedBy: auth.session.user.email || auth.session.user.id,
       },
     });
 
@@ -63,7 +70,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 }
 
 // DELETE /api/system-prompts/[key] - Delete a system prompt
+// Admin-only: System prompts control LLM behavior
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireAdmin();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { key } = await context.params;
 

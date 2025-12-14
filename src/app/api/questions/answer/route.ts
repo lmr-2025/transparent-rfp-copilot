@@ -4,30 +4,33 @@ import { authOptions } from "@/lib/auth";
 import { answerQuestionWithPrompt } from "@/lib/llm";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { logUsage } from "@/lib/usageTracking";
-
-type QuestionRequestBody = {
-  question?: string;
-  prompt?: string;
-  skills?: { title: string; content: string; tags: string[] }[];
-  fallbackContent?: { title: string; url: string; content: string }[];
-};
+import { questionAnswerSchema, validateBody } from "@/lib/validations";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
 export async function POST(request: NextRequest) {
-  let body: QuestionRequestBody;
+  let body;
   try {
-    body = (await request.json()) as QuestionRequestBody;
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
-  const question = body?.question?.trim();
-  if (!question) {
-    return NextResponse.json({ error: "question is required." }, { status: 400 });
+  const validation = validateBody(questionAnswerSchema, body);
+  if (!validation.success) {
+    return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const promptText = (body?.prompt ?? "").trim() || defaultQuestionPrompt;
-  const skills = Array.isArray(body?.skills) ? body.skills : undefined;
-  const fallbackContent = Array.isArray(body?.fallbackContent) ? body.fallbackContent : undefined;
+  const data = validation.data;
+  const question = data.question.trim();
+  const skills = data.skills;
+  const fallbackContent = data.fallbackContent;
+
+  // Load prompt from database with dynamic mode/domain filtering
+  const promptOptions = {
+    mode: data.mode,
+    domains: data.domains,
+  };
+  const promptText = data.prompt?.trim() || await loadSystemPrompt("questions", defaultQuestionPrompt, promptOptions);
 
   try {
     const session = await getServerSession(authOptions);
@@ -45,6 +48,8 @@ export async function POST(request: NextRequest) {
         metadata: {
           skillCount: skills?.length || 0,
           hasFallback: result.usedFallback,
+          mode: data.mode,
+          domains: data.domains,
         },
       });
     }

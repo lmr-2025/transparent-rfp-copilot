@@ -1,22 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
-import { ProjectStatus } from "@prisma/client";
-
-interface RowInput {
-  rowNumber: number;
-  question: string;
-  response?: string;
-  status?: string;
-  error?: string;
-  conversationHistory?: unknown;
-  confidence?: string;
-  sources?: string;
-  reasoning?: string;
-  inference?: string;
-  remarks?: string;
-  usedSkills?: unknown;
-  showRecommendation?: boolean;
-}
+import { prisma } from "@/lib/prisma";
+import { ProjectStatus, RowStatus } from "@prisma/client";
+import { requireAuth } from "@/lib/apiAuth";
+import { createProjectSchema, validateBody } from "@/lib/validations";
+import { logProjectChange, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/projects - Get all projects
 export async function GET() {
@@ -59,43 +46,48 @@ export async function GET() {
 
 // POST /api/projects - Create new project
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const body = await request.json();
-    const { name, sheetName, columns, rows, ownerName, customerName, notes, status } = body;
 
-    if (!name || !sheetName || !columns || !rows) {
-      return NextResponse.json(
-        { error: "Missing required fields: name, sheetName, columns, rows" },
-        { status: 400 }
-      );
+    const validation = validateBody(createProjectSchema, body);
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 });
     }
 
+    const data = validation.data;
+
     // Map status string to enum
-    const projectStatus: ProjectStatus = status?.toUpperCase().replace(/-/g, "_") || "DRAFT";
+    const projectStatus: ProjectStatus = (data.status?.toUpperCase().replace(/-/g, "_") as ProjectStatus) || "DRAFT";
 
     const project = await prisma.bulkProject.create({
       data: {
-        name,
-        sheetName,
-        columns,
-        ownerName,
-        customerName,
-        notes,
+        name: data.name,
+        sheetName: data.sheetName,
+        columns: data.columns,
+        ownerName: data.ownerName || auth.session.user.name,
+        ownerId: auth.session.user.id,
+        customerName: data.customerName,
+        notes: data.notes,
         status: projectStatus,
         rows: {
-          create: rows.map((row: RowInput) => ({
+          create: data.rows.map((row) => ({
             rowNumber: row.rowNumber,
             question: row.question,
             response: row.response || "",
-            status: row.status?.toUpperCase() || "PENDING",
+            status: (row.status?.toUpperCase() || "PENDING") as RowStatus,
             error: row.error,
-            conversationHistory: row.conversationHistory || null,
+            conversationHistory: row.conversationHistory || undefined,
             confidence: row.confidence,
             sources: row.sources,
             reasoning: row.reasoning,
             inference: row.inference,
             remarks: row.remarks,
-            usedSkills: row.usedSkills || null,
+            usedSkills: row.usedSkills || undefined,
             showRecommendation: row.showRecommendation || false,
           })),
         },
@@ -104,6 +96,16 @@ export async function POST(request: NextRequest) {
         rows: true,
       },
     });
+
+    // Audit log
+    await logProjectChange(
+      "CREATED",
+      project.id,
+      project.name,
+      getUserFromSession(auth.session),
+      undefined,
+      { rowCount: data.rows.length, customerName: data.customerName }
+    );
 
     return NextResponse.json({ project }, { status: 201 });
   } catch (error) {

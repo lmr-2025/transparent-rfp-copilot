@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import prisma from "@/lib/prisma";
-import {
-  getUserUsageSummary,
-  getUsageByFeature,
-  getDailyUsage,
-} from "@/lib/usageTracking";
+import { prisma } from "@/lib/prisma";
+import { getDailyUsage } from "@/lib/usageTracking";
 
 // GET /api/usage - Get usage statistics
 export async function GET(request: NextRequest) {

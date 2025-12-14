@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import prisma from "@/lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { ProjectStatus } from "@prisma/client";
+import { requireAuth } from "@/lib/apiAuth";
+import { logProjectChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -75,10 +77,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
 // PUT /api/projects/[id] - Update project
 export async function PUT(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const params = await context.params;
     const { id } = params;
     const body = await request.json();
+
+    // Get existing project for audit log
+    const existing = await prisma.bulkProject.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
 
     const {
       name, sheetName, columns, rows, ownerName, customerName, notes, status,
@@ -170,6 +183,28 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       customerProfiles: project.customerProfiles.map((cp) => cp.profile),
     };
 
+    // Compute changes for audit log
+    const changes = computeChanges(
+      existing as unknown as Record<string, unknown>,
+      project as unknown as Record<string, unknown>,
+      ["name", "customerName", "status", "notes"]
+    );
+
+    // Determine action type
+    let auditAction: "UPDATED" | "STATUS_CHANGED" = "UPDATED";
+    if (status && existing.status !== projectStatus) {
+      auditAction = "STATUS_CHANGED";
+    }
+
+    // Audit log
+    await logProjectChange(
+      auditAction,
+      project.id,
+      project.name,
+      getUserFromSession(auth.session),
+      Object.keys(changes).length > 0 ? changes : undefined
+    );
+
     return NextResponse.json({ project: transformedProject }, { status: 200 });
   } catch (error) {
     console.error("Error updating project:", error);
@@ -182,13 +217,34 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
 // DELETE /api/projects/[id] - Delete project
 export async function DELETE(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const params = await context.params;
     const { id } = params;
 
+    // Get project before deleting for audit log
+    const project = await prisma.bulkProject.findUnique({ where: { id } });
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+
     await prisma.bulkProject.delete({
       where: { id },
     });
+
+    // Audit log
+    await logProjectChange(
+      "DELETED",
+      id,
+      project.name,
+      getUserFromSession(auth.session),
+      undefined,
+      { deletedProject: { name: project.name, customerName: project.customerName } }
+    );
 
     return NextResponse.json(
       { message: "Project deleted successfully" },

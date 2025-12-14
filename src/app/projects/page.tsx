@@ -8,7 +8,7 @@ import { fetchAllProjects, deleteProject as deleteProjectApi, updateProject } fr
 
 const styles = {
   container: {
-    maxWidth: "1200px",
+    maxWidth: "1100px",
     margin: "0 auto",
     padding: "24px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
@@ -22,7 +22,7 @@ const styles = {
   },
   button: {
     padding: "10px 16px",
-    borderRadius: "4px",
+    borderRadius: "6px",
     border: "none",
     cursor: "pointer",
     fontWeight: 600,
@@ -203,13 +203,24 @@ function ProjectsListContent() {
     return projects.filter((p) => p.rows.some((r) => r.flaggedForReview));
   }, [projects]);
 
+  // Get recent projects (top 4 by last modified)
+  const recentProjects = useMemo(() => {
+    return [...projects]
+      .sort((a, b) => new Date(b.lastModifiedAt).getTime() - new Date(a.lastModifiedAt).getTime())
+      .slice(0, 4);
+  }, [projects]);
+
+  // Check if we should show the dashboard view (no filter selected or "all")
+  const showDashboard = statusFilter === "all" && !loading;
+
   return (
     <div style={styles.container}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "32px" }}>
         <div>
-          <h1 style={{ margin: 0 }}>Projects</h1>
-          <p style={{ color: "#475569", marginTop: "8px" }}>
-            Manage RFP questionnaires. Click a project to continue working on it.
+          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "#1e293b" }}>RFP Projects</h1>
+          <p style={{ color: "#64748b", marginTop: "8px", fontSize: "0.95rem" }}>
+            Upload questionnaires, generate AI responses, and track progress through review.
           </p>
         </div>
         <button
@@ -219,9 +230,11 @@ function ProjectsListContent() {
             ...styles.button,
             backgroundColor: "#0ea5e9",
             color: "#fff",
+            padding: "12px 20px",
+            fontSize: "0.95rem",
           }}
         >
-          + New Project
+          + Upload New
         </button>
       </div>
 
@@ -231,254 +244,328 @@ function ProjectsListContent() {
         </div>
       )}
 
-      {/* Status Filter Tabs */}
-      <div style={{ ...styles.card, padding: "12px" }}>
-        <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-          {([
-            { key: "all", label: "All" },
-            { key: "draft", label: "Draft" },
-            { key: "in_progress", label: "In Progress" },
-            { key: "needs_review", label: "Needs Review" },
-            { key: "approved", label: "Approved" },
-            { key: "has_flagged", label: "🚩 Has Flagged" },
-          ] as const).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              style={{
-                ...styles.button,
-                padding: "8px 14px",
-                backgroundColor: statusFilter === key
-                  ? key === "needs_review" ? "#f59e0b"
-                  : key === "has_flagged" ? "#f59e0b"
-                  : "#0ea5e9"
-                  : key === "needs_review" && filterCounts.needs_review > 0 ? "#fef3c7"
-                  : key === "has_flagged" && filterCounts.has_flagged > 0 ? "#fef3c7"
-                  : "#f1f5f9",
-                color: statusFilter === key
-                  ? "#fff"
-                  : (key === "needs_review" || key === "has_flagged") && filterCounts[key] > 0 ? "#92400e"
-                  : "#0f172a",
-              }}
-            >
-              {label} ({filterCounts[key]})
-            </button>
-          ))}
-        </div>
-      </div>
-
       {loading ? (
         <div style={styles.card}>
           <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
             Loading projects...
           </div>
         </div>
-      ) : filteredProjects.length === 0 ? (
-        <div style={styles.card}>
-          <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
-            {statusFilter === "all" ? (
-              <>
-                <p style={{ fontSize: "1.1rem", marginBottom: "8px" }}>No projects yet</p>
-                <p>Upload a CSV or Excel file to create your first project.</p>
-                <button
-                  type="button"
-                  onClick={() => router.push("/projects/upload")}
-                  style={{
-                    ...styles.button,
-                    backgroundColor: "#0ea5e9",
-                    color: "#fff",
-                    marginTop: "16px",
-                  }}
-                >
-                  Create First Project
-                </button>
-              </>
-            ) : (
-              <p>No {statusFilter === "has_flagged" ? "projects with flagged questions" : statusFilter.replace("_", " ")} projects.</p>
-            )}
+      ) : projects.length === 0 ? (
+        /* Empty state */
+        <div style={{
+          ...styles.card,
+          textAlign: "center",
+          padding: "60px 40px",
+          borderStyle: "dashed",
+          borderWidth: "2px",
+        }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: 600, color: "#1e293b", marginBottom: "8px" }}>
+            No projects yet
           </div>
+          <p style={{ color: "#64748b", marginBottom: "24px", maxWidth: "400px", margin: "0 auto 24px" }}>
+            Upload a CSV or Excel questionnaire to create your first project. AI will generate responses that you review and approve.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/projects/upload")}
+            style={{
+              ...styles.button,
+              backgroundColor: "#0ea5e9",
+              color: "#fff",
+              padding: "12px 24px",
+            }}
+          >
+            Upload Your First Questionnaire
+          </button>
         </div>
       ) : (
-        <div style={styles.card}>
-          <div style={{ marginBottom: "8px", color: "#475569", fontSize: "0.9rem" }}>
-            {filteredProjects.length} project{filteredProjects.length !== 1 ? "s" : ""}
-            {statusFilter === "needs_review" && " awaiting review"}
-            {statusFilter === "has_flagged" && " with flagged questions"}
-          </div>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Customer</th>
-                <th style={styles.th}>Project Name</th>
-                <th style={styles.th}>Owner</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Progress</th>
-                <th style={styles.th}>Modified</th>
-                <th style={styles.th}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProjects.map((project) => {
-                const stats = getProgressStats(project);
-                const isApproving = approvingId === project.id;
-                return (
-                  <tr key={project.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/projects/${project.id}`)}>
-                    <td style={styles.td}>
-                      {project.customerProfiles && project.customerProfiles.length > 0 ? (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                          {project.customerProfiles.map((cp) => (
-                            <span
-                              key={cp.id}
-                              style={{
-                                display: "inline-block",
-                                padding: "2px 8px",
-                                backgroundColor: "#e0e7ff",
-                                color: "#4338ca",
-                                borderRadius: "4px",
-                                fontSize: "0.8rem",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {cp.name}
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span style={{ color: "#94a3b8" }}>{project.customerName || "—"}</span>
-                      )}
-                    </td>
-                    <td style={styles.td}>{project.name}</td>
-                    <td style={styles.td}>{project.ownerName || "—"}</td>
-                    <td style={styles.td}>
-                      <span style={{ ...styles.statusBadge, ...getStatusColor(project.status) }}>
-                        {getStatusLabel(project.status)}
-                      </span>
-                    </td>
-                    <td style={styles.td}>
-                      <div style={{ fontSize: "0.85rem" }}>
-                        <div>{stats.completed}/{stats.total} answered</div>
-                        {stats.completed > 0 && (
-                          <div style={{ color: "#64748b", marginTop: "2px" }}>
-                            H:{stats.high} M:{stats.medium} L:{stats.low}
-                            {stats.errors > 0 && ` E:${stats.errors}`}
-                          </div>
-                        )}
-                        {stats.flagged > 0 && (
-                          <div style={{ color: "#92400e", marginTop: "2px", fontWeight: 600 }}>
-                            🚩 {stats.flagged} flagged
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td style={styles.td}>
-                      <div style={{ fontSize: "0.85rem" }}>
-                        {new Date(project.lastModifiedAt).toLocaleDateString()}
-                        <div style={{ color: "#94a3b8" }}>
-                          {new Date(project.lastModifiedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                        </div>
-                        {project.reviewRequestedBy && (
-                          <div style={{ color: "#92400e", marginTop: "2px", fontSize: "0.8rem" }}>
-                            Review by: {project.reviewRequestedBy}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                    <td style={styles.td} onClick={(e) => e.stopPropagation()}>
-                      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={() => router.push(`/projects/${project.id}`)}
-                          style={{
-                            ...styles.button,
-                            padding: "6px 12px",
-                            backgroundColor: "#0ea5e9",
-                            color: "#fff",
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          Open
-                        </button>
-                        {project.status === "needs_review" && (
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(project)}
-                            disabled={isApproving}
-                            style={{
-                              ...styles.button,
-                              padding: "6px 12px",
-                              backgroundColor: isApproving ? "#94a3b8" : "#22c55e",
-                              color: "#fff",
-                              fontSize: "0.85rem",
-                              cursor: isApproving ? "not-allowed" : "pointer",
-                            }}
-                          >
-                            {isApproving ? "..." : "Approve"}
-                          </button>
-                        )}
-                        {stats.flagged > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => router.push(`/projects/${project.id}?filter=flagged`)}
-                            style={{
-                              ...styles.button,
-                              padding: "6px 12px",
-                              backgroundColor: "#f59e0b",
-                              color: "#fff",
-                              fontSize: "0.85rem",
-                            }}
-                          >
-                            🚩 Review
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteProject(project.id, project.name)}
-                          style={{
-                            ...styles.button,
-                            padding: "6px 12px",
-                            backgroundColor: "#fee2e2",
-                            color: "#b91c1c",
-                            fontSize: "0.85rem",
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Flagged Questions Detail Section - show when has_flagged filter is active */}
-      {statusFilter === "has_flagged" && projectsWithFlaggedQuestions.length > 0 && (
-        <div style={styles.card}>
-          <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem" }}>Flagged Question Details</h3>
-          {projectsWithFlaggedQuestions.map((project) => {
-            const flaggedRows = project.rows.filter((r) => r.flaggedForReview);
-            return (
-              <div key={project.id} style={{ marginBottom: "16px", paddingBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
-                <div style={{ fontWeight: 600, marginBottom: "8px" }}>
-                  {project.customerName || "No customer"} — {project.name}
+        <>
+          {/* Status Summary Cards */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "32px" }}>
+            {[
+              { key: "needs_review" as const, label: "Needs Review", color: "#f59e0b", bgColor: "#fffbeb", borderColor: "#fcd34d" },
+              { key: "has_flagged" as const, label: "Has Flagged", color: "#f59e0b", bgColor: "#fffbeb", borderColor: "#fcd34d" },
+              { key: "in_progress" as const, label: "In Progress", color: "#0ea5e9", bgColor: "#f0f9ff", borderColor: "#7dd3fc" },
+              { key: "approved" as const, label: "Approved", color: "#22c55e", bgColor: "#f0fdf4", borderColor: "#86efac" },
+            ].map(({ key, label, color, bgColor, borderColor }) => (
+              <button
+                key={key}
+                onClick={() => setStatusFilter(statusFilter === key ? "all" : key)}
+                style={{
+                  padding: "16px",
+                  backgroundColor: statusFilter === key ? bgColor : "#fff",
+                  border: statusFilter === key ? `2px solid ${borderColor}` : "1px solid #e2e8f0",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  textAlign: "left",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                <div style={{ fontSize: "1.75rem", fontWeight: 700, color: filterCounts[key] > 0 ? color : "#94a3b8" }}>
+                  {filterCounts[key]}
                 </div>
-                {flaggedRows.map((row) => (
-                  <div key={row.id} style={{ fontSize: "0.85rem", color: "#64748b", marginLeft: "16px", marginBottom: "4px" }}>
-                    • <strong>Row {row.rowNumber}:</strong> {row.question.slice(0, 80)}{row.question.length > 80 ? "..." : ""}
-                    {row.flagNote && (
-                      <span style={{ color: "#92400e", fontStyle: "italic" }}> — &quot;{row.flagNote}&quot;</span>
-                    )}
-                    {row.flaggedBy && (
-                      <span style={{ color: "#94a3b8" }}> (by {row.flaggedBy})</span>
-                    )}
-                  </div>
+                <div style={{ fontSize: "0.85rem", color: "#64748b", marginTop: "4px" }}>
+                  {label}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Recent Projects (only show on dashboard view) */}
+          {showDashboard && recentProjects.length > 0 && (
+            <div style={{ marginBottom: "32px" }}>
+              <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "16px" }}>
+                Recent Projects
+              </h2>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
+                {recentProjects.map((project) => {
+                  const stats = getProgressStats(project);
+                  const progressPercent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
+                  return (
+                    <div
+                      key={project.id}
+                      onClick={() => router.push(`/projects/${project.id}`)}
+                      style={{
+                        ...styles.card,
+                        marginBottom: 0,
+                        cursor: "pointer",
+                        borderLeft: `4px solid ${
+                          project.status === "approved" ? "#22c55e" :
+                          project.status === "needs_review" ? "#f59e0b" :
+                          project.status === "in_progress" ? "#0ea5e9" :
+                          "#94a3b8"
+                        }`,
+                        transition: "all 0.15s ease",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = "translateY(-2px)";
+                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = "translateY(0)";
+                        e.currentTarget.style.boxShadow = "none";
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: "1rem", fontWeight: 600, color: "#1e293b", marginBottom: "4px" }}>
+                            {project.name}
+                          </div>
+                          {project.customerProfiles && project.customerProfiles.length > 0 ? (
+                            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
+                              {project.customerProfiles.slice(0, 2).map((cp) => (
+                                <span
+                                  key={cp.id}
+                                  style={{
+                                    fontSize: "0.75rem",
+                                    backgroundColor: "#e0e7ff",
+                                    color: "#4338ca",
+                                    padding: "2px 6px",
+                                    borderRadius: "4px",
+                                  }}
+                                >
+                                  {cp.name}
+                                </span>
+                              ))}
+                            </div>
+                          ) : project.customerName ? (
+                            <div style={{ fontSize: "0.85rem", color: "#64748b" }}>{project.customerName}</div>
+                          ) : null}
+                        </div>
+                        <span style={{ ...styles.statusBadge, ...getStatusColor(project.status), flexShrink: 0 }}>
+                          {getStatusLabel(project.status)}
+                        </span>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div style={{ marginBottom: "8px" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "#64748b", marginBottom: "4px" }}>
+                          <span>{stats.completed} of {stats.total} answered</span>
+                          <span>{progressPercent}%</span>
+                        </div>
+                        <div style={{ height: "6px", backgroundColor: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                          <div style={{
+                            width: `${progressPercent}%`,
+                            height: "100%",
+                            backgroundColor: progressPercent === 100 ? "#22c55e" : "#0ea5e9",
+                            transition: "width 0.3s ease",
+                          }} />
+                        </div>
+                      </div>
+
+                      {/* Footer info */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "#94a3b8" }}>
+                        <span>Modified {new Date(project.lastModifiedAt).toLocaleDateString()}</span>
+                        {stats.flagged > 0 && (
+                          <span style={{ color: "#f59e0b", fontWeight: 600 }}>
+                            {stats.flagged} flagged
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* All Projects Section */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
+                {statusFilter === "all" ? "All Projects" :
+                 statusFilter === "has_flagged" ? "Projects with Flagged Questions" :
+                 `${getStatusLabel(statusFilter)} Projects`}
+              </h2>
+
+              {/* Filter pills */}
+              <div style={{ display: "flex", gap: "6px" }}>
+                {(["all", "draft", "in_progress", "needs_review", "approved"] as const).map((key) => (
+                  <button
+                    key={key}
+                    onClick={() => setStatusFilter(key)}
+                    style={{
+                      padding: "6px 12px",
+                      fontSize: "0.8rem",
+                      fontWeight: 500,
+                      backgroundColor: statusFilter === key ? "#0ea5e9" : "#f1f5f9",
+                      color: statusFilter === key ? "#fff" : "#64748b",
+                      border: "none",
+                      borderRadius: "16px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {key === "all" ? "All" : getStatusLabel(key)} ({filterCounts[key]})
+                  </button>
                 ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+
+            {filteredProjects.length === 0 ? (
+              <div style={styles.card}>
+                <div style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
+                  No {statusFilter === "has_flagged" ? "projects with flagged questions" : statusFilter.replace("_", " ")} projects.
+                </div>
+              </div>
+            ) : (
+              <div style={styles.card}>
+                <table style={styles.table}>
+                  <thead>
+                    <tr>
+                      <th style={styles.th}>Project</th>
+                      <th style={styles.th}>Status</th>
+                      <th style={styles.th}>Progress</th>
+                      <th style={styles.th}>Modified</th>
+                      <th style={styles.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProjects.map((project) => {
+                      const stats = getProgressStats(project);
+                      const isApproving = approvingId === project.id;
+                      return (
+                        <tr key={project.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/projects/${project.id}`)}>
+                          <td style={styles.td}>
+                            <div style={{ fontWeight: 500, color: "#1e293b" }}>{project.name}</div>
+                            <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "2px" }}>
+                              {project.customerProfiles && project.customerProfiles.length > 0 ? (
+                                project.customerProfiles.map((cp) => cp.name).join(", ")
+                              ) : (
+                                project.customerName || project.ownerName || "—"
+                              )}
+                            </div>
+                          </td>
+                          <td style={styles.td}>
+                            <span style={{ ...styles.statusBadge, ...getStatusColor(project.status) }}>
+                              {getStatusLabel(project.status)}
+                            </span>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ fontSize: "0.85rem" }}>
+                              <div>{stats.completed}/{stats.total}</div>
+                              {stats.flagged > 0 && (
+                                <div style={{ color: "#f59e0b", fontWeight: 600 }}>
+                                  {stats.flagged} flagged
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td style={styles.td}>
+                            <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
+                              {new Date(project.lastModifiedAt).toLocaleDateString()}
+                            </div>
+                          </td>
+                          <td style={styles.td} onClick={(e) => e.stopPropagation()}>
+                            <div style={{ display: "flex", gap: "8px" }}>
+                              {project.status === "needs_review" && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleApprove(project)}
+                                  disabled={isApproving}
+                                  style={{
+                                    ...styles.button,
+                                    padding: "6px 12px",
+                                    backgroundColor: isApproving ? "#94a3b8" : "#22c55e",
+                                    color: "#fff",
+                                    fontSize: "0.85rem",
+                                    cursor: isApproving ? "not-allowed" : "pointer",
+                                  }}
+                                >
+                                  {isApproving ? "..." : "Approve"}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteProject(project.id, project.name)}
+                                style={{
+                                  ...styles.button,
+                                  padding: "6px 12px",
+                                  backgroundColor: "#fee2e2",
+                                  color: "#b91c1c",
+                                  fontSize: "0.85rem",
+                                }}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Flagged Questions Detail Section - show when has_flagged filter is active */}
+          {statusFilter === "has_flagged" && projectsWithFlaggedQuestions.length > 0 && (
+            <div style={{ ...styles.card, marginTop: "16px" }}>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem" }}>Flagged Question Details</h3>
+              {projectsWithFlaggedQuestions.map((project) => {
+                const flaggedRows = project.rows.filter((r) => r.flaggedForReview);
+                return (
+                  <div key={project.id} style={{ marginBottom: "16px", paddingBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
+                    <div style={{ fontWeight: 600, marginBottom: "8px" }}>
+                      {project.customerName || "No customer"} — {project.name}
+                    </div>
+                    {flaggedRows.map((row) => (
+                      <div key={row.id} style={{ fontSize: "0.85rem", color: "#64748b", marginLeft: "16px", marginBottom: "4px" }}>
+                        • <strong>Row {row.rowNumber}:</strong> {row.question.slice(0, 80)}{row.question.length > 80 ? "..." : ""}
+                        {row.flagNote && (
+                          <span style={{ color: "#92400e", fontStyle: "italic" }}> — &quot;{row.flagNote}&quot;</span>
+                        )}
+                        {row.flaggedBy && (
+                          <span style={{ color: "#94a3b8" }}> (by {row.flaggedBy})</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

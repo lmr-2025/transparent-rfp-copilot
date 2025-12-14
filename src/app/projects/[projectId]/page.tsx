@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
-import { BulkProject, BulkRow, ProjectCustomerProfileRef } from "@/types/bulkProject";
+import { BulkProject, BulkRow } from "@/types/bulkProject";
 import { fetchProject, updateProject, deleteProject as deleteProjectApi } from "@/lib/projectApi";
 import ConversationalRefinement from "@/components/ConversationalRefinement";
 import { loadSkillsFromApi } from "@/lib/skillStorage";
@@ -26,37 +26,7 @@ import {
 } from "@/lib/excelExport";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { CustomerProfile } from "@/types/customerProfile";
-
-// Helper to render text with clickable URLs
-function renderTextWithLinks(text: string): React.ReactNode {
-  if (!text) return null;
-
-  const urlRegex = /(https?:\/\/[^\s,\n)>\]]+)/gi;
-  const parts = text.split(urlRegex);
-
-  return parts.map((part, index) => {
-    if (urlRegex.test(part)) {
-      // Reset regex lastIndex since we're using it multiple times
-      urlRegex.lastIndex = 0;
-      return (
-        <a
-          key={index}
-          href={part}
-          target="_blank"
-          rel="noopener noreferrer"
-          style={{
-            color: "#2563eb",
-            textDecoration: "underline",
-            wordBreak: "break-all"
-          }}
-        >
-          {part}
-        </a>
-      );
-    }
-    return part;
-  });
-}
+import DomainSelector, { Domain } from "@/components/DomainSelector";
 
 const styles = {
   container: {
@@ -161,6 +131,7 @@ export default function BulkResponsesPage() {
   const [allCustomerProfiles, setAllCustomerProfiles] = useState<CustomerProfile[]>([]);
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [savingCustomers, setSavingCustomers] = useState(false);
+  const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
 
   // Load project by ID on mount
   useEffect(() => {
@@ -337,6 +308,8 @@ export default function BulkResponsesPage() {
           prompt: promptText,
           skills: skillsPayload,
           fallbackContent,
+          mode: "bulk",
+          domains: selectedDomains.length > 0 ? selectedDomains : undefined,
         }),
       });
       const data = await response.json().catch(() => null);
@@ -627,7 +600,7 @@ export default function BulkResponsesPage() {
             <strong>Customers:</strong>{" "}
             {project.customerProfiles && project.customerProfiles.length > 0 ? (
               <span>
-                {project.customerProfiles.map((cp, idx) => (
+                {project.customerProfiles.map((cp) => (
                   <span key={cp.id}>
                     <span style={{
                       display: "inline-block",
@@ -898,9 +871,17 @@ export default function BulkResponsesPage() {
             </div>
           )}
         </div>
+
+        <DomainSelector
+          selectedDomains={selectedDomains}
+          onChange={setSelectedDomains}
+          disabled={isGeneratingAll}
+          style={{ marginTop: "12px" }}
+        />
+
         <div style={{ marginTop: "8px" }}>
-          <a href="/prompts" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
-            Need to edit the prompt? Visit Prompt Home →
+          <a href="/admin/prompt-blocks" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
+            Need to edit the prompt? Visit Prompt Builder →
           </a>
         </div>
       </div>

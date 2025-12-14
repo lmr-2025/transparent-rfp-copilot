@@ -71,7 +71,7 @@ describe("/api/question-history", () => {
 
   it("codex: DELETE clears by user", async () => {
     mockDeleteMany.mockResolvedValue({ count: 1 });
-    const res = await DELETE(makeRequest());
+    const res = await DELETE();
     expect(res.status).toBe(200);
     expect(mockDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } });
   });
