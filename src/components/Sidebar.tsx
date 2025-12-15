@@ -5,17 +5,20 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useBranding } from "@/lib/branding";
+import { features } from "@/lib/featureFlags";
 
 type NavItem = {
   href: string;
   label: string;
   adminOnly?: boolean;
+  featureFlag?: keyof typeof features;
 };
 
 type NavSection = {
   section: string;
   items: NavItem[];
   adminOnly?: boolean;
+  featureFlag?: keyof typeof features;
 };
 
 const navItems: NavSection[] = [
@@ -41,6 +44,7 @@ const navItems: NavSection[] = [
   },
   {
     section: "Oracle",
+    featureFlag: "chat",
     items: [
       { href: "/chat", label: "Chat" },
       { href: "/chat/instruction-presets", label: "Instruction Presets", adminOnly: true },
@@ -48,6 +52,7 @@ const navItems: NavSection[] = [
   },
   {
     section: "Contract Review",
+    featureFlag: "contracts",
     items: [
       { href: "/contracts", label: "Library" },
       { href: "/contracts/upload", label: "Upload" },
@@ -69,10 +74,14 @@ export default function Sidebar() {
   const { branding } = useBranding();
   const isAdmin = session?.user?.role === "ADMIN";
 
-  // Filter nav items based on user role
-  const visibleNavItems = navItems.filter(
-    (section) => !section.adminOnly || isAdmin
-  );
+  // Filter nav items based on user role and feature flags
+  const visibleNavItems = navItems.filter((section) => {
+    // Check admin-only
+    if (section.adminOnly && !isAdmin) return false;
+    // Check feature flag
+    if (section.featureFlag && !features[section.featureFlag]) return false;
+    return true;
+  });
 
   return (
     <aside style={{
@@ -124,7 +133,11 @@ export default function Sidebar() {
               {section.section}
             </div>
             {section.items
-              .filter((item) => !item.adminOnly || isAdmin)
+              .filter((item) => {
+                if (item.adminOnly && !isAdmin) return false;
+                if (item.featureFlag && !features[item.featureFlag]) return false;
+                return true;
+              })
               .map((item) => {
               const isActive = pathname === item.href;
               return (
