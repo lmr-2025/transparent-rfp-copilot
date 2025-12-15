@@ -1,4 +1,5 @@
 import { Skill, SourceUrl, SkillOwner, SkillHistoryEntry } from "@/types/skill";
+import { getApiErrorMessage } from "@/lib/utils";
 
 export const SKILLS_STORAGE_KEY = "grc-minion-skills";
 
@@ -240,7 +241,7 @@ export async function updateSkillViaApi(
   });
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || "Failed to update skill");
+    throw new Error(getApiErrorMessage(errorData, "Failed to update skill"));
   }
   const updated = await response.json();
   const normalized = normalizeSkill(updated);

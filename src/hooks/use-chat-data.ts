@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
+import { getApiErrorMessage } from "@/lib/utils";
 import { Skill } from "@/types/skill";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import { CustomerProfile } from "@/types/customerProfile";
@@ -129,7 +130,7 @@ export function useSendMessage() {
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to get response");
+        throw new Error(getApiErrorMessage(errorData, "Failed to get response"));
       }
 
       return res.json();

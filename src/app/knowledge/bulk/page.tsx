@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
+import { getApiErrorMessage } from "@/lib/utils";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { Check, ChevronDown, ChevronUp, Eye, Edit3, ArrowLeft } from "lucide-react";
@@ -164,7 +165,7 @@ export default function BulkUrlImportPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Analysis failed");
+        throw new Error(getApiErrorMessage(errorData, "Analysis failed"));
       }
 
       const data = await response.json();
@@ -238,7 +239,7 @@ export default function BulkUrlImportPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to build snippet");
+        throw new Error(getApiErrorMessage(errorData, "Failed to build snippet"));
       }
 
       const data = await response.json();
@@ -269,7 +270,7 @@ export default function BulkUrlImportPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save snippet");
+        throw new Error(getApiErrorMessage(errorData, "Failed to save snippet"));
       }
 
       setProcessedResult({ created: 1, updated: 0, skipped: 0, errors: 0 });
@@ -312,7 +313,7 @@ export default function BulkUrlImportPage() {
 
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || "Generation failed");
+            throw new Error(getApiErrorMessage(errorData, "Generation failed"));
           }
 
           const data = await response.json();
@@ -352,7 +353,7 @@ export default function BulkUrlImportPage() {
 
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || "Generation failed");
+            throw new Error(getApiErrorMessage(errorData, "Generation failed"));
           }
 
           const data = await response.json();

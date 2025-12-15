@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Skill } from "@/types/skill";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
+import { getApiErrorMessage } from "@/lib/utils";
 import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
 
 type RFPEntry = {
@@ -251,7 +252,7 @@ export default function ImportRFPPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save snippet");
+        throw new Error(getApiErrorMessage(errorData, "Failed to save snippet"));
       }
 
       setSuccessMessage(`Snippet "${snippetDraft.name}" saved successfully!`);

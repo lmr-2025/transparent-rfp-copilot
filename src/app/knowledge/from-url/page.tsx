@@ -6,6 +6,7 @@ import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkil
 import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { INPUT_LIMITS } from "@/lib/constants";
+import { getApiErrorMessage } from "@/lib/utils";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
@@ -97,7 +98,7 @@ function KnowledgeUploadPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze URLs");
+        throw new Error(getApiErrorMessage(errorData, "Failed to analyze URLs"));
       }
 
       const data = await response.json() as AnalysisResult;
@@ -127,7 +128,7 @@ function KnowledgeUploadPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to build snippet");
+        throw new Error(getApiErrorMessage(errorData, "Failed to build snippet"));
       }
 
       const data = await response.json();
@@ -178,7 +179,7 @@ function KnowledgeUploadPageContent() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to update skill");
+          throw new Error(getApiErrorMessage(errorData, "Failed to update skill"));
         }
 
         const data = await response.json();
@@ -212,7 +213,7 @@ function KnowledgeUploadPageContent() {
 
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || "Failed to build skill");
+          throw new Error(getApiErrorMessage(errorData, "Failed to build skill"));
         }
 
         const data = await response.json();
@@ -348,7 +349,7 @@ function KnowledgeUploadPageContent() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to save snippet");
+        throw new Error(getApiErrorMessage(errorData, "Failed to save snippet"));
       }
 
       setGeneratedSnippetDraft(null);
