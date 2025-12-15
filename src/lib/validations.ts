@@ -53,7 +53,6 @@ export const createSkillSchema = z.object({
   edgeCases: z.array(z.string()).default([]),
   sourceUrls: z.array(sourceUrlItemSchema).default([]),
   isActive: z.boolean().default(true),
-  createdBy: z.string().optional(),
   owners: z.array(skillOwnerSchema).optional(),
   history: z.array(historyEntrySchema).optional(),
 });
@@ -69,7 +68,6 @@ export const updateSkillSchema = z.object({
   edgeCases: z.array(z.string()).optional(),
   sourceUrls: z.array(sourceUrlItemSchema).optional(),
   isActive: z.boolean().optional(),
-  createdBy: z.string().optional(),
   owners: z.array(skillOwnerSchema).optional(),
   history: z.array(historyEntrySchema).optional(),
   lastRefreshedAt: z.string().optional(),

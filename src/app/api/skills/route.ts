@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
         edgeCases: data.edgeCases,
         sourceUrls: data.sourceUrls,
         isActive: data.isActive,
-        createdBy: data.createdBy || auth.session.user.email,
+        createdBy: auth.session.user.email || undefined,
         ownerId: auth.session.user.id,
         owners: data.owners,
         history: data.history || [
