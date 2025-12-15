@@ -246,12 +246,14 @@ async function buildSourceMaterial(sourceText: string, sourceUrls: string[]): Pr
     sections.push(sourceText.trim());
   }
 
-  for (const url of sourceUrls) {
-    const text = await fetchUrlContent(url, { maxLength: 20000 });
-    if (text) {
-      sections.push(`Source: ${url}\n${text}`);
-    }
-  }
+  // Fetch all URLs in parallel for better performance
+  const urlResults = await Promise.all(
+    sourceUrls.map(async (url) => {
+      const text = await fetchUrlContent(url, { maxLength: 20000 });
+      return text ? `Source: ${url}\n${text}` : null;
+    })
+  );
+  sections.push(...urlResults.filter((s): s is string => s !== null));
 
   if (sections.length === 0) {
     throw new Error("Unable to load any content from the provided sources.");

@@ -327,32 +327,35 @@ async function analyzeAndGroupUrls(
 ): Promise<GroupedAnalyzeResponse> {
   const anthropic = getAnthropicClient();
 
-  // Fetch content from all URLs (with limits)
-  const urlContents: { url: string; content: string }[] = [];
-  for (const url of sourceUrls.slice(0, 20)) { // Limit to 20 URLs
+  // Fetch content from all URLs in parallel (with limits)
+  const fetchPromises = sourceUrls.slice(0, 20).map(async (url): Promise<{ url: string; content: string }> => {
     try {
       const ssrfCheck = await validateUrlForSSRF(url);
-      if (!ssrfCheck.valid) continue;
+      if (!ssrfCheck.valid) return { url, content: "[Could not fetch content]" };
 
       const parsed = new URL(url);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        return { url, content: "[Could not fetch content]" };
+      }
 
       const response = await fetch(parsed.toString(), {
         headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
       });
-      if (!response.ok) continue;
+      if (!response.ok) return { url, content: "[Could not fetch content]" };
 
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("text")) continue;
+      if (!contentType.includes("text")) return { url, content: "[Could not fetch content]" };
 
       const text = await response.text();
       // Take first 3000 chars per URL to fit more in context
-      urlContents.push({ url, content: text.slice(0, 3000) });
+      return { url, content: text.slice(0, 3000) };
     } catch {
       // Include URL even if we couldn't fetch it
-      urlContents.push({ url, content: "[Could not fetch content]" });
+      return { url, content: "[Could not fetch content]" };
     }
-  }
+  });
+
+  const urlContents = await Promise.all(fetchPromises);
 
   const skillsSummary = existingSkills.length > 0
     ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || s.categories?.[0] || "Uncategorized"}\n  Preview: ${s.contentPreview.substring(0, 150)}...`).join("\n")

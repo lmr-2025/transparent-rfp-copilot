@@ -348,10 +348,13 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 - Added try-catch with proper error response
 - Added type validation to ensure parsed value is string array
 
-#### ~~26. Sequential URL Fetching in Analyze Route~~ ✅ FIXED
+#### ~~26. Sequential URL Fetching in API Routes~~ ✅ FIXED
 **Fixed:** 2025-12-15
-- Changed `fetchSourceContent()` to use `Promise.all()` for parallel fetching
-- 10 URLs now fetch concurrently instead of sequentially
+- Changed all URL fetching to use `Promise.all()` for parallel fetching:
+  - `/api/skills/analyze` - `fetchSourceContent()` and `analyzeAndGroupUrls()`
+  - `/api/skills/suggest` - `buildSourceMaterial()`
+  - `/api/customers/suggest` - `buildSourceMaterial()`
+  - `/api/context-snippets/suggest` - `buildSourceMaterial()`
 
 #### ~~27. Missing URL Validation on Customer sourceUrls~~ ✅ FIXED
 **Fixed:** 2025-12-15

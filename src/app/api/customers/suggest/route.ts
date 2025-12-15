@@ -289,14 +289,14 @@ Return ONLY the JSON object.`;
 }
 
 async function buildSourceMaterial(sourceUrls: string[], documentContent: string = ""): Promise<string> {
-  const sections: string[] = [];
-
-  for (const url of sourceUrls.slice(0, 10)) {
-    const text = await fetchUrlContent(url);
-    if (text) {
-      sections.push(`Source: ${url}\n${text}`);
-    }
-  }
+  // Fetch all URLs in parallel for better performance
+  const urlResults = await Promise.all(
+    sourceUrls.slice(0, 10).map(async (url) => {
+      const text = await fetchUrlContent(url);
+      return text ? `Source: ${url}\n${text}` : null;
+    })
+  );
+  const sections = urlResults.filter((s): s is string => s !== null);
 
   // Add document content if provided
   if (documentContent) {
