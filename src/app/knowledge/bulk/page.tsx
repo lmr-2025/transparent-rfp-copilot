@@ -1008,6 +1008,24 @@ export default function BulkUrlImportPage() {
                 {/* Preview/Diff Panel */}
                 {previewGroup?.id === group.id && group.draft && (
                   <div style={{ borderTop: "1px solid #e2e8f0", padding: "16px", backgroundColor: "#f8fafc" }}>
+                    {/* Source URLs */}
+                    {group.urls.length > 0 && (
+                      <div style={{ marginBottom: "16px" }}>
+                        <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>
+                          Source URLs:
+                        </div>
+                        <ul style={{ margin: 0, paddingLeft: "20px", fontSize: "13px" }}>
+                          {group.urls.map((url, idx) => (
+                            <li key={idx} style={{ marginBottom: "4px" }}>
+                              <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb", wordBreak: "break-all" }}>
+                                {url}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     {/* Content Diff */}
                     <div>
                       <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>
