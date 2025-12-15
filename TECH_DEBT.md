@@ -116,10 +116,10 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ### 6. Large Components (>1000 lines)
 **Files:**
-- `src/app/admin/settings/page.tsx` (1,316 lines)
-- `src/app/knowledge/bulk/page.tsx` (1,283 lines)
+- `src/app/admin/settings/page.tsx` (1,316 lines) - already has extracted tab components
+- ~~`src/app/knowledge/bulk/page.tsx` (1,283 lines)~~ ✅ State extracted to Zustand store
 - `src/app/chat/components/ChatSidebar.tsx` (1,236 lines)
-- `src/app/chat/page.tsx` (1,170 lines)
+- ~~`src/app/chat/page.tsx` (1,170 lines)~~ ✅ Already refactored - only 470 lines, uses Zustand stores
 
 **Risk:** Unmaintainable, hard to test, slow IDE
 **Fix:** Extract sub-components to separate files
@@ -131,11 +131,14 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Create shared component library with Tailwind or CSS modules
 **Effort:** High (incremental)
 
-### 8. 30+ useState Hooks in Chat Page
-**File:** `src/app/chat/page.tsx` (lines 49-86)
-**Risk:** Prop drilling hell, hard to track state dependencies
-**Fix:** Use Zustand or React Context for state management
-**Effort:** High
+### ~~8. 30+ useState Hooks in Chat Page~~ ✅ FIXED
+**Status:** Reviewed 2025-12-15 - Chat page already refactored! Only 4 useState hooks remain (for modals). State management uses:
+- `useChatStore` (Zustand) for messages, loading, sidebar state
+- `useSelectionStore` (Zustand) for knowledge item selection
+- React Query for data fetching
+
+**Also Fixed:**
+- `src/app/knowledge/bulk/page.tsx` - Extracted 10 useState hooks to `src/stores/bulk-import-store.ts`
 
 ### 9. No Pagination in Library Views (Deferred)
 **File:** `src/app/knowledge/page.tsx`

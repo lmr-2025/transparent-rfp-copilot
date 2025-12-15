@@ -141,4 +141,57 @@ src/lib/validations.ts - (read, not modified)
 
 ---
 
+## Session: 2025-12-15 - Bulk Import State Management Refactor
+
+### Summary
+Refactored the bulk import page (`/knowledge/bulk`) to extract state management into a Zustand store, addressing tech debt items #6 (Large Components) and #8 (30+ useState Hooks).
+
+### Investigation Findings
+
+Before implementing, explored the codebase and found:
+- **Chat page** - Already well-refactored! Only 470 lines, 4 useState (modals only), uses `useChatStore` and `useSelectionStore` Zustand stores
+- **Admin settings page** - Already has extracted tab components, lower priority
+- **Bulk import page** - Main target: 1,284 lines, 10 useState hooks, monolithic
+
+### Changes Made
+
+**New File: `src/stores/bulk-import-store.ts`**
+- Types: `WorkflowStep`, `SkillGroup`, `DraftContent`, `ProcessedResult`, `SnippetDraft`, `BuildType`
+- State: workflow step, URL input, skill groups, snippet draft, error message, UI state (expanded groups, preview, editing)
+- Actions: `setWorkflowStep`, `updateSkillGroup`, `toggleGroupApproval`, `approveAll`, `approveAllDrafts`, `moveUrl`, `createNewGroupFromUrl`, `reset`
+- Selector: `useBulkImportCounts()` for computed counts
+
+**Modified: `src/app/knowledge/bulk/page.tsx`**
+- Replaced 10 useState hooks with `useBulkImportStore()`
+- Changed state updates from `setSkillGroups(prev => prev.map(...))` to `updateSkillGroup(id, updates)`
+- Removed ~100 lines of UI helper functions (now in store)
+- Removed unused state (`isBuilding`, `pendingMoveToNew`)
+
+### Commits Made
+
+1. `3a5cd214` - Refactor: Extract bulk import state to Zustand store
+
+### Tech Debt Updated
+
+- Item #6 (Large Components): Marked chat page and bulk page as done
+- Item #8 (30+ useState): Marked as fixed with details on existing Zustand patterns
+
+### Architecture Notes
+
+The project now has 3 Zustand stores:
+| Store | File | Purpose |
+|-------|------|---------|
+| `useChatStore` | `src/stores/chat-store.ts` | Chat messages, loading, sidebar state |
+| `useSelectionStore` | `src/stores/selection-store.ts` | Knowledge item selection |
+| `useBulkImportStore` | `src/stores/bulk-import-store.ts` | Bulk import workflow state |
+
+Pattern to follow for future state extraction:
+1. Create store file with types + initial state
+2. Add actions for state transitions
+3. Add selector hooks for computed values
+4. Update component to use store
+5. Remove old useState hooks
+
+---
+
 *Add new session entries above this line*
