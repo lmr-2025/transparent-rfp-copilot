@@ -29,6 +29,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
             },
           },
         },
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
       },
     });
 

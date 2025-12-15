@@ -75,6 +75,11 @@ export async function GET(request: NextRequest) {
       },
       take: limit,
       skip: offset,
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
 
     return apiSuccess({ profiles });
