@@ -4,6 +4,8 @@ import { useState } from "react";
 import { SkillCategoryItem } from "@/types/skill";
 import { SkillDraft } from "../types";
 import { styles } from "../styles";
+import SkillDiffModal from "@/components/SkillDiffModal";
+import { GitCompare } from "lucide-react";
 
 interface SkillDraftReviewProps {
   draft: SkillDraft;
@@ -23,6 +25,7 @@ export default function SkillDraftReview({
   onCancel,
 }: SkillDraftReviewProps) {
   const [showOriginal, setShowOriginal] = useState(false);
+  const [showDiffModal, setShowDiffModal] = useState(false);
   const isUpdate = draft._isUpdate;
 
   return (
@@ -114,20 +117,41 @@ export default function SkillDraftReview({
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
           <strong>Content:</strong>
           {isUpdate && draft._originalContent && (
-            <button
-              onClick={() => setShowOriginal(!showOriginal)}
-              style={{
-                padding: "4px 10px",
-                backgroundColor: showOriginal ? "#e2e8f0" : "#fff",
-                color: "#475569",
-                border: "1px solid #cbd5e1",
-                borderRadius: "4px",
-                fontSize: "12px",
-                cursor: "pointer",
-              }}
-            >
-              {showOriginal ? "Show Updated" : "Show Original"}
-            </button>
+            <div style={{ display: "flex", gap: "8px" }}>
+              <button
+                onClick={() => setShowDiffModal(true)}
+                style={{
+                  padding: "4px 10px",
+                  backgroundColor: "#3b82f6",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  fontWeight: 500,
+                }}
+              >
+                <GitCompare size={14} />
+                View Diff
+              </button>
+              <button
+                onClick={() => setShowOriginal(!showOriginal)}
+                style={{
+                  padding: "4px 10px",
+                  backgroundColor: showOriginal ? "#e2e8f0" : "#fff",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  cursor: "pointer",
+                }}
+              >
+                {showOriginal ? "Show Updated" : "Show Original"}
+              </button>
+            </div>
           )}
         </div>
         <pre style={{
@@ -142,6 +166,27 @@ export default function SkillDraftReview({
           {showOriginal && draft._originalContent ? draft._originalContent : draft.content}
         </pre>
       </div>
+
+      {/* Diff Modal */}
+      {isUpdate && draft._originalContent && (
+        <SkillDiffModal
+          isOpen={showDiffModal}
+          onClose={() => setShowDiffModal(false)}
+          onAccept={() => {
+            setShowDiffModal(false);
+            onSave();
+          }}
+          onReject={() => {
+            setShowDiffModal(false);
+            onCancel();
+          }}
+          skillTitle={draft._originalTitle || draft.title}
+          originalContent={draft._originalContent}
+          updatedContent={draft.content}
+          changeSummary={draft._changeSummary}
+          changeHighlights={draft._changeHighlights}
+        />
+      )}
       {draft.sourceMapping && draft.sourceMapping.length > 0 && (
         <div style={{ marginBottom: "16px" }}>
           <strong>Sources:</strong>

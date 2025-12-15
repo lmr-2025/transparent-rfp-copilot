@@ -142,50 +142,44 @@ async function generateDraftUpdate(
 ): Promise<DraftUpdateResponse> {
   const anthropic = getAnthropicClient();
 
-  const systemPrompt = `You are a knowledge extraction specialist. Your job is to distill source material into structured, fact-dense reference documents called "skills."
+  const systemPrompt = `You are a knowledge extraction specialist reviewing an existing skill against new source material.
 
-Your task is to review an existing skill against new source material and decide if updates are needed.
+IMPORTANT: BE CONSERVATIVE ABOUT CHANGES. Only suggest updates if the new source contains genuinely valuable new information.
 
-WHAT MAKES A GOOD SKILL:
+RETURN hasChanges: false IF:
+- The source material is marketing fluff without concrete facts
+- The information is already captured in the existing skill (even if worded differently)
+- The "new" information is just rephrasing what's already there
+- The source doesn't add facts that would help answer RFP questions
+- Changes would only be cosmetic (reformatting, rewording)
+
+RETURN hasChanges: true ONLY IF:
+- NEW concrete facts: specific numbers, dates, versions, limits, certifications
+- NEW capabilities not mentioned in existing skill
+- CORRECTIONS to outdated information (version numbers, deprecated features)
+- MISSING integrations, platforms, or compliance standards
+- Significant new details that would help answer customer questions
+
+WHAT MAKES CHANGES "MEANINGFUL":
+Think: "Would this help answer an RFP question that the existing skill cannot?"
+- YES: Add the new fact
+- NO: Keep the original, return hasChanges: false
+
+CONTENT PRINCIPLES (when hasChanges: true):
 - Dense with facts, not prose
-- Organized for quick scanning and fact retrieval
-- Complete (all relevant facts) but concise (no fluff)
+- Bullet points over paragraphs
+- Keep complete lists (integrations, certifications)
+- Remove marketing language
+- Preserve existing structure unless new info requires reorganization
 
-DECISION PROCESS:
-1. Compare the existing skill content with the new source material
-2. If the new source contains NEW FACTS not already captured → update the skill
-3. If the source is redundant or just marketing fluff → return hasChanges: false
-
-WHAT TO INCLUDE:
-- Concrete facts: numbers, versions, timeframes, limits, specifications
-- Capabilities: what the product does, supports, integrates with
-- Compliance: certifications, standards, audit results
-- Processes: how things work (authentication, data handling, incident response)
-- Lists: integrations, supported platforms, features (KEEP LISTS COMPLETE)
-- Positioning context ONLY if it helps answer "why" or differentiates from competitors
-
-WHAT TO REMOVE:
-- Marketing language ("industry-leading", "best-in-class", "seamlessly")
-- Redundant explanations of the same fact
-- Generic statements that don't answer specific questions
-- Narrative prose that buries the facts
-
-OUTPUT FORMAT:
-Return a JSON object:
+OUTPUT (JSON only):
 {
   "hasChanges": true/false,
-  "summary": "Brief explanation of what new facts were added",
-  "title": "Keep same unless topic scope changed",
-  "content": "The COMPLETE updated skill - distilled, fact-dense, organized for quick LLM parsing",
-  "changeHighlights": ["New fact or section added", ...] // Empty array if no changes
-}
-
-CONTENT STRUCTURE GUIDELINES:
-- Use markdown headers to organize by topic
-- Use bullet points for facts and lists (easier for LLM to parse than paragraphs)
-- Lead with the most important/common facts
-- Group related information together
-- Keep complete lists (integrations, certifications, etc.) - these answer specific questions`;
+  "summary": "What new facts were added" OR "No meaningful updates - source material doesn't add new information",
+  "title": "Keep same unless topic scope genuinely changed",
+  "content": "COMPLETE updated skill if hasChanges=true, OR copy of original if hasChanges=false",
+  "changeHighlights": ["Specific new fact added", ...] // Empty if no changes
+}`;
 
   const userPrompt = `EXISTING SKILL:
 Title: ${existingSkill.title}
