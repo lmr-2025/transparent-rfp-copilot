@@ -187,11 +187,12 @@ export default function SkillDraftReview({
           changeHighlights={draft._changeHighlights}
         />
       )}
-      {draft.sourceMapping && draft.sourceMapping.length > 0 && (
+      {/* Display source URLs - check both _sourceUrls and sourceMapping for compatibility */}
+      {((draft._sourceUrls && draft._sourceUrls.length > 0) || (draft.sourceMapping && draft.sourceMapping.length > 0)) && (
         <div style={{ marginBottom: "16px" }}>
           <strong>Sources:</strong>
           <ul style={{ margin: "4px 0 0 20px", fontSize: "13px" }}>
-            {draft.sourceMapping.map((url, index) => (
+            {(draft._sourceUrls || draft.sourceMapping || []).map((url, index) => (
               <li key={index} style={{ marginBottom: "4px" }}>
                 <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
                   {url}
