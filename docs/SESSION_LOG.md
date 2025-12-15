@@ -194,4 +194,61 @@ Pattern to follow for future state extraction:
 
 ---
 
+## Session: 2025-12-15 - Component Extraction & API Standardization
+
+### Summary
+Continued tech debt work: extracted reusable components and standardized API response patterns.
+
+### Component Extraction
+
+**New File: `src/app/chat/components/knowledge-source-list.tsx`** (114 lines)
+- Extracted from `knowledge-sidebar.tsx` to consolidate 4 nearly-identical sections
+- Reusable list component for knowledge source selection (skills, documents, URLs, customers)
+- Props: title, icon, items, selections, onToggle, onSelectAll, onSelectNone, emptyMessage
+
+**Modified: `src/app/chat/components/knowledge-sidebar.tsx`** (487→288 lines)
+- Reduced from 487 to 288 lines (40% reduction)
+- Now uses `KnowledgeSourceList` for all 4 knowledge types
+- DRY pattern for future knowledge source additions
+
+### API Response Standardization
+
+Migrated key routes to use `apiSuccess()` and `errors.*()` helpers:
+
+| Route | Methods | Changes |
+|-------|---------|---------|
+| `/api/reference-urls` | GET, POST, PUT | `apiSuccess()`, `errors.validation()`, `errors.internal()` |
+| `/api/documents` | GET, POST | `apiSuccess()`, `errors.badRequest()`, `errors.internal()` |
+| `/api/documents/[id]` | GET, DELETE, PATCH | `apiSuccess()`, `errors.notFound()`, `errors.internal()` |
+| `/api/customers` | GET, POST | `apiSuccess()`, `errors.validation()`, `errors.internal()` |
+
+### Tech Debt Documentation Fix
+
+- Fixed TECH_DEBT.md: ChatSidebar.tsx (1,236 lines) entry was outdated
+- Actual file is knowledge-sidebar.tsx at 288 lines (after refactor)
+- Chat page already well-structured with Zustand stores
+
+### Commits Made
+
+1. `1832a45d` - Refactor: Extract KnowledgeSourceList from knowledge-sidebar
+2. `ec54aec8` - Refactor: Migrate API routes to apiSuccess() pattern
+
+### Files Created/Modified
+
+```
+src/app/chat/components/knowledge-source-list.tsx (NEW)
+src/app/chat/components/knowledge-sidebar.tsx (MODIFIED - reduced 40%)
+src/app/api/reference-urls/route.ts (MODIFIED)
+src/app/api/documents/route.ts (MODIFIED)
+src/app/api/documents/[id]/route.ts (MODIFIED)
+src/app/api/customers/route.ts (MODIFIED)
+TECH_DEBT.md (MODIFIED - fixed outdated entries)
+```
+
+### Remaining API Routes
+
+48 routes still use `NextResponse.json()` directly. Can be migrated incrementally. Priority routes (documents, customers, reference-urls) now use standard pattern.
+
+---
+
 *Add new session entries above this line*
