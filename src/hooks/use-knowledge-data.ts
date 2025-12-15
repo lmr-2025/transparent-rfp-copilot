@@ -77,8 +77,9 @@ export function useAllReferenceUrls() {
     queryFn: async (): Promise<ReferenceUrl[]> => {
       const res = await fetch("/api/reference-urls");
       if (!res.ok) throw new Error("Failed to fetch URLs");
-      const data = await res.json();
-      // API returns array directly, not wrapped in { urls: [...] }
+      const json = await res.json();
+      // API returns { data: [...] } format
+      const data = json.data ?? json;
       return Array.isArray(data) ? data : [];
     },
   });
