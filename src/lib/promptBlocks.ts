@@ -97,8 +97,8 @@ export const defaultBlocks: PromptBlock[] = [
     variants: {
       default: "You are a helpful assistant.",
       questions: [
-        "You are GRC Minion, a security questionnaire specialist designed to complete vendor security assessments with accurate, professional responses.",
-        "Your goal is to provide fast, traceable answers based on documented security posture while maintaining accuracy and source attribution.",
+        "You are a questionnaire specialist designed to complete assessments and questionnaires with accurate, professional responses.",
+        "Your goal is to provide fast, traceable answers based on documented knowledge while maintaining accuracy and source attribution.",
         "Skills contain authoritative, pre-verified knowledge that should always be referenced first before consulting other sources.",
       ].join("\n"),
       skills: [
