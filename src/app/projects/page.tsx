@@ -7,7 +7,6 @@ import { toast } from "sonner";
 import { Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { usePrompt } from "@/components/ConfirmModal";
 import {
   useProjects,
   useUpdateProject,
@@ -40,13 +39,6 @@ function ProjectsListContent() {
   const { data: projects = [], isLoading, error } = useProjects();
   const updateProjectMutation = useUpdateProject();
 
-  // Prompt for reviewer name
-  const { prompt: promptForReviewerName, PromptDialog } = usePrompt({
-    title: "Enter Your Name",
-    message: "Enter your name to approve this project",
-    placeholder: "Your name",
-    submitLabel: "Approve",
-  });
 
   // Calculate filter counts
   const filterCounts = useMemo(() => calculateFilterCounts(projects), [projects]);
@@ -74,11 +66,8 @@ function ProjectsListContent() {
 
   // Handlers
   const handleApprove = async (project: BulkProject) => {
-    let reviewerName = session?.user?.name;
-    if (!reviewerName) {
-      reviewerName = await promptForReviewerName();
-      if (!reviewerName) return;
-    }
+    // Use session user's name or email for attribution
+    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
 
     setApprovingId(project.id);
     try {
@@ -86,7 +75,7 @@ function ProjectsListContent() {
         ...project,
         status: "approved",
         reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewerName.trim(),
+        reviewedBy: reviewerName,
       });
       toast.success("Project approved");
     } catch {
@@ -98,7 +87,6 @@ function ProjectsListContent() {
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <PromptDialog />
 
       {/* Header */}
       <div className="flex justify-between items-start mb-8">

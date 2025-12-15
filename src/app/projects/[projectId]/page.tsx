@@ -140,11 +140,6 @@ export default function BulkResponsesPage() {
     confirmLabel: "Delete",
     variant: "danger",
   });
-  const { prompt: promptForName, PromptDialog: NamePromptDialog } = usePrompt({
-    title: "Enter Your Name",
-    placeholder: "Your name",
-    submitLabel: "Continue",
-  });
   const { prompt: promptForNote, PromptDialog: NotePromptDialog } = usePrompt({
     title: "Flag for Review",
     message: "Add a note for the reviewer (optional)",
@@ -418,12 +413,8 @@ export default function BulkResponsesPage() {
   const handleRequestReview = async () => {
     if (!project) return;
 
-    // Use session user name, or prompt via modal if not signed in
-    let requesterName = session?.user?.name;
-    if (!requesterName) {
-      requesterName = await promptForName({ message: "Enter your name to request a review" });
-      if (!requesterName) return;
-    }
+    // Use session user's name or email for attribution
+    const requesterName = session?.user?.name || session?.user?.email || "Unknown User";
 
     setIsRequestingReview(true);
     try {
@@ -431,7 +422,7 @@ export default function BulkResponsesPage() {
         ...project,
         status: "needs_review" as const,
         reviewRequestedAt: new Date().toISOString(),
-        reviewRequestedBy: requesterName.trim(),
+        reviewRequestedBy: requesterName,
       };
       await updateProject(updatedProject);
       setProject(updatedProject);
@@ -446,7 +437,7 @@ export default function BulkResponsesPage() {
             projectName: project.name,
             projectUrl,
             customerName: project.customerName,
-            requesterName: requesterName.trim(),
+            requesterName,
           }),
         });
 
@@ -473,12 +464,8 @@ export default function BulkResponsesPage() {
   const handleApprove = async () => {
     if (!project) return;
 
-    // Use session user name, or prompt via modal if not signed in
-    let reviewerName = session?.user?.name;
-    if (!reviewerName) {
-      reviewerName = await promptForName({ message: "Enter your name to approve this project" });
-      if (!reviewerName) return;
-    }
+    // Use session user's name or email for attribution
+    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
 
     setIsApproving(true);
     try {
@@ -486,7 +473,7 @@ export default function BulkResponsesPage() {
         ...project,
         status: "approved" as const,
         reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewerName.trim(),
+        reviewedBy: reviewerName,
       };
       await updateProject(updatedProject);
       setProject(updatedProject);
@@ -553,7 +540,6 @@ export default function BulkResponsesPage() {
   return (
     <div style={styles.container}>
       <ConfirmDialog />
-      <NamePromptDialog />
       <NotePromptDialog />
       <div style={{ marginBottom: "16px" }}>
         <Link href="/projects/" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
@@ -967,7 +953,7 @@ export default function BulkResponsesPage() {
                       // Flag for review - prompt for optional note
                       const note = await promptForNote();
                       // note is null if cancelled, empty string if skipped
-                      const userName = session?.user?.name || "Anonymous";
+                      const userName = session?.user?.name || session?.user?.email || "Unknown User";
                       updateRow(row.id, {
                         flaggedForReview: true,
                         flaggedAt: new Date().toISOString(),
