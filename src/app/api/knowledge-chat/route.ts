@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Build knowledge base context from skills
     const knowledgeContext = skills.length > 0
       ? skills.map((skill, idx) =>
-          `=== SKILL ${idx + 1}: ${skill.title} ===\nTags: ${skill.tags.join(", ") || "none"}\n\n${skill.content}`
+          `=== SKILL ${idx + 1}: ${skill.title} ===\n\n${skill.content}`
         ).join("\n\n---\n\n")
       : "";
 
@@ -199,11 +199,10 @@ ${keyFactsText}`;
       },
     });
 
-    // Determine which skills were likely used (simple heuristic: check if skill title/tag is mentioned in response)
+    // Determine which skills were likely used (simple heuristic: check if skill title is mentioned in response)
     const skillsUsed = skills
       .filter(skill =>
-        content.text.toLowerCase().includes(skill.title.toLowerCase()) ||
-        skill.tags.some(tag => content.text.toLowerCase().includes(tag.toLowerCase()))
+        content.text.toLowerCase().includes(skill.title.toLowerCase())
       )
       .map(skill => ({ id: skill.id, title: skill.title }));
 

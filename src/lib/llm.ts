@@ -11,7 +11,6 @@ export type UsageInfo = {
 
 export type SkillDraft = {
   title: string;
-  tags: string[];
   content: string;
   sourceMapping?: string[];
   usage?: UsageInfo;
@@ -91,7 +90,7 @@ export type FallbackContent = {
 export async function answerQuestionWithPrompt(
   question: string,
   promptText = defaultQuestionPrompt,
-  skills?: { title: string; content: string; tags: string[] }[],
+  skills?: { title: string; content: string }[],
   fallbackContent?: FallbackContent[],
 ): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
@@ -116,12 +115,9 @@ export async function answerQuestionWithPrompt(
     const skillBlocks = skills.map((skill, index) => {
       return [
         `### Skill ${index + 1}: ${skill.title}`,
-        skill.tags.length > 0 ? `Tags: ${skill.tags.join(", ")}` : "",
         "",
         skill.content,
-      ]
-        .filter(Boolean)
-        .join("\n");
+      ].join("\n");
     });
 
     skillsContext = [
@@ -281,7 +277,6 @@ function normalizeSkillDraft(data: unknown): SkillDraft {
   const dataObj = data as Record<string, unknown>;
   const missingFields: string[] = [];
   if (!("title" in dataObj)) missingFields.push("title");
-  if (!("tags" in dataObj)) missingFields.push("tags");
   if (!("content" in dataObj)) missingFields.push("content");
 
   if (missingFields.length > 0) {
@@ -292,7 +287,7 @@ function normalizeSkillDraft(data: unknown): SkillDraft {
     );
   }
 
-  const { title, tags, content } = data as Record<string, unknown>;
+  const { title, content } = data as Record<string, unknown>;
 
   if (title == null || content == null) {
     throw new Error("Skill title and content must be strings.");
@@ -308,13 +303,8 @@ function normalizeSkillDraft(data: unknown): SkillDraft {
 
   const sourceMappingFromRoot = parseStringArray(rawSourceMapping);
 
-  const tagList = Array.isArray(tags)
-    ? tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
-    : [];
-
   return {
     title: titleValue.trim(),
-    tags: tagList,
     content: contentValue.trim(),
     sourceMapping: sourceMappingFromRoot.length > 0 ? sourceMappingFromRoot : undefined,
   };

@@ -88,7 +88,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (data.title !== undefined) updateData.title = data.title;
     if (data.content !== undefined) updateData.content = data.content;
     if (data.categories !== undefined) updateData.categories = data.categories;
-    if (data.tags !== undefined) updateData.tags = data.tags;
     if (data.quickFacts !== undefined) updateData.quickFacts = data.quickFacts;
     if (data.edgeCases !== undefined) updateData.edgeCases = data.edgeCases;
     if (data.sourceUrls !== undefined) updateData.sourceUrls = data.sourceUrls;
@@ -116,7 +115,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       skill as unknown as Record<string, unknown>,
-      ["title", "content", "categories", "tags", "quickFacts", "edgeCases", "sourceUrls", "isActive", "owners"]
+      ["title", "content", "categories", "quickFacts", "edgeCases", "sourceUrls", "isActive", "owners"]
     );
 
     // Audit log

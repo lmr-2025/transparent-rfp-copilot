@@ -186,16 +186,16 @@ export const selectRelevantSkills = (question: string, allSkills: Skill[]): Skil
   // Score each skill based on keyword matches
   const scoredSkills = activeSkills.map((skill) => {
     let score = 0;
-    const skillText = `${skill.title} ${skill.tags.join(" ")} ${skill.content}`.toLowerCase();
+    const skillText = `${skill.title} ${skill.content}`.toLowerCase();
 
     // Title matches are worth more
     if (skill.title.toLowerCase().split(/\s+/).some((word) => questionWords.includes(word))) {
       score += 10;
     }
 
-    // Tag matches
-    skill.tags.forEach((tag) => {
-      if (questionLower.includes(tag.toLowerCase())) {
+    // Category matches
+    skill.categories?.forEach((cat) => {
+      if (questionLower.includes(cat.toLowerCase())) {
         score += 5;
       }
     });

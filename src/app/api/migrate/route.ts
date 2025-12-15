@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
               title: skill.title,
               content: skill.content || "",
               categories: skill.categories || (skill.category ? [skill.category] : []),
-              tags: skill.tags || [],
               quickFacts: skill.quickFacts || [],
               edgeCases: skill.edgeCases || [],
               sourceUrls: skill.sourceUrls || [],

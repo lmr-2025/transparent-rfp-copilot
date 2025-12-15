@@ -111,8 +111,7 @@ function KnowledgeLibraryContent() {
         (item) =>
           item.title.toLowerCase().includes(query) ||
           item.subtitle?.toLowerCase().includes(query) ||
-          item.content?.toLowerCase().includes(query) ||
-          item.tags?.some((tag) => tag.toLowerCase().includes(query))
+          item.content?.toLowerCase().includes(query)
       );
     }
 

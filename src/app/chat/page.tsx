@@ -103,7 +103,7 @@ export default function ChatPageV2() {
     const selectedSkills = skills.filter((s) => selectedSkillIds.includes(s.id));
     const knowledgeContext = selectedSkills.length > 0
       ? selectedSkills.map((skill, idx) =>
-          `=== SKILL ${idx + 1}: ${skill.title} ===\nTags: ${skill.tags.join(", ") || "none"}\n\n${skill.content}`
+          `=== SKILL ${idx + 1}: ${skill.title} ===\n\n${skill.content}`
         ).join("\n\n---\n\n")
       : "";
 
@@ -190,7 +190,6 @@ ${keyFactsText}`;
           id: s.id,
           title: s.title,
           content: s.content,
-          tags: s.tags,
         }));
 
       const selectedCustomers = customers

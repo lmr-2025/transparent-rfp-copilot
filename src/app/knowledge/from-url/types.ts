@@ -7,7 +7,6 @@ export type UploadStatus = {
 
 export type SkillDraft = {
   title: string;
-  tags: string[];
   content: string;
   sourceMapping?: string[];
   // Store source URLs directly in the draft so they survive any re-renders
@@ -38,7 +37,6 @@ export type SkillSuggestion = {
   existingSkillTitle?: string;
   suggestedTitle?: string;
   suggestedCategory?: string;
-  suggestedTags?: string[];
   splitSuggestions?: SplitSuggestion[];
   reason: string;
 };

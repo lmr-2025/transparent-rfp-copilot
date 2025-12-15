@@ -97,7 +97,6 @@ export async function POST(request: NextRequest) {
         title: data.title,
         content: data.content,
         categories: data.categories,
-        tags: data.tags,
         quickFacts: data.quickFacts,
         edgeCases: data.edgeCases,
         sourceUrls: data.sourceUrls,
@@ -123,7 +122,7 @@ export async function POST(request: NextRequest) {
       skill.title,
       getUserFromSession(auth.session),
       undefined,
-      { categories: data.categories, tags: data.tags }
+      { categories: data.categories }
     );
 
     return NextResponse.json(skill, { status: 201 });

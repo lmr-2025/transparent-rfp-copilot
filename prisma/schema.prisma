@@ -211,7 +211,6 @@ model Skill {
   title           String
   content         String   @db.Text
   categories      String[] // Broad capability areas
-  tags            String[]
   quickFacts      Json?    // Array of {question, answer}
   edgeCases       String[]
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}

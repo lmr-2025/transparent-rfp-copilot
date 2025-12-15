@@ -279,7 +279,6 @@ export default function BulkResponsesPage() {
       const skillsPayload = relevantSkills.map((skill) => ({
         title: skill.title,
         content: skill.content,
-        tags: skill.tags,
       }));
 
       // If no skills match, fetch reference URLs and documents as fallback

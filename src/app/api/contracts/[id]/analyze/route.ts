@@ -69,7 +69,6 @@ export async function POST(
         title: true,
         content: true,
         categories: true,
-        tags: true,
       },
     });
 

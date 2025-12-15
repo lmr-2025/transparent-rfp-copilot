@@ -64,7 +64,6 @@ export type Skill = {
   title: string;
   categories?: string[]; // Broad capability areas this skill belongs to (can be multiple)
   category?: SkillCategory; // Deprecated - use categories[] instead
-  tags: string[];
   content: string;
   quickFacts: SkillFact[];
   edgeCases: string[];

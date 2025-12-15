@@ -19,7 +19,6 @@ type SuggestRequestBody = {
   existingSkill?: {
     title: string;
     content: string;
-    tags: string[];
   };
 };
 
@@ -28,7 +27,6 @@ type DraftUpdateResponse = {
   hasChanges: boolean;
   summary: string; // What changed or "No updates needed"
   title: string;
-  tags: string[];
   content: string; // Complete updated content (or original if no changes)
   changeHighlights: string[]; // Brief bullets about what changed
 };
@@ -137,7 +135,7 @@ export async function POST(request: NextRequest) {
 
 // Generate updated draft by comparing existing skill with new source material
 async function generateDraftUpdate(
-  existingSkill: { title: string; content: string; tags: string[] },
+  existingSkill: { title: string; content: string },
   newSourceContent: string,
   sourceUrls: string[],
   authSession: { user?: { id?: string; email?: string | null } } | null
@@ -170,7 +168,6 @@ Return a JSON object:
   "hasChanges": true/false,
   "summary": "Brief explanation of what changed OR 'No significant updates - the source material is already reflected in the current skill'",
   "title": "Keep same unless topic scope changed",
-  "tags": ["existing tags", "plus any new relevant ones"],
   "content": "If hasChanges=true: the COMPLETE updated skill content with changes integrated. If hasChanges=false: return the original content unchanged.",
   "changeHighlights": ["Bullet point 1 describing a change", "Bullet point 2", ...] // Empty array if no changes
 }
@@ -184,7 +181,6 @@ IMPORTANT GUIDELINES:
 
   const userPrompt = `EXISTING SKILL:
 Title: ${existingSkill.title}
-Tags: ${existingSkill.tags.join(", ")}
 
 Current Content:
 ${existingSkill.content}
@@ -259,7 +255,7 @@ function formatInitialMessage(sourceText: string): string {
     "Source material:",
     sourceText.trim(),
     "",
-    "Return a SINGLE JSON object (not an array) with: { \"title\": \"...\", \"tags\": [...], \"content\": \"...\" }",
+    "Return a SINGLE JSON object (not an array) with: { \"title\": \"...\", \"content\": \"...\" }",
   ].join("\n");
 }
 

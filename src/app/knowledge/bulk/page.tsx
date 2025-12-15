@@ -14,7 +14,6 @@ import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 type DraftContent = {
   title: string;
   content: string;
-  tags: string[];
   hasChanges?: boolean;
   changeHighlights?: string[];
 };
@@ -96,7 +95,7 @@ export default function BulkUrlImportPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [previewGroup, setPreviewGroup] = useState<SkillGroup | null>(null);
-  const [editingDraft, setEditingDraft] = useState<{ groupId: string; field: "title" | "content" | "tags" } | null>(null);
+  const [editingDraft, setEditingDraft] = useState<{ groupId: string; field: "title" | "content" } | null>(null);
 
   // Build type selector
   const [buildType, setBuildType] = useState<BuildType>("skill");
@@ -165,7 +164,6 @@ export default function BulkUrlImportPage() {
       const existingSkillsInfo = skills.map(s => ({
         id: s.id,
         title: s.title,
-        tags: s.tags,
         contentPreview: s.content.substring(0, 500),
         sourceUrls: s.sourceUrls?.map(u => u.url) || [],
       }));
@@ -210,7 +208,6 @@ export default function BulkUrlImportPage() {
             // Store original for diff comparison
             originalContent: existingSkill?.content,
             originalTitle: existingSkill?.title,
-            originalTags: existingSkill?.tags,
           };
         });
         setSkillGroups(groups);
@@ -330,7 +327,6 @@ export default function BulkUrlImportPage() {
               existingSkill: {
                 title: existingSkill.title,
                 content: existingSkill.content,
-                tags: existingSkill.tags,
               },
             }),
           });
@@ -350,13 +346,11 @@ export default function BulkUrlImportPage() {
                 draft: {
                   title: data.draft.title || existingSkill.title,
                   content: data.draft.content,
-                  tags: [...new Set([...existingSkill.tags, ...(data.draft.tags || [])])],
                   hasChanges: data.draft.hasChanges,
                   changeHighlights: data.draft.changeHighlights,
                 },
                 originalContent: existingSkill.content,
                 originalTitle: existingSkill.title,
-                originalTags: existingSkill.tags,
               } : g
             ));
           } else {
@@ -368,7 +362,6 @@ export default function BulkUrlImportPage() {
                 draft: {
                   title: existingSkill.title,
                   content: existingSkill.content,
-                  tags: existingSkill.tags,
                   hasChanges: false,
                 },
               } : g
@@ -399,7 +392,6 @@ export default function BulkUrlImportPage() {
               draft: {
                 title: draft.title || group.skillTitle,
                 content: draft.content,
-                tags: draft.tags || [],
                 hasChanges: true,
               },
             } : g
@@ -459,7 +451,6 @@ export default function BulkUrlImportPage() {
           const updates = {
             title: group.draft!.title,
             content: group.draft!.content,
-            tags: group.draft!.tags,
             sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
             lastRefreshedAt: now,
             history: [
@@ -491,7 +482,6 @@ export default function BulkUrlImportPage() {
 
           const skillData = {
             title: group.draft!.title,
-            tags: group.draft!.tags,
             content: group.draft!.content,
             quickFacts: [] as { question: string; answer: string }[],
             edgeCases: [] as string[],
@@ -571,7 +561,7 @@ export default function BulkUrlImportPage() {
     ));
   };
 
-  const updateDraftField = (groupId: string, field: "title" | "content" | "tags", value: string | string[]) => {
+  const updateDraftField = (groupId: string, field: "title" | "content", value: string) => {
     setSkillGroups(prev => prev.map(g => {
       if (g.id === groupId && g.draft) {
         return {
@@ -1172,16 +1162,6 @@ export default function BulkUrlImportPage() {
                 {/* Preview/Diff Panel */}
                 {previewGroup?.id === group.id && group.draft && (
                   <div style={{ borderTop: "1px solid #e2e8f0", padding: "16px", backgroundColor: "#f8fafc" }}>
-                    {/* Tags */}
-                    <div style={{ marginBottom: "16px" }}>
-                      <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>Tags:</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                        {group.draft.tags.map((tag, idx) => (
-                          <span key={idx} style={{ padding: "4px 8px", backgroundColor: "#e0f2fe", color: "#0369a1", borderRadius: "4px", fontSize: "12px" }}>{tag}</span>
-                        ))}
-                      </div>
-                    </div>
-
                     {/* Content Diff */}
                     <div>
                       <div style={{ fontSize: "12px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>

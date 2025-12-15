@@ -212,7 +212,6 @@ export default function ImportRFPPage() {
           existingSkills: skills.map((s) => ({
             id: s.id,
             title: s.title,
-            tags: s.tags,
             content: s.content,
           })),
         }),
@@ -308,7 +307,6 @@ export default function ImportRFPPage() {
           // Create new skill via API
           const skillData = {
             title: suggestion.skillTitle,
-            tags: suggestion.tags,
             content: suggestion.suggestedAdditions,
             quickFacts: [] as { question: string; answer: string }[],
             edgeCases: [] as string[],
@@ -733,27 +731,6 @@ export default function ImportRFPPage() {
                       </span>
                       <span style={{ fontWeight: 600, fontSize: "15px" }}>{suggestion.skillTitle}</span>
                     </div>
-
-                    {suggestion.tags.length > 0 && (
-                      <div style={{ marginBottom: "8px" }}>
-                        {suggestion.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            style={{
-                              display: "inline-block",
-                              padding: "2px 6px",
-                              marginRight: "4px",
-                              backgroundColor: "#f1f5f9",
-                              borderRadius: "4px",
-                              fontSize: "11px",
-                              color: "#64748b",
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    )}
 
                     <div style={{ marginBottom: "12px" }}>
                       <strong style={{ fontSize: "13px", color: "#475569" }}>

@@ -82,9 +82,6 @@ export default function SkillDraftReview({
         )}
       </div>
       <div style={{ marginBottom: "16px" }}>
-        <strong>Tags:</strong> {draft.tags.join(", ") || "None"}
-      </div>
-      <div style={{ marginBottom: "16px" }}>
         <strong>Content:</strong>
         <pre style={{
           backgroundColor: "#fff",

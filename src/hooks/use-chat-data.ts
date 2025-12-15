@@ -102,7 +102,7 @@ export function useChatSessions(limit = 20) {
 // Send chat message mutation
 type SendMessageParams = {
   message: string;
-  skills: { id: string; title: string; content: string; tags: string[] }[];
+  skills: { id: string; title: string; content: string }[];
   customerProfiles: {
     id: string;
     name: string;

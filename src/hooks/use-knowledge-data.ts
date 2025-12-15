@@ -204,7 +204,6 @@ export interface UnifiedLibraryItem {
   title: string;
   subtitle?: string;
   content?: string;
-  tags?: string[];
   categories?: string[];
   isActive?: boolean;
   createdAt: string;
@@ -228,9 +227,8 @@ export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
     id: skill.id,
     type: "skill",
     title: skill.title,
-    subtitle: skill.tags?.join(", "),
+    subtitle: skill.categories?.join(", "),
     content: skill.content,
-    tags: skill.tags,
     categories: skill.categories,
     isActive: skill.isActive,
     createdAt: skill.createdAt,

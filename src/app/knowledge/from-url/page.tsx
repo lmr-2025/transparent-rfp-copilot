@@ -84,7 +84,6 @@ function KnowledgeUploadPageContent() {
       const existingSkills = skills.map(s => ({
         id: s.id,
         title: s.title,
-        tags: s.tags,
         contentPreview: s.content.substring(0, 500),
         sourceUrls: s.sourceUrls?.map(u => u.url) || [],
       }));
@@ -172,7 +171,6 @@ function KnowledgeUploadPageContent() {
             existingSkill: {
               title: existingSkill.title,
               content: existingSkill.content,
-              tags: existingSkill.tags,
             },
           }),
         });
@@ -201,7 +199,6 @@ function KnowledgeUploadPageContent() {
             const updates = {
               title: data.draft.title || existingSkill.title,
               content: data.draft.content,
-              tags: [...new Set([...existingSkill.tags, ...data.draft.tags])],
               sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
               lastRefreshedAt: now,
             };
@@ -276,7 +273,6 @@ function KnowledgeUploadPageContent() {
     const skillData = {
       title: generatedDraft.title,
       categories: selectedCategories.length > 0 ? selectedCategories : undefined,
-      tags: generatedDraft.tags,
       content: generatedDraft.content,
       quickFacts: [],
       edgeCases: [],

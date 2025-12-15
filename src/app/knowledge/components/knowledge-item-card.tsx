@@ -86,22 +86,6 @@ export function KnowledgeItemCard({
               {item.subtitle && (
                 <p className="text-sm text-muted-foreground truncate mt-0.5">{item.subtitle}</p>
               )}
-              {/* Tags/Categories */}
-              {item.tags && item.tags.length > 0 && (
-                <div className="flex gap-1 flex-wrap mt-2">
-                  {item.tags.slice(0, 3).map((tag) => (
-                    <span
-                      key={tag}
-                      className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                  {item.tags.length > 3 && (
-                    <span className="text-xs text-muted-foreground">+{item.tags.length - 3}</span>
-                  )}
-                </div>
-              )}
               {/* Owners */}
               {item.owners && item.owners.length > 0 && (
                 <div className="flex items-center gap-1 mt-2">

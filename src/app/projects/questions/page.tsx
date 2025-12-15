@@ -249,7 +249,6 @@ export default function QuestionsPage() {
       const skillsPayload = relevantSkills.map((skill) => ({
         title: skill.title,
         content: skill.content,
-        tags: skill.tags,
       }));
 
       const response = await fetch("/api/questions/answer", {

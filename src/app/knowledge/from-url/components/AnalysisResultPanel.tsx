@@ -196,24 +196,6 @@ function CreateNewPanel({
       <p style={{ margin: "0 0 12px 0", color: "#166534", fontSize: "13px" }}>
         {analysisResult.suggestion.reason}
       </p>
-      {analysisResult.suggestion.suggestedTags && analysisResult.suggestion.suggestedTags.length > 0 && (
-        <div style={{ marginBottom: "12px" }}>
-          <span style={{ fontSize: "12px", color: "#166534" }}>Suggested tags: </span>
-          {analysisResult.suggestion.suggestedTags.map((tag, i) => (
-            <span key={i} style={{
-              display: "inline-block",
-              padding: "2px 8px",
-              marginLeft: "4px",
-              backgroundColor: "#bbf7d0",
-              color: "#166534",
-              borderRadius: "4px",
-              fontSize: "11px",
-            }}>
-              {tag}
-            </span>
-          ))}
-        </div>
-      )}
       <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
         <button
           onClick={() => onBuildFromUrls()}

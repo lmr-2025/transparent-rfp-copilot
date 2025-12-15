@@ -49,7 +49,6 @@ export const createSkillSchema = z.object({
   title: z.string().min(1, "Title is required").max(500),
   content: z.string().min(1, "Content is required").max(100000),
   categories: z.array(z.string()).default([]),
-  tags: z.array(z.string()).default([]),
   quickFacts: z.array(quickFactSchema).default([]),
   edgeCases: z.array(z.string()).default([]),
   sourceUrls: z.array(sourceUrlItemSchema).default([]),
@@ -66,7 +65,6 @@ export const updateSkillSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   content: z.string().min(1).max(100000).optional(),
   categories: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
   quickFacts: z.array(quickFactSchema).optional(),
   edgeCases: z.array(z.string()).optional(),
   sourceUrls: z.array(sourceUrlItemSchema).optional(),
@@ -239,7 +237,6 @@ const skillContextSchema = z.object({
   id: z.string(),
   title: z.string(),
   content: z.string(),
-  tags: z.array(z.string()),
 });
 
 const customerProfileContextSchema = z.object({
@@ -303,7 +300,6 @@ export const questionAnswerSchema = z.object({
   skills: z.array(z.object({
     title: z.string(),
     content: z.string(),
-    tags: z.array(z.string()),
   })).optional(),
   fallbackContent: z.array(z.object({
     title: z.string(),

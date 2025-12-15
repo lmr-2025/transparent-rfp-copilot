@@ -132,7 +132,6 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
     title: item.title ?? "",
     categories: categories.length > 0 ? categories : undefined,
     category: item.category, // Keep for backwards compatibility
-    tags: Array.isArray(item.tags) ? (item.tags as string[]).filter(Boolean) : [],
     content: item.content ?? "",
     quickFacts,
     edgeCases,

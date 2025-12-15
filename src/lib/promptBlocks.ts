@@ -166,7 +166,6 @@ export const defaultBlocks: PromptBlock[] = [
         "",
         "{",
         '  "title": "Clear, specific title for this skill",',
-        '  "tags": ["relevant", "category", "tags"],',
         '  "content": "The factual information compiled from the source material. This should be comprehensive (500-2000 words) and well-organized with markdown headers where appropriate."',
         "}",
         "",
