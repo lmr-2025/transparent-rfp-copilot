@@ -95,6 +95,39 @@ export function getUserFromSession(session: {
 }
 
 /**
+ * Request context for audit logging
+ */
+export type RequestContext = {
+  ipAddress?: string;
+  userAgent?: string;
+};
+
+/**
+ * Extract request context (IP and User-Agent) from a Next.js request
+ */
+export function getRequestContext(request: Request): RequestContext {
+  // Get IP address from various headers (in order of priority)
+  const forwarded = request.headers.get("x-forwarded-for");
+  const realIp = request.headers.get("x-real-ip");
+  const cfConnectingIp = request.headers.get("cf-connecting-ip"); // Cloudflare
+
+  let ipAddress: string | undefined;
+  if (forwarded) {
+    // x-forwarded-for can contain multiple IPs, take the first (client IP)
+    ipAddress = forwarded.split(",")[0]?.trim();
+  } else if (realIp) {
+    ipAddress = realIp;
+  } else if (cfConnectingIp) {
+    ipAddress = cfConnectingIp;
+  }
+
+  // Get User-Agent
+  const userAgent = request.headers.get("user-agent") || undefined;
+
+  return { ipAddress, userAgent };
+}
+
+/**
  * Log a skill change
  */
 export async function logSkillChange(
@@ -103,7 +136,8 @@ export async function logSkillChange(
   skillTitle: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "SKILL",
@@ -113,6 +147,7 @@ export async function logSkillChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -125,7 +160,8 @@ export async function logCustomerChange(
   customerName: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "CUSTOMER",
@@ -135,6 +171,7 @@ export async function logCustomerChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -147,7 +184,8 @@ export async function logProjectChange(
   projectName: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "PROJECT",
@@ -157,6 +195,7 @@ export async function logProjectChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -169,7 +208,8 @@ export async function logDocumentChange(
   documentTitle: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "DOCUMENT",
@@ -179,6 +219,7 @@ export async function logDocumentChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -191,7 +232,8 @@ export async function logContractChange(
   contractName: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "CONTRACT",
@@ -201,6 +243,7 @@ export async function logContractChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -213,7 +256,8 @@ export async function logReferenceUrlChange(
   urlTitle: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "REFERENCE_URL",
@@ -223,6 +267,7 @@ export async function logReferenceUrlChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 
@@ -235,7 +280,8 @@ export async function logContextSnippetChange(
   snippetName: string,
   user?: AuditUser,
   changes?: Record<string, { from: unknown; to: unknown }>,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
 ): Promise<void> {
   await createAuditLog({
     entityType: "CONTEXT_SNIPPET",
@@ -245,6 +291,7 @@ export async function logContextSnippetChange(
     user,
     changes,
     metadata,
+    ...requestContext,
   });
 }
 

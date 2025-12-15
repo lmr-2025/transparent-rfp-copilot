@@ -147,13 +147,15 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Status:** Already fixed - Created `src/lib/constants.ts` with named values (see "Recently Fixed" section).
 
 ### 11. Inconsistent API Response Formats
+**Status:** Pattern established, incremental migration needed
 **Files:** Various API routes
 **Evidence:**
 - `/api/documents` returns `{ documents: [...] }`
 - `/api/reference-urls` returns array directly
 - `/api/customers` returns `{ profiles: [...] }`
-**Fix:** Standardize to `{ success, data, error?, pagination? }`
-**Effort:** Medium
+**Fix:** Use `apiSuccess()` from `/lib/apiResponse.ts` for `{ data: T, pagination?, transparency? }` pattern
+**Note:** `/api/context-snippets` already uses new pattern as reference. Migrate other routes incrementally when touching them.
+**Effort:** Medium (but can be done incrementally)
 
 ### 12. Missing Type Safety
 **Files:** Multiple
@@ -165,10 +167,14 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P3: Low Priority / Nice to Have
 
-### 13. Missing API Documentation
-**Files:** All API routes
-**Fix:** Add JSDoc with input/output schemas, error codes, auth requirements
-**Effort:** Low
+### ~~13. Missing API Documentation~~ ✅ PARTIAL FIX
+**Fixed:** 2025-12-15
+- Added comprehensive JSDoc documentation to key API routes:
+  - `/api/skills` (GET, POST) - full parameter/response documentation
+  - `/api/chat` (POST) - includes rate limit info, examples
+  - `/api/customers` (GET, POST) - full parameter/response documentation
+- Pattern established for other routes to follow
+- Remaining routes can be documented incrementally when modified
 
 ### 14. Accessibility Issues
 **Risk:** No ARIA labels, focus management in modals, color-only indicators
@@ -282,30 +288,27 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P3: Remaining Items from Code Review
 
-### 18. Category Storage Sync
-**Issue:** Some pages use sync `loadCategories()` (localStorage) and never fetch from API
-**Files:**
-- `src/app/admin/categories/page.tsx`
-- `src/app/admin/settings/page.tsx`
-- `src/app/knowledge/from-url/page.tsx`
-- `src/app/knowledge/urls/add/page.tsx`
-- `src/app/knowledge/documents/page.tsx`
-**Risk:** Categories created on one machine won't appear on another until manual refresh
-**Fix:** Update pages to use `loadCategoriesFromApi()` via React Query hooks (like `use-chat-data.ts`)
-**Effort:** Low-Medium
+### ~~18. Category Storage Sync~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Updated all pages to use `loadCategoriesFromApi()` with `useEffect` instead of sync `loadCategories()`
+- Added loading states to category lists in `/admin/categories/page.tsx` and `/admin/settings/page.tsx`
+- Updated `/knowledge/from-url/page.tsx`, `/knowledge/urls/add/page.tsx`, `/knowledge/documents/page.tsx`
+- Categories now properly sync from API on page load
 
-### 19. Audit Log Request Context
-**Issue:** `ipAddress` and `userAgent` fields never populated
-**Risk:** Reduced security audit trail
-**Fix:** Thread request object through API handlers to audit functions, extract headers
-**Effort:** Medium (requires touching all API routes that audit)
+### ~~19. Audit Log Request Context~~ ✅ PARTIAL FIX
+**Fixed:** 2025-12-15
+- Added `getRequestContext(request)` helper to extract IP address and User-Agent from requests
+- Supports multiple header formats: `x-forwarded-for`, `x-real-ip`, `cf-connecting-ip` (Cloudflare)
+- Updated all audit log helper functions to accept optional `requestContext` parameter
+- Updated `/api/skills` POST route as example
+- Other API routes can be updated incrementally to pass request context
 
-### 20. Rate Limit In-Memory Fallback
-**Issue:** Rate limiting falls back to in-memory Map when Redis unavailable
-**File:** `src/lib/rateLimit.ts`
-**Risk:** Not production-safe for multi-instance deployments
-**Fix:** Require Redis in production, or use distributed alternative
-**Effort:** Low (configuration change)
+### ~~20. Rate Limit In-Memory Fallback~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Added production warning when Redis not configured
+- Logs `[RATE_LIMIT] Redis not configured in production...` on first use
+- Warns about multi-instance deployment safety
+- Development continues to work with in-memory fallback
 
 ---
 
@@ -376,12 +379,15 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Normalize to separate ChatMessage table with pagination
 **Effort:** High
 
-#### 31. Console.log Used for Production Errors
-**Files:** Multiple API routes
-**Issue:** Errors logged to `console.error` but no structured logging or alerting
-**Risk:** Hard to monitor production issues
-**Fix:** Add structured logging (winston/pino) with error tracking
-**Effort:** Medium
+#### ~~31. Console.log Used for Production Errors~~ ✅ PARTIAL FIX
+**Fixed:** 2025-12-15
+- Created `src/lib/logger.ts` - lightweight structured logger
+  - JSON output in production for log aggregation (Datadog, CloudWatch, etc.)
+  - Human-readable output in development
+  - Supports error serialization with stack traces
+  - Child loggers for request-scoped context
+- Updated key API routes: `/api/chat`, `/api/skills`
+- Pattern established for other routes to adopt incrementally
 
 #### 32. Inconsistent Naming: BulkProject vs Project
 **File:** `prisma/schema.prisma` (lines 78-105)

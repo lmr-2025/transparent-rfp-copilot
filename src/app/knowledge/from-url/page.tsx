@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
-import { loadCategories } from "@/lib/categoryStorage";
+import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { INPUT_LIMITS } from "@/lib/constants";
 import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
@@ -40,14 +40,15 @@ function KnowledgeUploadPageContent() {
   const [generatedDraft, setGeneratedDraft] = useState<SkillDraft | null>(null);
   const [generatedSnippetDraft, setGeneratedSnippetDraft] = useState<SnippetDraft | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
+  const [categories, setCategories] = useState<SkillCategoryItem[]>([]);
   const [selectedSplitIndex, setSelectedSplitIndex] = useState<number | null>(null);
   // Track the URLs used for the current build (to store in skill)
   const buildUrlsRef = useRef<string[]>([]);
 
-  // Load skills from API on mount
+  // Load skills and categories from API on mount
   useEffect(() => {
     loadSkillsFromApi().then(setSkills).catch(() => toast.error("Failed to load skills"));
+    loadCategoriesFromApi().then(setCategories).catch(() => toast.error("Failed to load categories"));
   }, []);
 
   const updateQueueItem = (id: string, patch: Partial<UploadStatus>) => {

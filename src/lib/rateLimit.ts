@@ -5,8 +5,9 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 // Initialize Redis client - uses UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN env vars
-// Falls back to in-memory rate limiting if Redis not configured
+// Falls back to in-memory rate limiting if Redis not configured (development only)
 let redis: Redis | null = null;
+let redisWarningLogged = false;
 
 function getRedis(): Redis | null {
   if (redis) return redis;
@@ -17,6 +18,17 @@ function getRedis(): Redis | null {
   if (url && token) {
     redis = new Redis({ url, token });
     return redis;
+  }
+
+  // Warn in production if Redis not configured (in-memory fallback is not safe for multi-instance)
+  const isProduction = process.env.NODE_ENV === "production";
+  if (isProduction && !redisWarningLogged) {
+    console.warn(
+      "[RATE_LIMIT] Redis not configured in production. " +
+      "In-memory rate limiting is NOT safe for multi-instance deployments. " +
+      "Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables."
+    );
+    redisWarningLogged = true;
   }
 
   return null;

@@ -1,10 +1,40 @@
+/**
+ * Customers API Route - Customer Profile Management
+ *
+ * CRUD operations for customer profiles. Customer profiles store
+ * information about clients/prospects that can be referenced
+ * when answering RFP questions.
+ *
+ * @module /api/customers
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
 
-// GET /api/customers - Get all customer profiles
+/**
+ * GET /api/customers - List customer profiles
+ *
+ * @description Retrieves customer profiles with optional filtering.
+ * Results are ordered by most recently updated first.
+ *
+ * @authentication Required - returns 401 if not authenticated
+ *
+ * @query {string} [active="false"] - Filter by active status ("true" for active only)
+ * @query {string} [industry] - Filter by industry name
+ * @query {string} [search] - Search by customer name (case-insensitive)
+ * @query {number} [limit=100] - Maximum profiles to return (max 500)
+ * @query {number} [offset=0] - Number of profiles to skip (for pagination)
+ *
+ * @returns {{ profiles: CustomerProfile[] }} 200 - List of customer profiles
+ * @returns {{ error: string }} 401 - Unauthorized
+ * @returns {{ error: string }} 500 - Server error
+ *
+ * @example
+ * GET /api/customers?active=true&industry=Healthcare&limit=20
+ */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {
@@ -56,7 +86,32 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/customers - Create new customer profile
+/**
+ * POST /api/customers - Create a new customer profile
+ *
+ * @description Creates a new customer profile in the database.
+ * Customer profiles store key information about clients/prospects.
+ *
+ * @authentication Required - returns 401 if not authenticated
+ *
+ * @body {string} name - Customer/company name (required)
+ * @body {string} overview - Summary of the customer (required)
+ * @body {string} [industry] - Industry sector
+ * @body {string} [website] - Company website URL
+ * @body {string} [products] - Description of products/services they offer
+ * @body {string} [challenges] - Known challenges or pain points
+ * @body {KeyFact[]} [keyFacts] - Array of {label, value} pairs
+ * @body {SourceUrl[]} [sourceUrls] - Source URLs for the profile data
+ *
+ * @returns {{ profile: CustomerProfile }} 201 - Created profile
+ * @returns {{ error: string }} 400 - Validation error
+ * @returns {{ error: string }} 401 - Unauthorized
+ * @returns {{ error: string }} 500 - Server error
+ *
+ * @example
+ * POST /api/customers
+ * { "name": "Acme Corp", "overview": "Enterprise software company..." }
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {

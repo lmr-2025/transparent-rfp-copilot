@@ -2,9 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createSkillSchema, validateBody } from "@/lib/validations";
-import { logSkillChange, getUserFromSession } from "@/lib/auditLog";
+import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
+import { logger } from "@/lib/logger";
 
-// GET /api/skills - List all skills (requires authentication)
+/**
+ * GET /api/skills - List all skills
+ *
+ * @description Retrieves skills from the database with optional filtering.
+ * Returns skills ordered by most recently updated first.
+ *
+ * @authentication Required - returns 401 if not authenticated
+ *
+ * @query {string} [active="true"] - Filter by active status ("true" or "false")
+ * @query {string} [category] - Filter by category name (use "all" for no filter)
+ * @query {number} [limit=100] - Maximum skills to return (max 500)
+ * @query {number} [offset=0] - Number of skills to skip (for pagination)
+ *
+ * @returns {Skill[]} 200 - Array of skill objects with owner information
+ * @returns {{ error: string }} 401 - Unauthorized
+ * @returns {{ error: string }} 500 - Server error
+ *
+ * @example
+ * // Get active skills in Security category
+ * GET /api/skills?active=true&category=Security&limit=50
+ */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {
@@ -72,7 +93,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(transformedSkills);
   } catch (error) {
-    console.error("Failed to fetch skills:", error);
+    logger.error("Failed to fetch skills", error, { route: "/api/skills" });
     return NextResponse.json(
       { error: "Failed to fetch skills" },
       { status: 500 }
@@ -80,7 +101,32 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/skills - Create a new skill
+/**
+ * POST /api/skills - Create a new skill
+ *
+ * @description Creates a new skill in the database. The authenticated user
+ * becomes the owner of the skill automatically.
+ *
+ * @authentication Required - returns 401 if not authenticated
+ *
+ * @body {string} title - Skill title (required)
+ * @body {string} content - Main skill content/knowledge (required)
+ * @body {string[]} [categories] - Category names this skill belongs to
+ * @body {QuickFact[]} [quickFacts] - Array of {question, answer} pairs
+ * @body {string[]} [edgeCases] - Special cases or caveats
+ * @body {SourceUrl[]} [sourceUrls] - Array of {url, addedAt, lastFetchedAt}
+ * @body {boolean} [isActive=true] - Whether skill is active
+ * @body {Owner[]} [owners] - Additional owners beyond the creator
+ *
+ * @returns {Skill} 201 - Created skill object
+ * @returns {{ error: string }} 400 - Validation error
+ * @returns {{ error: string }} 401 - Unauthorized
+ * @returns {{ error: string }} 500 - Server error
+ *
+ * @example
+ * POST /api/skills
+ * { "title": "SOC2 Compliance", "content": "Our SOC2 Type II..." }
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {
@@ -119,19 +165,20 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Audit log
+    // Audit log with request context for IP/User-Agent tracking
     await logSkillChange(
       "CREATED",
       skill.id,
       skill.title,
       getUserFromSession(auth.session),
       undefined,
-      { categories: data.categories }
+      { categories: data.categories },
+      getRequestContext(request)
     );
 
     return NextResponse.json(skill, { status: 201 });
   } catch (error) {
-    console.error("Failed to create skill:", error);
+    logger.error("Failed to create skill", error, { route: "/api/skills" });
     return NextResponse.json(
       { error: "Failed to create skill" },
       { status: 500 }

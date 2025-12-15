@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { SkillCategoryItem } from "@/types/skill";
 import {
-  loadCategories,
+  loadCategoriesFromApi,
   addCategory,
   updateCategory,
   deleteCategory,
@@ -516,7 +516,8 @@ function IntegrationsTab({
 }
 
 function CategoriesTab() {
-  const [categories, setCategories] = useState<SkillCategoryItem[]>(() => loadCategories());
+  const [categories, setCategories] = useState<SkillCategoryItem[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -524,6 +525,14 @@ function CategoriesTab() {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  // Load categories from API on mount
+  useEffect(() => {
+    loadCategoriesFromApi()
+      .then(setCategories)
+      .catch(() => toast.error("Failed to load categories"))
+      .finally(() => setIsLoadingCategories(false));
+  }, []);
 
   const handleAdd = async () => {
     setError(null);
@@ -671,7 +680,12 @@ function CategoriesTab() {
         </div>
       )}
 
-      {categories.length === 0 ? (
+      {isLoadingCategories ? (
+        <div className="p-8 text-center">
+          <Loader2 size={24} className="animate-spin mx-auto text-gray-400 mb-2" />
+          <p className="text-gray-500 text-sm">Loading categories...</p>
+        </div>
+      ) : categories.length === 0 ? (
         <div className="p-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
           <FolderOpen size={40} className="mx-auto text-gray-400 mb-2" />
           <p className="text-gray-500">No categories yet</p>

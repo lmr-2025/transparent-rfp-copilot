@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown, LayoutTemplate } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmModal";
-import { loadCategories } from "@/lib/categoryStorage";
+import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 
 interface CategoryItem {
   id: string;
@@ -47,9 +47,8 @@ export default function DocumentsPage() {
 
   useEffect(() => {
     loadDocuments();
-    // Load categories
-    const cats = loadCategories();
-    setAvailableCategories(cats);
+    // Load categories from API
+    loadCategoriesFromApi().then(setAvailableCategories).catch(console.error);
   }, []);
 
   const loadDocuments = async () => {

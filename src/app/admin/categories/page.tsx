@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Trash2, Edit2, FolderOpen, GripVertical, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { SkillCategoryItem } from "@/types/skill";
 import {
-  loadCategories,
+  loadCategoriesFromApi,
   addCategory,
   updateCategory,
   deleteCategory,
@@ -13,7 +13,16 @@ import {
 } from "@/lib/categoryStorage";
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<SkillCategoryItem[]>(() => loadCategories());
+  const [categories, setCategories] = useState<SkillCategoryItem[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+
+  // Load categories from API on mount
+  useEffect(() => {
+    loadCategoriesFromApi()
+      .then(setCategories)
+      .catch(() => toast.error("Failed to load categories"))
+      .finally(() => setIsLoadingCategories(false));
+  }, []);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -269,7 +278,18 @@ export default function CategoriesPage() {
       )}
 
       {/* Category List */}
-      {categories.length === 0 ? (
+      {isLoadingCategories ? (
+        <div
+          style={{
+            padding: "40px",
+            textAlign: "center",
+            color: "#64748b",
+          }}
+        >
+          <Loader2 size={32} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+          <p>Loading categories...</p>
+        </div>
+      ) : categories.length === 0 ? (
         <div
           style={{
             padding: "40px",

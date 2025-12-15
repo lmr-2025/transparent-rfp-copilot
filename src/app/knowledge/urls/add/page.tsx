@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
-import { loadCategories } from "@/lib/categoryStorage";
+import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { SkillCategoryItem } from "@/types/skill";
 
 const styles = {
@@ -127,7 +127,12 @@ const styles = {
 
 export default function AddReferenceUrlPage() {
   const router = useRouter();
-  const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
+  const [categories, setCategories] = useState<SkillCategoryItem[]>([]);
+
+  // Load categories from API on mount
+  useEffect(() => {
+    loadCategoriesFromApi().then(setCategories).catch(() => toast.error("Failed to load categories"));
+  }, []);
 
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
