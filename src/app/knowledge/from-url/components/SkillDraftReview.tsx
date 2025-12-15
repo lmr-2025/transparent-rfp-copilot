@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { SkillCategoryItem } from "@/types/skill";
 import { SkillDraft } from "../types";
 import { styles } from "../styles";
@@ -21,13 +22,41 @@ export default function SkillDraftReview({
   onSave,
   onCancel,
 }: SkillDraftReviewProps) {
+  const [showOriginal, setShowOriginal] = useState(false);
+  const isUpdate = draft._isUpdate;
+
   return (
     <div style={{
       ...styles.card,
-      backgroundColor: "#f0fdf4",
-      border: "2px solid #86efac",
+      backgroundColor: isUpdate ? "#fefce8" : "#f0fdf4",
+      border: isUpdate ? "2px solid #fde047" : "2px solid #86efac",
     }}>
-      <h3 style={{ marginTop: 0, color: "#15803d" }}>Generated Skill - Review & Save</h3>
+      <h3 style={{ marginTop: 0, color: isUpdate ? "#854d0e" : "#15803d" }}>
+        {isUpdate ? `Update Skill: "${draft._originalTitle}"` : "Generated Skill"} - Review & Save
+      </h3>
+
+      {/* Change highlights for updates */}
+      {isUpdate && draft._changeHighlights && draft._changeHighlights.length > 0 && (
+        <div style={{
+          backgroundColor: "#fef9c3",
+          padding: "12px",
+          borderRadius: "8px",
+          marginBottom: "16px",
+          border: "1px solid #fde047",
+        }}>
+          <strong style={{ color: "#854d0e", fontSize: "14px" }}>📝 Changes detected:</strong>
+          {draft._changeSummary && (
+            <p style={{ margin: "8px 0", color: "#92400e", fontSize: "13px" }}>
+              {draft._changeSummary}
+            </p>
+          )}
+          <ul style={{ margin: "8px 0 0 20px", padding: 0, color: "#78350f", fontSize: "13px" }}>
+            {draft._changeHighlights.map((highlight, idx) => (
+              <li key={idx} style={{ marginBottom: "4px" }}>{highlight}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div style={{ marginBottom: "16px" }}>
         <strong>Title:</strong> {draft.title}
       </div>
@@ -82,17 +111,35 @@ export default function SkillDraftReview({
         )}
       </div>
       <div style={{ marginBottom: "16px" }}>
-        <strong>Content:</strong>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+          <strong>Content:</strong>
+          {isUpdate && draft._originalContent && (
+            <button
+              onClick={() => setShowOriginal(!showOriginal)}
+              style={{
+                padding: "4px 10px",
+                backgroundColor: showOriginal ? "#e2e8f0" : "#fff",
+                color: "#475569",
+                border: "1px solid #cbd5e1",
+                borderRadius: "4px",
+                fontSize: "12px",
+                cursor: "pointer",
+              }}
+            >
+              {showOriginal ? "Show Updated" : "Show Original"}
+            </button>
+          )}
+        </div>
         <pre style={{
           backgroundColor: "#fff",
           padding: "12px",
           borderRadius: "6px",
           overflow: "auto",
-          maxHeight: "300px",
+          maxHeight: "400px",
           fontSize: "13px",
           whiteSpace: "pre-wrap",
         }}>
-          {draft.content}
+          {showOriginal && draft._originalContent ? draft._originalContent : draft.content}
         </pre>
       </div>
       {draft.sourceMapping && draft.sourceMapping.length > 0 && (
@@ -114,7 +161,7 @@ export default function SkillDraftReview({
           onClick={onSave}
           style={{
             padding: "10px 20px",
-            backgroundColor: "#15803d",
+            backgroundColor: isUpdate ? "#d97706" : "#15803d",
             color: "#fff",
             border: "none",
             borderRadius: "6px",
@@ -122,7 +169,7 @@ export default function SkillDraftReview({
             cursor: "pointer",
           }}
         >
-          Save to Library
+          {isUpdate ? "Apply Update" : "Save to Library"}
         </button>
         <button
           onClick={onCancel}

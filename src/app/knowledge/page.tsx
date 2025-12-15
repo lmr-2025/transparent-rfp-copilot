@@ -247,7 +247,7 @@ function KnowledgeLibraryContent() {
   const addLinks: Record<TabType, { href: string; label: string }> = {
     skills: { href: "/knowledge/add", label: "Add Skill" },
     documents: { href: "/knowledge/documents", label: "Upload Document" },
-    urls: { href: "/knowledge/from-url", label: "Add URL" },
+    urls: { href: "/knowledge/urls/add", label: "Add URL" },
     snippets: { href: "/knowledge/snippets", label: "Add Snippet" },
   };
 

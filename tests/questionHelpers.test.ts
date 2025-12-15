@@ -7,7 +7,6 @@ import type { Skill } from "@/types/skill";
 const makeSkill = (overrides: Partial<Skill>): Skill => ({
   id: randomUUID(),
   title: "Placeholder",
-  tags: [],
   content: "",
   quickFacts: [],
   edgeCases: [],
@@ -54,21 +53,18 @@ describe("selectRelevantSkills", () => {
       makeSkill({
         id: "s1",
         title: "Data Encryption Overview",
-        tags: ["encryption", "crypto"],
-        content: "Explains AES-256 and key rotation.",
+        content: "Explains AES-256 encryption and key rotation.",
       }),
       makeSkill({
         id: "s2",
         title: "Access Control",
-        tags: ["rbac"],
         content: "Role based access with SSO.",
       }),
       makeSkill({
         id: "s3",
         title: "Legacy Skill",
         isActive: false,
-        tags: ["encryption"],
-        content: "Should not appear because inactive.",
+        content: "Should not appear because inactive. Uses encryption.",
       }),
     ];
 

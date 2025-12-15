@@ -238,7 +238,10 @@ export async function updateSkillViaApi(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(updates),
   });
-  if (!response.ok) throw new Error("Failed to update skill");
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.error || "Failed to update skill");
+  }
   const updated = await response.json();
   const normalized = normalizeSkill(updated);
   cachedSkills = cachedSkills.map((s) => (s.id === id ? normalized : s));

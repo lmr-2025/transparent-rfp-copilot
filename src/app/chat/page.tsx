@@ -24,6 +24,7 @@ import { TransparencyModal, TransparencyData } from "./components/transparency-m
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
+import { parseAnswerSections } from "@/lib/questionHelpers";
 
 export default function ChatPageV2() {
   const { data: session } = useSession();
@@ -227,15 +228,23 @@ ${keyFactsText}`;
         userInstructions,
       });
 
+      // Parse the response to extract transparency metadata (reuse existing parser from questions)
+      const parsed = parseAnswerSections(response.response);
+
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: response.response,
+        content: parsed.response || response.response, // Use parsed response, fallback to full response
         timestamp: new Date(),
         skillsUsed: response.skillsUsed,
         customersUsed: response.customersUsed,
         documentsUsed: response.documentsUsed,
         urlsUsed: response.urlsUsed,
+        confidence: parsed.confidence,
+        sources: parsed.sources,
+        reasoning: parsed.reasoning,
+        inference: parsed.inference,
+        remarks: parsed.remarks,
       };
 
       addMessage(assistantMessage);

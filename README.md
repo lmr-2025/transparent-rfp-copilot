@@ -1,45 +1,119 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Transparent RFP Copilot
+
+AI-powered RFP response assistant with full transparency. Every answer includes confidence scores, source citations, and visible reasoning.
+
+## Features
+
+### Core Capabilities
+
+- **RFP Projects** - Upload Excel/CSV questionnaires, answer questions individually or in bulk, export completed responses
+- **Chat** - Conversational interface to explore your knowledge base with selected skills and customer context
+- **Contracts** - Upload and analyze contracts, extract key terms, identify risks, review obligations
+- **Knowledge Base** - Skills, documents, URLs, and customer profiles that ground all AI responses
+
+### Full Transparency
+
+Every response includes:
+- **Confidence Scores** - High/Medium/Low rating so you know when to trust or verify
+- **Source Citations** - Which skills, documents, and URLs were used
+- **Reasoning** - How the answer was derived, what was inferred vs. found directly
+- **Editable Prompts** - View and customize system prompts (admin)
+
+## Tech Stack
+
+- **Framework:** Next.js 16 with App Router
+- **AI:** Claude API (Anthropic)
+- **Database:** PostgreSQL with Prisma ORM
+- **Auth:** NextAuth.js with Google OAuth
+- **UI:** React 19, Tailwind CSS, shadcn/ui, Radix primitives
+- **State:** React Query (server), Zustand (client)
+- **Rate Limiting:** Upstash Redis
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- PostgreSQL database
+- Claude API key from Anthropic
+- Google OAuth credentials (for authentication)
+
+### Environment Variables
+
+Create a `.env` file:
 
 ```bash
+# Database
+DATABASE_URL="postgresql://user:password@localhost:5432/rfp_copilot"
+
+# Auth
+NEXTAUTH_URL="http://localhost:3000"
+NEXTAUTH_SECRET="your-secret-key"
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+# AI
+ANTHROPIC_API_KEY="your-anthropic-api-key"
+
+# Rate Limiting (optional - falls back to in-memory)
+UPSTASH_REDIS_REST_URL="your-upstash-url"
+UPSTASH_REDIS_REST_TOKEN="your-upstash-token"
+```
+
+### Installation
+
+```bash
+# Install dependencies
+npm install
+
+# Generate Prisma client
+npx prisma generate
+
+# Run database migrations
+npx prisma migrate dev
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) to access the app.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### First-Time Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Navigate to `/setup` to configure Google OAuth credentials
+2. Sign in with Google
+3. Add knowledge items (skills, documents, URLs) via the Knowledge Base
+4. Start answering questions or chatting
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Testing
-
-<!-- codex: added basic test instructions -->
+## Development
 
 ```bash
-npm run test      # run the Vitest suite once
-npm run test:watch  # re-run tests on file changes
+npm run dev        # Start dev server
+npm run build      # Production build
+npm run lint       # Run ESLint
+npm run test       # Run tests once
+npm run test:watch # Run tests in watch mode
 ```
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── api/               # API routes
+│   ├── chat/              # Chat feature
+│   ├── contracts/         # Contract analysis
+│   ├── knowledge/         # Knowledge base management
+│   ├── projects/          # RFP projects
+│   └── admin/             # Admin settings
+├── components/            # Reusable React components
+├── lib/                   # Utilities and helpers
+│   ├── promptBlocks.ts   # Composable prompt system
+│   ├── auth.ts           # Authentication config
+│   └── prisma.ts         # Database client
+└── stores/               # Zustand state stores
+```
+
+## License
+
+Private - All rights reserved

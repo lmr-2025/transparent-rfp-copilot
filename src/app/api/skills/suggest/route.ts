@@ -142,42 +142,50 @@ async function generateDraftUpdate(
 ): Promise<DraftUpdateResponse> {
   const anthropic = getAnthropicClient();
 
-  const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
+  const systemPrompt = `You are a knowledge extraction specialist. Your job is to distill source material into structured, fact-dense reference documents called "skills."
 
-Your task is to review an existing skill document against new source material and decide if updates are needed.
+Your task is to review an existing skill against new source material and decide if updates are needed.
+
+WHAT MAKES A GOOD SKILL:
+- Dense with facts, not prose
+- Organized for quick scanning and fact retrieval
+- Complete (all relevant facts) but concise (no fluff)
 
 DECISION PROCESS:
 1. Compare the existing skill content with the new source material
-2. If the new source contains SIGNIFICANT new information, updates, or corrections → write an updated draft
-3. If the new source is redundant (same info already in skill) or irrelevant → return hasChanges: false
+2. If the new source contains NEW FACTS not already captured → update the skill
+3. If the source is redundant or just marketing fluff → return hasChanges: false
 
-WHAT COUNTS AS SIGNIFICANT:
-- New facts, procedures, or guidelines not in the current skill
-- Corrections to existing information
-- Updated versions, dates, or specifications
-- New sections that add value
+WHAT TO INCLUDE:
+- Concrete facts: numbers, versions, timeframes, limits, specifications
+- Capabilities: what the product does, supports, integrates with
+- Compliance: certifications, standards, audit results
+- Processes: how things work (authentication, data handling, incident response)
+- Lists: integrations, supported platforms, features (KEEP LISTS COMPLETE)
+- Positioning context ONLY if it helps answer "why" or differentiates from competitors
 
-WHAT IS NOT SIGNIFICANT:
-- Same information worded differently
-- Information already covered in the skill
-- Tangentially related content that doesn't add value
+WHAT TO REMOVE:
+- Marketing language ("industry-leading", "best-in-class", "seamlessly")
+- Redundant explanations of the same fact
+- Generic statements that don't answer specific questions
+- Narrative prose that buries the facts
 
 OUTPUT FORMAT:
 Return a JSON object:
 {
   "hasChanges": true/false,
-  "summary": "Brief explanation of what changed OR 'No significant updates - the source material is already reflected in the current skill'",
+  "summary": "Brief explanation of what new facts were added",
   "title": "Keep same unless topic scope changed",
-  "content": "If hasChanges=true: the COMPLETE updated skill content with changes integrated. If hasChanges=false: return the original content unchanged.",
-  "changeHighlights": ["Bullet point 1 describing a change", "Bullet point 2", ...] // Empty array if no changes
+  "content": "The COMPLETE updated skill - distilled, fact-dense, organized for quick LLM parsing",
+  "changeHighlights": ["New fact or section added", ...] // Empty array if no changes
 }
 
-IMPORTANT GUIDELINES:
-- Preserve the original writing style and structure
-- Integrate new information naturally into existing sections where appropriate
-- Remove duplicate/redundant content
-- Keep the document well-organized with clear headers
-- The content field must be COMPLETE - not just the changes`;
+CONTENT STRUCTURE GUIDELINES:
+- Use markdown headers to organize by topic
+- Use bullet points for facts and lists (easier for LLM to parse than paragraphs)
+- Lead with the most important/common facts
+- Group related information together
+- Keep complete lists (integrations, certifications, etc.) - these answer specific questions`;
 
   const userPrompt = `EXISTING SKILL:
 Title: ${existingSkill.title}
@@ -200,13 +208,16 @@ Review the new source material against the existing skill.
 
 Return ONLY the JSON object.`;
 
-  const response = await anthropic.messages.create({
+  // Use streaming for large outputs to avoid timeout
+  const stream = anthropic.messages.stream({
     model: CLAUDE_MODEL,
-    max_tokens: 12000,
+    max_tokens: 32000,
     temperature: 0.1,
     system: systemPrompt,
     messages: [{ role: "user", content: userPrompt }],
   });
+
+  const response = await stream.finalMessage();
 
   const content = response.content[0];
   if (content.type !== "text") {

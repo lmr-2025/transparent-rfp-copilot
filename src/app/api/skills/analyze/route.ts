@@ -10,7 +10,7 @@ type ExistingSkillInfo = {
   id: string;
   title: string;
   category?: SkillCategory;
-  tags: string[];
+  categories?: string[];
   contentPreview: string; // First ~500 chars to keep prompt small
   sourceUrls?: string[]; // URLs already used to build this skill
 };
@@ -29,7 +29,6 @@ type SkillSuggestion = {
   // For create_new or split_topics
   suggestedTitle?: string;
   suggestedCategory?: SkillCategory;
-  suggestedTags?: string[];
   // For split_topics - multiple skills to create
   splitSuggestions?: {
     title: string;
@@ -214,12 +213,12 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 async function analyzeContent(
   sourceContent: string,
   sourceUrls: string[],
-  existingSkills: { id: string; title: string; category?: SkillCategory; tags: string[]; contentPreview: string }[]
+  existingSkills: { id: string; title: string; category?: SkillCategory; categories?: string[]; contentPreview: string }[]
 ): Promise<AnalyzeResponse> {
   const anthropic = getAnthropicClient();
 
   const skillsSummary = existingSkills.length > 0
-    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || "Uncategorized"}\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
+    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || s.categories?.[0] || "Uncategorized"}\n  Preview: ${s.contentPreview.substring(0, 200)}...`).join("\n\n")
     : "No existing skills in the knowledge base.";
 
   const categoriesList = (await getCategoryNamesFromDb()).join(", ");
@@ -354,7 +353,7 @@ async function analyzeAndGroupUrls(
   }
 
   const skillsSummary = existingSkills.length > 0
-    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Tags: ${s.tags.join(", ") || "none"}\n  Preview: ${s.contentPreview.substring(0, 150)}...`).join("\n")
+    ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || s.categories?.[0] || "Uncategorized"}\n  Preview: ${s.contentPreview.substring(0, 150)}...`).join("\n")
     : "No existing skills in the knowledge base.";
 
   const urlSummary = urlContents.map((u, i) =>

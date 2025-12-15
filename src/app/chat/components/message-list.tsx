@@ -4,7 +4,9 @@ import { useRef, useEffect } from "react";
 import { User, Bot, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "@/stores/chat-store";
+import TransparencyDetails from "@/components/TransparencyDetails";
 
 interface MessageListProps {
   messages: ChatMessage[];
@@ -81,11 +83,35 @@ function MessageBubble({ message, onViewTransparency }: MessageBubbleProps) {
             : "bg-muted text-foreground"
         )}
       >
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">
-          {message.content}
+        <div className={cn(
+          "text-sm leading-relaxed",
+          !isUser && "[&>p]:my-3 [&>ul]:my-3 [&>ol]:my-3 [&_li]:my-1 [&>h1]:mt-5 [&>h1]:mb-2 [&>h1]:text-base [&>h1]:font-semibold [&>h2]:mt-5 [&>h2]:mb-2 [&>h2]:text-sm [&>h2]:font-semibold [&>h3]:mt-4 [&>h3]:mb-1 [&>h3]:text-sm [&>h3]:font-medium [&_strong]:font-semibold [&>p:has(strong:first-child)]:mt-4"
+        )}>
+          {isUser ? (
+            <span className="whitespace-pre-wrap">{message.content}</span>
+          ) : (
+            <ReactMarkdown>{message.content}</ReactMarkdown>
+          )}
         </div>
 
-        {/* Transparency button for assistant messages */}
+        {/* Transparency details for assistant messages */}
+        {!isUser && (message.confidence || message.sources || message.reasoning || message.inference || message.remarks) && (
+          <TransparencyDetails
+            data={{
+              confidence: message.confidence,
+              sources: message.sources,
+              reasoning: message.reasoning,
+              inference: message.inference,
+              remarks: message.remarks,
+            }}
+            knowledgeReferences={[
+              ...(message.skillsUsed || []).map((s) => ({ id: s.id, title: s.title, type: "skill" as const })),
+              ...(message.documentsUsed || []).map((d) => ({ id: d.id, title: d.title, type: "document" as const })),
+            ]}
+          />
+        )}
+
+        {/* View full prompt transparency button */}
         {!isUser && message.skillsUsed && onViewTransparency && (
           <div className="mt-2 pt-2 border-t border-border/50">
             <Button
@@ -95,13 +121,13 @@ function MessageBubble({ message, onViewTransparency }: MessageBubbleProps) {
               className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground"
             >
               <Eye className="h-3 w-3" />
-              View transparency
+              View full prompt
             </Button>
           </div>
         )}
 
-        {/* Sources used */}
-        {!isUser && (message.skillsUsed?.length || message.documentsUsed?.length || message.urlsUsed?.length) && (
+        {/* Knowledge sources used (shown even without transparency metadata) */}
+        {!isUser && !message.confidence && (message.skillsUsed?.length || message.documentsUsed?.length || message.urlsUsed?.length) && (
           <div className="mt-2 flex flex-wrap gap-1">
             {message.skillsUsed?.map((skill) => (
               <span

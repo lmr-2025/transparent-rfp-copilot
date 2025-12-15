@@ -218,7 +218,7 @@ const otherMethods = [
     bestFor: "Reference material, long-form docs",
   },
   {
-    href: "/knowledge/urls",
+    href: "/knowledge/urls/add",
     icon: Globe,
     iconBg: "#e0e7ff",
     iconColor: "#6366f1",

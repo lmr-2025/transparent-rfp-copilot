@@ -6,11 +6,18 @@ import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/customers - Get all customer profiles
 export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") === "true";
     const industry = searchParams.get("industry");
     const search = searchParams.get("search");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     const where: {
       isActive?: boolean;
@@ -38,6 +45,8 @@ export async function GET(request: NextRequest) {
       orderBy: {
         updatedAt: "desc",
       },
+      take: limit,
+      skip: offset,
     });
 
     return NextResponse.json({ profiles }, { status: 200 });

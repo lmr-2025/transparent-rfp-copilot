@@ -182,32 +182,20 @@ function KnowledgeUploadPageContent() {
 
         const data = await response.json();
         if (data.draftMode && data.draft) {
-          // Apply the update directly if has changes
           if (data.draft.hasChanges) {
-            const now = new Date().toISOString();
-            // Merge new URLs with existing ones (avoid duplicates)
-            const existingUrls = existingSkill.sourceUrls || [];
-            const existingUrlStrings = new Set(existingUrls.map(u => u.url));
-            const newSourceUrls: SourceUrl[] = urls
-              .filter(url => !existingUrlStrings.has(url))
-              .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
-            // Update lastFetchedAt for URLs that were re-fetched
-            const updatedExistingUrls = existingUrls.map(u =>
-              urls.includes(u.url) ? { ...u, lastFetchedAt: now } : u
-            );
-
-            const updates = {
+            // Show review step instead of auto-saving
+            setGeneratedDraft({
               title: data.draft.title || existingSkill.title,
               content: data.draft.content,
-              sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
-              lastRefreshedAt: now,
-            };
-            // Save to database via API
-            const updatedSkill = await updateSkillViaApi(existingSkill.id, updates);
-            setSkills((prev) => prev.map((s) => (s.id === existingSkill.id ? updatedSkill : s)));
+              _sourceUrls: urls,
+              _isUpdate: true,
+              _existingSkillId: existingSkill.id,
+              _originalTitle: existingSkill.title,
+              _originalContent: existingSkill.content,
+              _changeHighlights: data.draft.changeHighlights || [],
+              _changeSummary: data.draft.summary,
+            });
             setAnalysisResult(null);
-            setUrlInput("");
-            toast.success(`Updated skill: "${existingSkill.title}"`);
           } else {
             toast.info("No significant changes found. The existing skill already covers this content.");
             setAnalysisResult(null);
@@ -255,8 +243,50 @@ function KnowledgeUploadPageContent() {
     if (!generatedDraft) return;
 
     const now = new Date().toISOString();
-    // Use URLs from draft (primary) or ref (fallback)
     const urlsToSave = generatedDraft._sourceUrls ?? buildUrlsRef.current;
+
+    // Handle update mode
+    if (generatedDraft._isUpdate && generatedDraft._existingSkillId) {
+      const existingSkill = skills.find(s => s.id === generatedDraft._existingSkillId);
+      if (!existingSkill) {
+        toast.error("Original skill not found");
+        return;
+      }
+
+      // Merge new URLs with existing ones (avoid duplicates)
+      const existingUrls = existingSkill.sourceUrls || [];
+      const existingUrlStrings = new Set(existingUrls.map(u => u.url));
+      const newSourceUrls: SourceUrl[] = urlsToSave
+        .filter(url => !existingUrlStrings.has(url))
+        .map(url => ({ url, addedAt: now, lastFetchedAt: now }));
+      // Update lastFetchedAt for URLs that were re-fetched
+      const updatedExistingUrls = existingUrls.map(u =>
+        urlsToSave.includes(u.url) ? { ...u, lastFetchedAt: now } : u
+      );
+
+      const updates = {
+        title: generatedDraft.title,
+        content: generatedDraft.content,
+        sourceUrls: [...updatedExistingUrls, ...newSourceUrls],
+        lastRefreshedAt: now,
+      };
+
+      try {
+        const updatedSkill = await updateSkillViaApi(existingSkill.id, updates);
+        setSkills((prev) => prev.map((s) => (s.id === existingSkill.id ? updatedSkill : s)));
+        setGeneratedDraft(null);
+        setSelectedCategories([]);
+        setUrlInput("");
+        buildUrlsRef.current = [];
+        toast.success(`Updated skill: "${generatedDraft.title}"`);
+      } catch (error) {
+        console.error("Failed to update skill:", error);
+        toast.error("Failed to update skill. Please try again.");
+      }
+      return;
+    }
+
+    // Create new skill mode
     const sourceUrls: SourceUrl[] = urlsToSave.map(url => ({
       url,
       addedAt: now,

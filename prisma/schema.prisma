@@ -129,6 +129,7 @@ model BulkRow {
 
   project              BulkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, rowNumber])
   @@index([projectId])
   @@index([status])
   @@index([flaggedForReview])
@@ -148,17 +149,20 @@ enum RowStatus {
 }
 
 model KnowledgeDocument {
-  id          String   @id @default(uuid())
-  title       String
-  filename    String
-  fileType    String   // pdf, doc, docx, txt
-  content     String   @db.Text // Extracted text content
-  fileSize    Int      // bytes
-  categories  String[] // Uses same categories as Skills
-  uploadedAt  DateTime @default(now())
-  description String?  @db.Text
+  id              String   @id @default(uuid())
+  title           String
+  filename        String
+  fileType        String   // pdf, doc, docx, txt
+  content         String   @db.Text // Extracted text content
+  fileSize        Int      // bytes
+  categories      String[] // Uses same categories as Skills
+  uploadedAt      DateTime @default(now())
+  description     String?  @db.Text
+  isTemplate      Boolean  @default(false) // Whether this doc is a template
+  templateContent String?  @db.Text // LLM-generated markdown template version
 
   @@index([uploadedAt])
+  @@index([isTemplate])
 }
 
 // Customer Profiles (The Rolodex)
@@ -529,79 +533,3 @@ enum AuditAction {
   MERGED
 }
 
-enum ItemCategory {
-  ELECTRONICS
-  CLOTHING
-  TOYS
-  PRACTICAL
-}
-
-enum ItemPriority {
-  LOW
-  MEDIUM
-  HIGH
-}
-
-enum Retailer {
-  AMAZON
-  WALMART
-  TARGET
-  BESTBUY
-  SAMS
-  OTHER
-}
-
-model Item {
-  id              String         @id @default(uuid())
-  name            String
-  category        ItemCategory
-  ageRange        String?
-  priority        ItemPriority   @default(MEDIUM)
-  targetBuyPrice  Decimal        @db.Decimal(10, 2)
-  normalPrice     Decimal?       @db.Decimal(10, 2)
-  lowestSeenPrice Decimal?       @db.Decimal(10, 2)
-  quantityGoal    Int            @default(1)
-  notes           String?        @db.Text
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  listings        Listing[]
-  purchases       Purchase[]
-
-  @@index([category])
-  @@index([priority])
-}
-
-model Listing {
-  id              String    @id @default(uuid())
-  itemId          String
-  retailer        Retailer
-  url             String
-  currentPrice    Decimal?  @db.Decimal(10, 2)
-  lowestSeenPrice Decimal?  @db.Decimal(10, 2)
-  lastCheckedAt   DateTime?
-  active          Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  @@index([itemId])
-  @@index([retailer])
-  @@index([lastCheckedAt])
-}
-
-model Purchase {
-  id               String   @id @default(uuid())
-  itemId           String
-  retailer         String
-  unitPrice        Decimal  @db.Decimal(10, 2)
-  quantity         Int      @default(1)
-  purchasedAt      DateTime
-  storageLocation  String?
-  notes            String?  @db.Text
-  createdAt        DateTime @default(now())
-
-  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
-
-  @@index([itemId])
-  @@index([purchasedAt])
-}

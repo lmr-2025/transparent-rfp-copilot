@@ -10,7 +10,8 @@ export const maxDuration = 120;
 type SkillSummary = {
   id: string;
   title: string;
-  tags: string[];
+  category?: string;
+  categories?: string[];
   contentPreview: string; // First ~500 chars of content
 };
 
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     const systemPrompt = await loadSystemPrompt("analysis", "You are a knowledge library analyst.");
 
     const skillsContext = skills.map((s, idx) =>
-      `[${idx + 1}] ID: ${s.id}\nTitle: ${s.title}\nTags: ${s.tags.join(", ") || "none"}\nContent Preview: ${s.contentPreview}`
+      `[${idx + 1}] ID: ${s.id}\nTitle: ${s.title}\nCategory: ${s.category || s.categories?.[0] || "Uncategorized"}\nContent Preview: ${s.contentPreview}`
     ).join("\n\n---\n\n");
 
     const userPrompt = `Analyze this knowledge library for organizational issues:

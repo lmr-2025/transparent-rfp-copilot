@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 
 /**
  * Get an initialized Anthropic client.
@@ -60,8 +61,8 @@ export function stripCodeFence(value: string): string {
 }
 
 /**
- * Fetch URL content with standard validation and error handling.
- * Returns null if fetch fails or content is invalid.
+ * Fetch URL content with SSRF protection and standard validation.
+ * Returns null if fetch fails, content is invalid, or URL fails SSRF check.
  */
 export async function fetchUrlContent(
   urlString: string,
@@ -72,21 +73,15 @@ export async function fetchUrlContent(
 ): Promise<string | null> {
   const { maxLength = 15000, userAgent = "TransparentTrust/1.0" } = options;
 
-  let parsed: URL;
-  try {
-    parsed = new URL(urlString);
-  } catch {
-    console.warn(`Skipping invalid URL: ${urlString}`);
-    return null;
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    console.warn(`Skipping unsupported protocol: ${urlString}`);
+  // SSRF protection: validate URL before fetching
+  const ssrfCheck = await validateUrlForSSRF(urlString);
+  if (!ssrfCheck.valid) {
+    console.warn(`SSRF check failed for URL ${urlString}: ${ssrfCheck.error}`);
     return null;
   }
 
   try {
-    const response = await fetch(parsed.toString(), {
+    const response = await fetch(urlString, {
       headers: { "User-Agent": userAgent },
     });
 

@@ -12,6 +12,12 @@ export type ChatMessage = {
   urlsUsed?: { id: string; title: string }[];
   systemPrompt?: string;
   model?: string;
+  // Response transparency metadata (parsed from LLM response)
+  confidence?: string;
+  sources?: string;
+  reasoning?: string;
+  inference?: string;
+  remarks?: string;
 };
 
 type SidebarTab = "instructions" | "knowledge" | "customers";

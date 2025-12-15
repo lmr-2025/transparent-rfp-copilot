@@ -14,7 +14,7 @@ type ExistingSkill = {
   id: string;
   title: string;
   category?: SkillCategory;
-  tags: string[];
+  categories?: string[];
   content: string;
 };
 
@@ -26,7 +26,6 @@ type SkillSuggestion = {
   currentContent?: string;
   suggestedAdditions: string;
   relevantQA: RFPEntry[];
-  tags: string[];
 };
 
 type AnalysisResult = {
@@ -65,7 +64,7 @@ export async function POST(request: NextRequest) {
 
     // Build the prompt
     const skillsSummary = existingSkills.length > 0
-      ? existingSkills.map((s, i) => `${i + 1}. "${s.title}" (ID: ${s.id})\n   Category: ${s.category || "Uncategorized"}\n   Tags: ${s.tags.join(", ") || "none"}\n   Content preview: ${s.content.substring(0, 300)}...`).join("\n\n")
+      ? existingSkills.map((s, i) => `${i + 1}. "${s.title}" (ID: ${s.id})\n   Category: ${s.category || s.categories?.[0] || "Uncategorized"}\n   Content preview: ${s.content.substring(0, 300)}...`).join("\n\n")
       : "No existing skills.";
 
     const categoriesList = (await getCategoryNamesFromDb()).join(", ");
@@ -107,8 +106,7 @@ You MUST respond with valid JSON in this exact structure:
       "skillTitle": "title of skill to update or create",
       "category": "One of the categories above (required for new skills)",
       "suggestedAdditions": "the actual content to add to the skill - should be well-formatted, factual statements extracted from the RFP answers",
-      "relevantQAIndices": [array of Q&A indices that informed this suggestion],
-      "tags": ["relevant", "tags"]
+      "relevantQAIndices": [array of Q&A indices that informed this suggestion]
     }
   ],
   "unmatchedIndices": [array of Q&A indices that couldn't be matched to any skill topic]
@@ -160,7 +158,6 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
         skillTitle: string;
         suggestedAdditions: string;
         relevantQAIndices: number[];
-        tags: string[];
       }>;
       unmatchedIndices: number[];
     };
@@ -195,7 +192,6 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
         relevantQA: s.relevantQAIndices
           .filter((i) => i >= 1 && i <= rfpEntries.length)
           .map((i) => rfpEntries[i - 1]), // Convert 1-indexed to 0-indexed
-        tags: s.tags || [],
       })),
       unmatchedEntries: parsed.unmatchedIndices
         .filter((i) => i >= 1 && i <= rfpEntries.length)

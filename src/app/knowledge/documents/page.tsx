@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown } from "lucide-react";
+import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown, LayoutTemplate } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategories } from "@/lib/categoryStorage";
 
@@ -20,6 +20,7 @@ interface DocumentMeta {
   uploadedAt: string;
   description?: string;
   categories?: string[];
+  isTemplate?: boolean;
 }
 
 export default function DocumentsPage() {
@@ -41,6 +42,7 @@ export default function DocumentsPage() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [availableCategories, setAvailableCategories] = useState<CategoryItem[]>([]);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -95,6 +97,9 @@ export default function DocumentsPage() {
       if (selectedCategories.length > 0) {
         formData.append("categories", JSON.stringify(selectedCategories));
       }
+      if (saveAsTemplate) {
+        formData.append("saveAsTemplate", "true");
+      }
 
       const response = await fetch("/api/documents", {
         method: "POST",
@@ -140,6 +145,7 @@ export default function DocumentsPage() {
     setSelectedFile(null);
     setSelectedCategories([]);
     setShowCategoryDropdown(false);
+    setSaveAsTemplate(false);
     setUploadError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -163,6 +169,9 @@ export default function DocumentsPage() {
   const getFileIcon = (fileType: string) => {
     if (fileType === "pdf") {
       return <FileText size={20} style={{ color: "#ef4444" }} />;
+    }
+    if (fileType === "pptx") {
+      return <FileText size={20} style={{ color: "#f97316" }} />; // Orange for PowerPoint
     }
     return <File size={20} style={{ color: "#3b82f6" }} />;
   };
@@ -238,7 +247,7 @@ export default function DocumentsPage() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,.doc,.docx,.txt,.pptx"
               onChange={handleFileSelect}
               style={{
                 width: "100%",
@@ -249,7 +258,7 @@ export default function DocumentsPage() {
               }}
             />
             <p style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "4px" }}>
-              Supported formats: PDF, DOC, DOCX, TXT (max 10MB recommended)
+              Supported formats: PDF, DOC, DOCX, PPTX, TXT (max 10MB recommended)
             </p>
           </div>
 
@@ -409,6 +418,39 @@ export default function DocumentsPage() {
             )}
           </div>
 
+          {/* Save as Template checkbox */}
+          <div style={{ marginBottom: "16px" }}>
+            <label
+              style={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "10px",
+                cursor: "pointer",
+                padding: "12px",
+                backgroundColor: saveAsTemplate ? "#fef3c7" : "#fff",
+                border: saveAsTemplate ? "1px solid #fcd34d" : "1px solid #e2e8f0",
+                borderRadius: "8px",
+                transition: "all 0.15s ease",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={saveAsTemplate}
+                onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                style={{ width: "18px", height: "18px", marginTop: "2px" }}
+              />
+              <div>
+                <div style={{ fontWeight: 500, display: "flex", alignItems: "center", gap: "6px" }}>
+                  <LayoutTemplate size={16} style={{ color: "#d97706" }} />
+                  Save as Template
+                </div>
+                <p style={{ fontSize: "0.8rem", color: "#64748b", margin: "4px 0 0 0" }}>
+                  Generate a markdown template from this document. Use templates in chat to have the AI fill them in with knowledge from your skills.
+                </p>
+              </div>
+            </label>
+          </div>
+
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               onClick={handleUpload}
@@ -497,7 +539,27 @@ export default function DocumentsPage() {
               <div style={{ display: "flex", gap: "12px", flex: 1 }}>
                 <div style={{ paddingTop: "2px" }}>{getFileIcon(doc.fileType)}</div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, marginBottom: "4px" }}>{doc.title}</div>
+                  <div style={{ fontWeight: 600, marginBottom: "4px", display: "flex", alignItems: "center", gap: "8px" }}>
+                    {doc.title}
+                    {doc.isTemplate && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "2px 8px",
+                          backgroundColor: "#fef3c7",
+                          color: "#92400e",
+                          borderRadius: "999px",
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                        }}
+                      >
+                        <LayoutTemplate size={12} />
+                        Template
+                      </span>
+                    )}
+                  </div>
                   <div style={{ fontSize: "0.85rem", color: "#64748b", marginBottom: "4px" }}>
                     {doc.filename} • {formatFileSize(doc.fileSize)} • {doc.fileType.toUpperCase()}
                   </div>

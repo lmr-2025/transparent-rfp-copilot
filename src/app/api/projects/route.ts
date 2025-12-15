@@ -6,9 +6,20 @@ import { createProjectSchema, validateBody } from "@/lib/validations";
 import { logProjectChange, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/projects - Get all projects
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 200);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
+
     const projects = await prisma.bulkProject.findMany({
+      take: limit,
+      skip: offset,
       include: {
         rows: true, // Include all rows with the project
         customerProfiles: {

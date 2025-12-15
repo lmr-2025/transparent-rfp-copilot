@@ -78,7 +78,8 @@ export function useAllReferenceUrls() {
       const res = await fetch("/api/reference-urls");
       if (!res.ok) throw new Error("Failed to fetch URLs");
       const data = await res.json();
-      return (data.urls || []) as ReferenceUrl[];
+      // API returns array directly, not wrapped in { urls: [...] }
+      return Array.isArray(data) ? data : [];
     },
   });
 }

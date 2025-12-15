@@ -89,11 +89,11 @@ export async function GET(request: NextRequest) {
       days
     );
 
-    // Get recent calls (last 20)
+    // Get recent calls (last 100)
     const recentCalls = await prisma.apiUsage.findMany({
       where,
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 100,
       select: {
         id: true,
         feature: true,

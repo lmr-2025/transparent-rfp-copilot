@@ -1,6 +1,6 @@
 # Tech Debt Tracker
 
-Last updated: 2025-12-14
+Last updated: 2025-12-15
 
 ## Priority Levels
 - **P0**: Security/data risk - fix immediately
@@ -92,6 +92,11 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P1: High Priority
 
+### ~~17. Reference URLs Have No "Add" Page~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Created `/knowledge/urls/add` page for adding Reference URLs
+- Updated links in `/knowledge/page.tsx` and `/knowledge/add/page.tsx`
+
 ### ~~3. Browser `alert()` Usage~~ ✅ FIXED
 **Status:** All `alert()` calls replaced with `toast.success/error/info()` from sonner library.
 
@@ -182,6 +187,18 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Extract to utility function
 **Effort:** Low
 
+### 16. Remaining Tags Code to Remove
+**Status:** Skills `tags` field removed (2025-12-15), but tag-related code exists elsewhere
+**Files with `tags`:**
+- `prisma/schema.prisma` - CustomerProfile has `tags String[]`, Document has `tags String[]`
+- `src/lib/validations.ts` - Customer schemas still have tags validation
+- `src/app/customers/` - Customer pages display/manage tags
+- `src/app/knowledge/documents/` - Document pages may display tags
+
+**Decision needed:** Are tags useful for CustomerProfile and Document, or should they be removed too?
+**Fix:** If not useful, remove tags from remaining models following the Skill pattern
+**Effort:** Medium (similar to Skill tags removal - ~20 files)
+
 ---
 
 ## Recently Fixed (2025-12-14)
@@ -220,20 +237,257 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ---
 
-## P2: Broken/Stale Links
+## ~~P2: Broken/Stale Links~~ ✅ FIXED
 
-### Deleted Page Links
-**Priority:** P2
-**Issue:** Old routes were deleted but links may still exist in the codebase or bookmarks
-**Deleted routes:**
-- `/knowledge/urls` → Use `/knowledge/from-url` instead
-- `/knowledge/unified-library` → Use `/knowledge` instead
-- `/knowledge/library` → Use `/knowledge` instead
-- `/knowledge/categories` → Use `/admin/categories` instead
-- `/customers/library` → Use `/customers` instead
+### ~~Deleted Page Links~~
+**Fixed:** 2025-12-15
+- Fixed `/knowledge/urls` → `/knowledge/from-url` in `src/app/knowledge/add/page.tsx`
+- Other deleted routes had no stale links in code
 
-**Fix:** Search codebase for stale links, update navigation components
+---
+
+## ✅ COMPLETED: Critical Security & Performance Fixes (2025-12-15)
+
+### Security Fixes Applied
+- [x] **Auth on GET routes** - Added `requireAuth()` to `/api/customers`, `/api/documents`, `/api/projects`
+- [x] **SSRF protection** - Added `validateUrlForSSRF()` to `fetchUrlContent()` in `apiHelpers.ts`
+- [x] **File size limit** - Added 10MB limit to document upload in `/api/documents`
+
+### Performance Fixes Applied
+- [x] **N+1 query fix** - Project updates now use diff-based association updates (only add/remove changed)
+- [x] **Row upsert** - Project row updates use `upsert` instead of delete-all-then-recreate
+- [x] **Transaction wrapping** - Project updates wrapped in `$transaction()` for atomicity
+- [x] **Pagination** - Added `limit`/`offset` params to skills (100/500), customers (100/500), documents (100/500), projects (50/200)
+- [x] **Database index** - Added unique constraint on `BulkRow(projectId, rowNumber)` for efficient upserts
+
+### Dead Code Removed
+- [x] **Angel-tree models** - Removed `Item`, `Listing`, `Purchase` models (~75 lines)
+- [x] **Angel-tree enums** - Removed `ItemCategory`, `ItemPriority`, `Retailer` enums
+- [x] **Angel-tree code** - Deleted orphaned `angel-tree-actions.ts` and `seed.js`
+
+### PowerPoint Support Added
+- [x] **PPTX parsing** - Added `node-pptx-parser` with temp file handling
+- [x] **Template generation** - "Save as Template" checkbox generates markdown templates via LLM
+
+---
+
+## ✅ REVIEWED: Not Over-Engineered (2025-12-15)
+
+### Prompt Blocks System (~560 lines)
+**Verdict:** Actually in active use - NOT over-engineered
+- Used by 14+ API routes and pages
+- Provides composable prompts with context-specific variants
+- Supports admin UI for customization
+- Value: Consistent prompts across different contexts
+
+### Category Storage (localStorage + database)
+**Verdict:** Intentional caching strategy - NOT a bug
+- Database (via API) is the source of truth
+- localStorage is cache for fast initial render
+- All writes go through API first, then update cache
+- **Minor issue:** Some pages use sync `loadCategories()` and never fetch from API
+
+### Audit Log ipAddress/userAgent Fields
+**Verdict:** Designed for future use - NOT a bug
+- Schema supports these fields, `createAuditLog()` accepts them
+- Helper functions don't pass them (would require request context threading)
+- Value: Security auditing capability when needed
+
+---
+
+## P3: Remaining Items from Code Review
+
+### 18. Category Storage Sync
+**Issue:** Some pages use sync `loadCategories()` (localStorage) and never fetch from API
+**Files:**
+- `src/app/admin/categories/page.tsx`
+- `src/app/admin/settings/page.tsx`
+- `src/app/knowledge/from-url/page.tsx`
+- `src/app/knowledge/urls/add/page.tsx`
+- `src/app/knowledge/documents/page.tsx`
+**Risk:** Categories created on one machine won't appear on another until manual refresh
+**Fix:** Update pages to use `loadCategoriesFromApi()` via React Query hooks (like `use-chat-data.ts`)
+**Effort:** Low-Medium
+
+### 19. Audit Log Request Context
+**Issue:** `ipAddress` and `userAgent` fields never populated
+**Risk:** Reduced security audit trail
+**Fix:** Thread request object through API handlers to audit functions, extract headers
+**Effort:** Medium (requires touching all API routes that audit)
+
+### 20. Rate Limit In-Memory Fallback
+**Issue:** Rate limiting falls back to in-memory Map when Redis unavailable
+**File:** `src/lib/rateLimit.ts`
+**Risk:** Not production-safe for multi-instance deployments
+**Fix:** Require Redis in production, or use distributed alternative
+**Effort:** Low (configuration change)
+
+---
+
+## Code Review Findings (2025-12-15)
+
+### ✅ Fixed During Review
+- [x] **Missing auth on GET `/api/skills/[id]`** - Added `requireAuth()` to single skill endpoint
+
+### P1: High Priority (New)
+
+#### 21. Missing Rate Limiting on LLM Routes
+**Files:**
+- `src/app/api/skills/merge/route.ts`
+- `src/app/api/customers/suggest/route.ts`
+**Issue:** These routes make expensive Claude API calls but don't implement rate limiting
+**Risk:** Cost abuse via excessive API usage
+**Fix:** Add `checkRateLimit(identifier, "llm")` like other LLM routes
 **Effort:** Low
+
+#### 22. Unbounded LLM Context Size
+**File:** `src/app/api/knowledge-chat/route.ts` (lines 82-137)
+**Issue:** All selected skills, documents, and customer profiles are concatenated without size limit. Could exceed Claude's context window or cause high costs
+**Risk:** API errors, excessive costs
+**Fix:** Add context size limit with truncation or warning
+**Effort:** Medium
+
+#### 23. OAuth Secrets Unencrypted in Setup Route
+**File:** `src/app/api/setup/route.ts` (lines 66-69)
+**Issue:** OAuth client secrets stored in database without encryption during initial setup. Admin settings route uses encryption, but setup route stores plaintext
+**Risk:** OAuth credentials exposed if database compromised
+**Fix:** Use same encryption as admin settings route
+**Effort:** Low
+
+### P2: Medium Priority (New)
+
+#### 24. Unsafe Type Casts in Skill Update
+**File:** `src/app/api/skills/[id]/route.ts` (lines 117-119)
+**Issue:** Objects cast to `unknown as Record<string, unknown>` for `computeChanges()` without validation
+**Risk:** Runtime errors if object structure unexpected
+**Fix:** Add type guards or Zod validation
+**Effort:** Low
+
+#### 25. Unvalidated JSON.parse in Document Upload
+**File:** `src/app/api/documents/route.ts` (line 64)
+**Issue:** `JSON.parse(categoriesRaw)` without try-catch or validation
+**Risk:** Runtime error on malformed JSON crashes upload
+**Fix:** Wrap in try-catch, validate with Zod
+**Effort:** Low
+
+#### 26. Sequential URL Fetching in Analyze Route
+**File:** `src/app/api/skills/analyze/route.ts` (lines 178-211)
+**Issue:** URLs fetched sequentially in for loop. With 10 URLs, adds 10+ seconds latency
+**Risk:** Poor UX, timeouts
+**Fix:** Use `Promise.all()` for parallel fetching
+**Effort:** Low
+
+#### 27. Missing URL Validation on Customer sourceUrls
+**File:** `src/lib/validations.ts` (line 91)
+**Issue:** `sourceUrls` defined as `z.array(z.string())` but should validate strings are valid URLs
+**Risk:** Invalid URLs stored in database
+**Fix:** Use `z.array(z.string().url())`
+**Effort:** Low
+
+#### 28. HTML Entity Decoding Incomplete
+**File:** `src/app/api/fetch-url/route.ts` (lines 96-107)
+**Issue:** Only common HTML entities decoded. Numeric entities (`&#123;`) not handled
+**Risk:** Malformed text extraction from HTML
+**Fix:** Use library like `html-entities` or `he`
+**Effort:** Low
+
+### P3: Low Priority (New)
+
+#### 29. Deprecated SystemPrompt Model Still in Schema
+**File:** `prisma/schema.prisma` (lines 248-258)
+**Issue:** Comment says "DEPRECATED - use PromptBlock instead" but model still exists
+**Risk:** Confusion, accidental use
+**Fix:** Remove model and run migration
+**Effort:** Low
+
+#### 30. Conversation History Stored as JSON Without Pagination
+**File:** `prisma/schema.prisma` (line 442)
+**Issue:** Chat messages stored as JSON array in single field. Long conversations could exceed limits
+**Risk:** Database bloat, slow queries
+**Fix:** Normalize to separate ChatMessage table with pagination
+**Effort:** High
+
+#### 31. Console.log Used for Production Errors
+**Files:** Multiple API routes
+**Issue:** Errors logged to `console.error` but no structured logging or alerting
+**Risk:** Hard to monitor production issues
+**Fix:** Add structured logging (winston/pino) with error tracking
+**Effort:** Medium
+
+#### 32. Inconsistent Naming: BulkProject vs Project
+**File:** `prisma/schema.prisma` (lines 78-105)
+**Issue:** Model named `BulkProject` but represents any project
+**Risk:** Confusing for new developers
+**Fix:** Rename to `Project` (requires migration + code updates)
+**Effort:** High
+
+---
+
+## Feature Backlog (2025-12-15)
+
+### F1. Duplicate Usage Pages
+**Files:**
+- `src/app/usage/page.tsx`
+- `src/app/admin/usage/page.tsx`
+**Issue:** These two files are 100% identical (469 lines each)
+**Fix:** Delete one and redirect, or differentiate (admin version shows all users by default, public version shows user-only)
+**Effort:** Low
+
+### F2. Missing Export/Download for Knowledge Items
+**Current State:** Projects have Excel export, but Skills/Documents/Reference URLs have no export
+**User Need:** Ability to backup or migrate knowledge base
+**Fix Options:**
+- Add CSV/JSON export for each knowledge type
+- Add bulk export for entire knowledge base
+**Effort:** Medium
+
+### F3. No Import for Skills
+**Current State:** Documents have import, Reference URLs have bulk add, but Skills have no import
+**User Need:** Migrate skills between environments or restore from backup
+**Fix:** Add JSON/CSV import similar to document import
+**Effort:** Medium
+
+### F4. Chat History Search
+**Current State:** Chat sessions listed in sidebar but not searchable
+**User Need:** Find past conversations by content or topic
+**Fix:** Add search input to ChatSidebar, query against messages JSON
+**Effort:** Medium
+
+### F5. Knowledge Item Versioning
+**Current State:** Skills are overwritten on edit, no history
+**User Need:** See what changed, revert bad edits
+**Fix:** Store version history (simple: JSON changelog field, proper: separate Version table)
+**Effort:** High
+
+### F6. Bulk Edit for Knowledge Items
+**Current State:** Can bulk delete, but not bulk edit (category, owner)
+**User Need:** Reassign many items when owner leaves
+**Fix:** Add "Edit Selected" option to bulk actions
+**Effort:** Medium
+
+### F7. Dashboard/Analytics Page
+**Current State:** Usage shows API costs, but no business metrics
+**User Need:** See question response times, confidence distribution, most-used skills
+**Fix:** Add analytics dashboard with charts
+**Effort:** High
+
+### F8. Webhook/Integration for External Systems
+**Current State:** Slack webhook exists for notifications
+**User Need:** Trigger actions in other systems when answers are generated
+**Fix:** Add configurable webhooks for events (answer_generated, skill_created, etc.)
+**Effort:** High
+
+### F9. Mobile-Responsive Design
+**Current State:** Pages work on mobile but not optimized
+**User Need:** Use on tablet during meetings
+**Fix:** Add responsive breakpoints, test on mobile devices
+**Effort:** Medium
+
+### F10. Keyboard Shortcuts
+**Current State:** Only Enter to submit in chat
+**User Need:** Power users want shortcuts for common actions
+**Fix:** Add keyboard shortcut system (Cmd+K for search, Cmd+N for new, etc.)
+**Effort:** Medium
 
 ---
 

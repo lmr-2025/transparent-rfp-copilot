@@ -15,11 +15,24 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 
+vi.mock("@/lib/apiAuth", () => ({
+  requireAuth: vi.fn(() => Promise.resolve({
+    authorized: true,
+    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
+  })),
+}));
+
+vi.mock("@/lib/auditLog", () => ({
+  logProjectChange: vi.fn(),
+  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
+}));
+
 const routes = await import("@/app/api/projects/route");
 
-const makeRequest = (body?: unknown) =>
+const makeRequest = (body?: unknown, url = "http://localhost/api/projects") =>
   ({
     json: async () => body,
+    url,
   }) as unknown as NextRequest;
 
 describe("/api/projects route", () => {
@@ -37,7 +50,7 @@ describe("/api/projects route", () => {
         ],
       },
     ]);
-    const res = await routes.GET();
+    const res = await routes.GET(makeRequest());
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.projects[0].customerProfiles[0].name).toBe("Acme");

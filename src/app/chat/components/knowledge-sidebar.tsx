@@ -456,6 +456,7 @@ function SelectableItem({ label, selected, onClick }: SelectableItemProps) {
   return (
     <button
       onClick={onClick}
+      title={label}
       className={cn(
         "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
         selected

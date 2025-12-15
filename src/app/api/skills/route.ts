@@ -15,6 +15,8 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") !== "false";
     const category = searchParams.get("category");
+    const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
+    const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     const where: {
       isActive?: boolean;
@@ -32,6 +34,8 @@ export async function GET(request: NextRequest) {
     const skills = await prisma.skill.findMany({
       where,
       orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: offset,
       include: {
         owner: {
           select: {

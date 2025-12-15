@@ -10,6 +10,11 @@ type RouteContext = {
 
 // GET /api/skills/[id] - Get a single skill
 export async function GET(request: NextRequest, context: RouteContext) {
+  const auth = await requireAuth();
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   try {
     const { id } = await context.params;
 
@@ -93,6 +98,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (data.sourceUrls !== undefined) updateData.sourceUrls = data.sourceUrls;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
     if (data.owners !== undefined) updateData.owners = data.owners;
+    if (data.lastRefreshedAt !== undefined) updateData.lastRefreshedAt = new Date(data.lastRefreshedAt);
 
     const skill = await prisma.skill.update({
       where: { id },
@@ -130,8 +136,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json(skill);
   } catch (error) {
     console.error("Failed to update skill:", error);
+    const message = error instanceof Error ? error.message : "Failed to update skill";
     return NextResponse.json(
-      { error: "Failed to update skill" },
+      { error: message },
       { status: 500 }
     );
   }

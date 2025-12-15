@@ -11,6 +11,13 @@ export type SkillDraft = {
   sourceMapping?: string[];
   // Store source URLs directly in the draft so they survive any re-renders
   _sourceUrls?: string[];
+  // For update mode - track what's changing
+  _isUpdate?: boolean;
+  _existingSkillId?: string;
+  _originalTitle?: string;
+  _originalContent?: string;
+  _changeHighlights?: string[];
+  _changeSummary?: string;
 };
 
 export type SnippetDraft = {
