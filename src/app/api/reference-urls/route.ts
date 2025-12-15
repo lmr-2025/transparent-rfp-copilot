@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
     const urls = await prisma.referenceUrl.findMany({
       where,
       orderBy: { addedAt: "desc" },
+      include: {
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
 
     return apiSuccess(urls);
@@ -48,6 +53,8 @@ export async function POST(request: NextRequest) {
         title: data.title,
         description: data.description,
         categories: data.categories,
+        ownerId: auth.session.user.id,
+        createdBy: auth.session.user.email || undefined,
       },
     });
 
@@ -85,7 +92,7 @@ export async function PUT(request: NextRequest) {
 
     const { urls } = validation.data;
 
-    // Upsert each URL (skip duplicates)
+    // Upsert each URL (skip duplicates), set owner on new URLs
     const results = await Promise.all(
       urls.map((u) =>
         prisma.referenceUrl.upsert({
@@ -95,6 +102,8 @@ export async function PUT(request: NextRequest) {
             title: u.title,
             description: u.description,
             categories: u.categories || [],
+            ownerId: auth.session.user.id,
+            createdBy: auth.session.user.email || undefined,
           },
           update: {
             title: u.title || undefined,

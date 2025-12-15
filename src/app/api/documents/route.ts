@@ -35,6 +35,11 @@ export async function GET(request: NextRequest) {
         uploadedAt: true,
         description: true,
         isTemplate: true,
+        ownerId: true,
+        createdBy: true,
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
         // Don't include content or templateContent in list - too large
       },
     });
@@ -125,7 +130,7 @@ export async function POST(request: NextRequest) {
       templateContent = await generateMarkdownTemplate(content, title.trim());
     }
 
-    // Save to database
+    // Save to database with owner info
     const document = await prisma.knowledgeDocument.create({
       data: {
         title: title.trim(),
@@ -137,6 +142,8 @@ export async function POST(request: NextRequest) {
         description: description?.trim() || null,
         isTemplate: saveAsTemplate,
         templateContent,
+        ownerId: auth.session.user.id,
+        createdBy: auth.session.user.email || undefined,
       },
     });
 

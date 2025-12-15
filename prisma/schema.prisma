@@ -22,22 +22,24 @@ enum UserRole {
 
 // NextAuth.js models
 model User {
-  id               String            @id @default(cuid())
+  id               String              @id @default(cuid())
   name             String?
-  email            String?           @unique
+  email            String?             @unique
   emailVerified    DateTime?
   image            String?
-  role             UserRole          @default(USER)
+  role             UserRole            @default(USER)
   accounts         Account[]
   sessions         Session[]
   questionHistory  QuestionHistory[]
   chatSessions     ChatSession[]
   apiUsage         ApiUsage[]
-  ownedProjects    BulkProject[]     @relation("ProjectOwner")
-  ownedSkills      Skill[]           @relation("SkillOwner")
-  ownedCustomers   CustomerProfile[] @relation("CustomerOwner")
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  ownedProjects    BulkProject[]       @relation("ProjectOwner")
+  ownedSkills      Skill[]             @relation("SkillOwner")
+  ownedCustomers   CustomerProfile[]   @relation("CustomerOwner")
+  ownedDocuments   KnowledgeDocument[] @relation("DocumentOwner")
+  ownedUrls        ReferenceUrl[]      @relation("UrlOwner")
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 }
 
 model Account {
@@ -160,9 +162,13 @@ model KnowledgeDocument {
   description     String?  @db.Text
   isTemplate      Boolean  @default(false) // Whether this doc is a template
   templateContent String?  @db.Text // LLM-generated markdown template version
+  ownerId         String?  // Foreign key to User
+  owner           User?    @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy       String?  // User email for display
 
   @@index([uploadedAt])
   @@index([isTemplate])
+  @@index([ownerId])
 }
 
 // Customer Profiles (The Rolodex)
@@ -293,8 +299,12 @@ model ReferenceUrl {
   addedAt     DateTime @default(now())
   lastUsedAt  DateTime?
   usageCount  Int      @default(0)
+  ownerId     String?  // Foreign key to User
+  owner       User?    @relation("UrlOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  createdBy   String?  // User email for display
 
   @@index([addedAt])
+  @@index([ownerId])
 }
 
 // Chat Prompts (prompt library for The Oracle)
