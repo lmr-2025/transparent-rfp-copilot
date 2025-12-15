@@ -158,9 +158,11 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Effort:** Medium (but can be done incrementally)
 
 ### 12. Missing Type Safety
+**Status:** Input validation complete, response parsing still needed
 **Files:** Multiple
 **Evidence:** `as` casts without validation, missing Zod parsing on responses
-**Fix:** Use Zod for all API response parsing
+**Note:** Input validation already comprehensive in `src/lib/validations.ts` with Zod schemas for all create/update operations. The remaining work is adding response schemas and parsing API responses in frontend hooks.
+**Fix:** Add Zod response schemas and update frontend fetch hooks
 **Effort:** Medium
 
 ---
