@@ -272,14 +272,22 @@ function extractJsonObject(value: string): string | null {
 }
 
 function normalizeSkillDraft(data: unknown): SkillDraft {
-  if (
-    !data ||
-    typeof data !== "object" ||
-    !("title" in data) ||
-    !("tags" in data) ||
-    !("content" in data)
-  ) {
-    throw new Error("LLM response missing required fields.");
+  if (!data || typeof data !== "object") {
+    throw new Error("LLM response is not a valid object.");
+  }
+
+  const dataObj = data as Record<string, unknown>;
+  const missingFields: string[] = [];
+  if (!("title" in dataObj)) missingFields.push("title");
+  if (!("tags" in dataObj)) missingFields.push("tags");
+  if (!("content" in dataObj)) missingFields.push("content");
+
+  if (missingFields.length > 0) {
+    const receivedKeys = Object.keys(dataObj).slice(0, 10).join(", ");
+    throw new Error(
+      `LLM response missing required fields: ${missingFields.join(", ")}. ` +
+      `Received keys: ${receivedKeys || "(none)"}`
+    );
   }
 
   const { title, tags, content } = data as Record<string, unknown>;
