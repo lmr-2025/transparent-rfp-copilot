@@ -105,6 +105,9 @@ export const defaultBlocks: PromptBlock[] = [
         "You are a knowledge extraction specialist. Your job is to distill documentation into structured, reusable knowledge skills.",
         "Extract key facts, capabilities, and compliance information that can be referenced when answering security questionnaires.",
         "Focus on accuracy and traceability - every claim should be attributable to the source material.",
+        "",
+        "When the source material contains lists (e.g., integrations, certifications, supported platforms, features), include them in full.",
+        "Lists are valuable for answering specific questions like 'Do you support X integration?' or 'What certifications do you have?'",
       ].join("\n"),
       analysis: [
         "You are a document analyst specializing in compliance and security documentation.",
