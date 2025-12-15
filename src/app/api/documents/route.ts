@@ -61,7 +61,17 @@ export async function POST(request: NextRequest) {
     const title = formData.get("title") as string | null;
     const description = formData.get("description") as string | null;
     const categoriesRaw = formData.get("categories") as string | null;
-    const categories = categoriesRaw ? JSON.parse(categoriesRaw) as string[] : [];
+    let categories: string[] = [];
+    if (categoriesRaw) {
+      try {
+        const parsed = JSON.parse(categoriesRaw);
+        if (Array.isArray(parsed)) {
+          categories = parsed.filter((c): c is string => typeof c === "string");
+        }
+      } catch {
+        return NextResponse.json({ error: "Invalid categories format" }, { status: 400 });
+      }
+    }
     const saveAsTemplate = formData.get("saveAsTemplate") === "true";
 
     if (!file) {

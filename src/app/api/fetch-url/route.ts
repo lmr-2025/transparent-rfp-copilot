@@ -100,11 +100,21 @@ function extractTextFromHtml(html: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
     .replace(/&rsquo;/g, "'")
+    .replace(/&lsquo;/g, "'")
     .replace(/&ldquo;/g, '"')
     .replace(/&rdquo;/g, '"')
     .replace(/&mdash;/g, "—")
-    .replace(/&ndash;/g, "–");
+    .replace(/&ndash;/g, "–")
+    .replace(/&hellip;/g, "…")
+    .replace(/&copy;/g, "©")
+    .replace(/&reg;/g, "®")
+    .replace(/&trade;/g, "™")
+    .replace(/&bull;/g, "•")
+    // Decode numeric entities (decimal: &#123; and hex: &#x7B;)
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
   // Clean up whitespace
   text = text

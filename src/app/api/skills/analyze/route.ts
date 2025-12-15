@@ -176,35 +176,37 @@ function findUrlMatches(
 }
 
 async function fetchSourceContent(urls: string[]): Promise<string | null> {
-  const sections: string[] = [];
-
-  for (const url of urls.slice(0, 10)) { // Limit to 10 URLs
+  // Fetch all URLs in parallel for better performance
+  const fetchPromises = urls.slice(0, 10).map(async (url): Promise<string | null> => {
     try {
       // SSRF protection: validate URL before fetching
       const ssrfCheck = await validateUrlForSSRF(url);
       if (!ssrfCheck.valid) {
         console.warn(`SSRF check failed for URL ${url}: ${ssrfCheck.error}`);
-        continue;
+        return null;
       }
 
       const parsed = new URL(url);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") continue;
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
 
       const response = await fetch(parsed.toString(), {
         headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
       });
-      if (!response.ok) continue;
+      if (!response.ok) return null;
 
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("text")) continue;
+      if (!contentType.includes("text")) return null;
 
       const text = await response.text();
       // Take first 5000 chars per URL for analysis (we just need to understand the topic)
-      sections.push(`Source: ${url}\n${text.slice(0, 5000)}`);
+      return `Source: ${url}\n${text.slice(0, 5000)}`;
     } catch {
-      continue;
+      return null;
     }
-  }
+  });
+
+  const results = await Promise.all(fetchPromises);
+  const sections = results.filter((s): s is string => s !== null);
 
   if (sections.length === 0) return null;
   return sections.join("\n\n---\n\n").slice(0, 30000); // Cap total at 30k

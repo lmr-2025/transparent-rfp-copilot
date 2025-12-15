@@ -9,8 +9,22 @@ import { knowledgeChatSchema, validateBody } from "@/lib/validations";
 import { getAnthropicClient } from "@/lib/apiHelpers";
 import { interpolateSnippets } from "@/lib/snippetInterpolation";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { CONTEXT_LIMITS } from "@/lib/constants";
 
 export const maxDuration = 60;
+
+/**
+ * Truncates context to fit within the maximum size limit.
+ * Returns the truncated string and whether truncation occurred.
+ */
+function truncateContext(context: string, maxSize: number): { text: string; truncated: boolean } {
+  if (context.length <= maxSize) {
+    return { text: context, truncated: false };
+  }
+  // Truncate and add indicator
+  const truncated = context.slice(0, maxSize - 50) + "\n\n[... context truncated due to size limits ...]";
+  return { text: truncated, truncated: true };
+}
 
 type ChatResponse = {
   response: string;
@@ -18,6 +32,7 @@ type ChatResponse = {
   customersUsed: { id: string; name: string }[];
   documentsUsed: { id: string; title: string }[];
   urlsUsed: { id: string; title: string }[];
+  contextTruncated?: boolean; // True if context was truncated to fit limits
   // Transparency data
   transparency: {
     systemPrompt: string;
@@ -140,6 +155,18 @@ ${keyFactsText}`;
       combinedKnowledgeContext = "No knowledge base documents provided.";
     }
 
+    // Apply context size limits to prevent excessive API costs and context overflow
+    // Allocate budget: 60% knowledge, 30% customer, 10% buffer for base prompt
+    const knowledgeBudget = Math.floor(CONTEXT_LIMITS.MAX_CONTEXT * 0.6);
+    const customerBudget = Math.floor(CONTEXT_LIMITS.MAX_CONTEXT * 0.3);
+
+    const truncatedKnowledge = truncateContext(combinedKnowledgeContext, knowledgeBudget);
+    const truncatedCustomer = truncateContext(customerContext, customerBudget);
+    const contextTruncated = truncatedKnowledge.truncated || truncatedCustomer.truncated;
+
+    combinedKnowledgeContext = truncatedKnowledge.text;
+    const finalCustomerContext = truncatedCustomer.text;
+
     // Load base system prompt from the new block-based system
     const baseSystemPrompt = await loadSystemPrompt("chat", "You are a helpful assistant.");
 
@@ -155,8 +182,8 @@ ${keyFactsText}`;
       contextParts.push(`## User Instructions\n${expandedInstructions}`);
     }
 
-    if (customerContext) {
-      contextParts.push(`## Customer Context\n${customerContext}`);
+    if (finalCustomerContext) {
+      contextParts.push(`## Customer Context\n${finalCustomerContext}`);
     }
 
     contextParts.push(`## Knowledge Base\n${combinedKnowledgeContext}`);
@@ -236,11 +263,12 @@ ${keyFactsText}`;
       customersUsed,
       documentsUsed,
       urlsUsed,
+      contextTruncated,
       transparency: {
         systemPrompt,
         baseSystemPrompt,
         knowledgeContext: combinedKnowledgeContext, // Use combined context for display
-        customerContext,
+        customerContext: finalCustomerContext,
         documentContext,
         urlContext,
         model: CLAUDE_MODEL,

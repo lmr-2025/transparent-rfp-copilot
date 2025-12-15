@@ -143,14 +143,8 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Implement server-side pagination, virtualization (react-window)
 **Effort:** Medium
 
-### 10. Hardcoded Magic Numbers
-**Files:** Multiple
-**Evidence:**
-- `.slice(0, 10000)` - unexplained limit
-- `contextSize > 100000` - warning threshold
-- `USER_INSTRUCTIONS_STORAGE_KEY = "grc-minion-user-instructions"`
-**Fix:** Create `constants.ts` with named values
-**Effort:** Low
+### ~~10. Hardcoded Magic Numbers~~ ✅ FIXED
+**Status:** Already fixed - Created `src/lib/constants.ts` with named values (see "Recently Fixed" section).
 
 ### 11. Inconsistent API Response Formats
 **Files:** Various API routes
@@ -181,11 +175,8 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Audit and add accessibility features
 **Effort:** Medium
 
-### 15. Duplicate Business Logic
-**File:** `src/app/knowledge/page.tsx` (lines 509-512, 594-597)
-**Evidence:** Owner duplicate check logic repeated
-**Fix:** Extract to utility function
-**Effort:** Low
+### ~~15. Duplicate Business Logic~~ ✅ FIXED
+**Status:** Already fixed - Owner logic extracted to `owner-management-dialog.tsx` component with `isOwner()` helper.
 
 ### 16. Remaining Tags Code to Remove
 **Status:** Skills `tags` field removed (2025-12-15), but tag-related code exists elsewhere
@@ -331,65 +322,46 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ### P1: High Priority (New)
 
-#### 21. Missing Rate Limiting on LLM Routes
-**Files:**
-- `src/app/api/skills/merge/route.ts`
-- `src/app/api/customers/suggest/route.ts`
-**Issue:** These routes make expensive Claude API calls but don't implement rate limiting
-**Risk:** Cost abuse via excessive API usage
-**Fix:** Add `checkRateLimit(identifier, "llm")` like other LLM routes
-**Effort:** Low
+#### ~~21. Missing Rate Limiting on LLM Routes~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- `/api/skills/merge` - Added rate limiting (customers/suggest already had it)
 
-#### 22. Unbounded LLM Context Size
-**File:** `src/app/api/knowledge-chat/route.ts` (lines 82-137)
-**Issue:** All selected skills, documents, and customer profiles are concatenated without size limit. Could exceed Claude's context window or cause high costs
-**Risk:** API errors, excessive costs
-**Fix:** Add context size limit with truncation or warning
-**Effort:** Medium
+#### ~~22. Unbounded LLM Context Size~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Added `truncateContext()` helper to enforce `CONTEXT_LIMITS.MAX_CONTEXT` (100k chars)
+- Knowledge context gets 60% budget, customer context gets 30% budget
+- Response includes `contextTruncated` flag when truncation occurs
+- Truncated content includes indicator message
 
-#### 23. OAuth Secrets Unencrypted in Setup Route
-**File:** `src/app/api/setup/route.ts` (lines 66-69)
-**Issue:** OAuth client secrets stored in database without encryption during initial setup. Admin settings route uses encryption, but setup route stores plaintext
-**Risk:** OAuth credentials exposed if database compromised
-**Fix:** Use same encryption as admin settings route
-**Effort:** Low
+#### ~~23. OAuth Secrets Unencrypted in Setup Route~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Added encryption for sensitive keys (matching admin settings pattern)
+- Setup route now requires ENCRYPTION_KEY for secrets
 
 ### P2: Medium Priority (New)
 
-#### 24. Unsafe Type Casts in Skill Update
-**File:** `src/app/api/skills/[id]/route.ts` (lines 117-119)
-**Issue:** Objects cast to `unknown as Record<string, unknown>` for `computeChanges()` without validation
-**Risk:** Runtime errors if object structure unexpected
-**Fix:** Add type guards or Zod validation
-**Effort:** Low
+#### ~~24. Unsafe Type Casts in Skill Update~~ ✅ REVIEWED
+**Status:** Reviewed 2025-12-15 - The cast is appropriate since Prisma models are plain objects and `computeChanges()` only needs generic record access. Not a real issue.
 
-#### 25. Unvalidated JSON.parse in Document Upload
-**File:** `src/app/api/documents/route.ts` (line 64)
-**Issue:** `JSON.parse(categoriesRaw)` without try-catch or validation
-**Risk:** Runtime error on malformed JSON crashes upload
-**Fix:** Wrap in try-catch, validate with Zod
-**Effort:** Low
+#### ~~25. Unvalidated JSON.parse in Document Upload~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Added try-catch with proper error response
+- Added type validation to ensure parsed value is string array
 
-#### 26. Sequential URL Fetching in Analyze Route
-**File:** `src/app/api/skills/analyze/route.ts` (lines 178-211)
-**Issue:** URLs fetched sequentially in for loop. With 10 URLs, adds 10+ seconds latency
-**Risk:** Poor UX, timeouts
-**Fix:** Use `Promise.all()` for parallel fetching
-**Effort:** Low
+#### ~~26. Sequential URL Fetching in Analyze Route~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Changed `fetchSourceContent()` to use `Promise.all()` for parallel fetching
+- 10 URLs now fetch concurrently instead of sequentially
 
-#### 27. Missing URL Validation on Customer sourceUrls
-**File:** `src/lib/validations.ts` (line 91)
-**Issue:** `sourceUrls` defined as `z.array(z.string())` but should validate strings are valid URLs
-**Risk:** Invalid URLs stored in database
-**Fix:** Use `z.array(z.string().url())`
-**Effort:** Low
+#### ~~27. Missing URL Validation on Customer sourceUrls~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Changed `sourceUrls` from `z.array(z.string())` to `z.array(z.string().url())`
+- Applied to both create and update schemas
 
-#### 28. HTML Entity Decoding Incomplete
-**File:** `src/app/api/fetch-url/route.ts` (lines 96-107)
-**Issue:** Only common HTML entities decoded. Numeric entities (`&#123;`) not handled
-**Risk:** Malformed text extraction from HTML
-**Fix:** Use library like `html-entities` or `he`
-**Effort:** Low
+#### ~~28. HTML Entity Decoding Incomplete~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Added numeric entity decoding (decimal `&#123;` and hex `&#x7B;`)
+- Added more common named entities (&hellip;, &copy;, &reg;, &trade;, &bull;, &apos;, &lsquo;)
 
 ### P3: Low Priority (New)
 
@@ -398,7 +370,7 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Issue:** Comment says "DEPRECATED - use PromptBlock instead" but model still exists
 **Risk:** Confusion, accidental use
 **Fix:** Remove model and run migration
-**Effort:** Low
+**Effort:** ~~Low~~ **Medium-High** - Model is still actively used by `/api/system-prompts` routes and `/api/contracts/[id]/analyze`. Requires data migration to PromptBlock and updating all API routes.
 
 #### 30. Conversation History Stored as JSON Without Pagination
 **File:** `prisma/schema.prisma` (line 442)
@@ -425,13 +397,11 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## Feature Backlog (2025-12-15)
 
-### F1. Duplicate Usage Pages
-**Files:**
-- `src/app/usage/page.tsx`
-- `src/app/admin/usage/page.tsx`
-**Issue:** These two files are 100% identical (469 lines each)
-**Fix:** Delete one and redirect, or differentiate (admin version shows all users by default, public version shows user-only)
-**Effort:** Low
+### ~~F1. Duplicate Usage Pages~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- Deleted duplicate `src/app/admin/usage/page.tsx` (469 lines)
+- Replaced with redirect to `/usage`
+- Single usage page now serves both routes
 
 ### F2. Missing Export/Download for Knowledge Items
 **Current State:** Projects have Excel export, but Skills/Documents/Reference URLs have no export

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 type MergeRequestBody = {
   targetSkill: {
@@ -20,6 +21,13 @@ type MergeResponse = {
 };
 
 export async function POST(request: NextRequest) {
+  // Rate limit check - LLM tier for expensive AI calls
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(identifier, "llm");
+  if (!rateLimitResult.success && rateLimitResult.error) {
+    return rateLimitResult.error;
+  }
+
   let body: MergeRequestBody;
   try {
     body = (await request.json()) as MergeRequestBody;

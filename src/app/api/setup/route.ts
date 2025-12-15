@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { encrypt, isEncryptionConfigured } from "@/lib/encryption";
+
+// Keys that contain sensitive data and should be encrypted
+const SENSITIVE_KEY_PATTERNS = ["SECRET", "TOKEN", "KEY", "PASSWORD", "CREDENTIAL"];
+
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEY_PATTERNS.some(pattern => key.toUpperCase().includes(pattern));
+}
 
 // GET /api/setup - Check if setup is needed
 export async function GET() {
@@ -62,11 +70,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isSensitive = isSensitiveKey(key);
+
+    // Require encryption to be configured for sensitive values
+    if (isSensitive && !isEncryptionConfigured()) {
+      return NextResponse.json(
+        { error: "ENCRYPTION_KEY environment variable must be configured to store sensitive settings" },
+        { status: 500 }
+      );
+    }
+
+    // Encrypt sensitive values before storing
+    const valueToStore = isSensitive && value ? encrypt(value) : (value || "");
+
     // Store in database
     await prisma.appSetting.upsert({
       where: { key },
-      create: { key, value: value || "", updatedBy: "setup-wizard" },
-      update: { value: value || "", updatedBy: "setup-wizard" },
+      create: { key, value: valueToStore, updatedBy: "setup-wizard" },
+      update: { value: valueToStore, updatedBy: "setup-wizard" },
     });
 
     return NextResponse.json({ success: true, key });
