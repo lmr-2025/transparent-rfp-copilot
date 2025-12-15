@@ -216,6 +216,24 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 - [x] ~~No loading state on Delete button~~ - Added `deletingId` state
 - [x] ~~Silent error handling (.catch(console.error))~~ - All replaced with toast.error() notifications
 - [x] ~~Browser confirm() usage~~ - All 15 confirm() calls replaced with ConfirmModal component
+- [x] ~~Browser prompt() usage~~ - All prompt() calls replaced with PromptModal/TextareaPromptModal components
+
+---
+
+## P2: Broken/Stale Links
+
+### Deleted Page Links
+**Priority:** P2
+**Issue:** Old routes were deleted but links may still exist in the codebase or bookmarks
+**Deleted routes:**
+- `/knowledge/urls` → Use `/knowledge/from-url` instead
+- `/knowledge/unified-library` → Use `/knowledge` instead
+- `/knowledge/library` → Use `/knowledge` instead
+- `/knowledge/categories` → Use `/admin/categories` instead
+- `/customers/library` → Use `/customers` instead
+
+**Fix:** Search codebase for stale links, update navigation components
+**Effort:** Low
 
 ---
 
