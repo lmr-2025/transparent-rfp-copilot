@@ -20,6 +20,11 @@ export type BulkRow = {
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
+  // Review workflow
+  reviewStatus?: "NONE" | "REQUESTED" | "APPROVED" | "CORRECTED";
+  reviewedAt?: string;
+  reviewedBy?: string;
+  userEditedAnswer?: string;
   // Legacy fields for conversational refinement
   challengePrompt?: string;
   challengeResponse?: string;

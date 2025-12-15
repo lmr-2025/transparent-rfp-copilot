@@ -5,7 +5,7 @@ import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { useConfirm, usePrompt } from "@/components/ConfirmModal";
+import { useConfirm, usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
@@ -124,7 +124,7 @@ export default function BulkResponsesPage() {
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [availableSkills, setAvailableSkills] = useState<Skill[]>([]);
   const [referenceUrls, setReferenceUrls] = useState<ReferenceUrl[]>([]);
-  const [statusFilter, setStatusFilter] = useState<"all" | "high" | "medium" | "low" | "error" | "flagged">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "high" | "medium" | "low" | "error" | "flagged" | "pending-review" | "reviewed">("all");
   const [promptCollapsed, setPromptCollapsed] = useState(true);
   const [generateProgress, setGenerateProgress] = useState({ current: 0, total: 0 });
   const [isRequestingReview, setIsRequestingReview] = useState(false);
@@ -147,7 +147,15 @@ export default function BulkResponsesPage() {
     submitLabel: "Flag",
     cancelLabel: "Skip Note",
   });
+  const { prompt: promptForReviewNote, TextareaPromptDialog: ReviewNoteDialog } = useTextareaPrompt({
+    title: "Request Review",
+    message: "Add a note for the reviewer explaining what you'd like them to check (optional)",
+    placeholder: "e.g., 'Please verify the compliance claims' or 'Not sure about the SOC 2 mention'",
+    submitLabel: "Send for Review",
+    cancelLabel: "Cancel",
+  });
   const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
+  const [sendingReviewRowId, setSendingReviewRowId] = useState<string | null>(null);
 
   // Load project by ID on mount
   useEffect(() => {
@@ -211,7 +219,7 @@ export default function BulkResponsesPage() {
 
   const stats = useMemo(() => {
     if (!project) {
-      return { total: 0, high: 0, medium: 0, low: 0, errors: 0, flagged: 0 };
+      return { total: 0, high: 0, medium: 0, low: 0, errors: 0, flagged: 0, pendingReview: 0, approved: 0 };
     }
     const total = project.rows.length;
     const high = project.rows.filter((row) => row.confidence && row.confidence.toLowerCase().includes('high')).length;
@@ -219,7 +227,9 @@ export default function BulkResponsesPage() {
     const low = project.rows.filter((row) => row.confidence && row.confidence.toLowerCase().includes('low')).length;
     const errors = project.rows.filter((row) => row.status === "error").length;
     const flagged = project.rows.filter((row) => row.flaggedForReview).length;
-    return { total, high, medium, low, errors, flagged };
+    const pendingReview = project.rows.filter((row) => row.reviewStatus === "REQUESTED").length;
+    const approved = project.rows.filter((row) => row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED").length;
+    return { total, high, medium, low, errors, flagged, pendingReview, approved };
   }, [project]);
 
   const filteredRows = useMemo(() => {
@@ -230,6 +240,12 @@ export default function BulkResponsesPage() {
     }
     if (statusFilter === "flagged") {
       return project.rows.filter((row) => row.flaggedForReview);
+    }
+    if (statusFilter === "pending-review") {
+      return project.rows.filter((row) => row.reviewStatus === "REQUESTED");
+    }
+    if (statusFilter === "reviewed") {
+      return project.rows.filter((row) => row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED");
     }
     // Filter by confidence level
     return project.rows.filter((row) => {
@@ -490,6 +506,124 @@ export default function BulkResponsesPage() {
     }
   };
 
+  // Send a specific row for review with Slack notification
+  const handleSendForReview = async (rowId: string) => {
+    if (!project) return;
+    const row = project.rows.find((r) => r.id === rowId);
+    if (!row) return;
+
+    // Prompt for review note
+    const reviewNote = await promptForReviewNote();
+    if (reviewNote === null) return; // Cancelled
+
+    setSendingReviewRowId(rowId);
+    try {
+      const response = await fetch(`/api/projects/${project.id}/rows/${rowId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewNote: reviewNote || undefined }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to send for review");
+      }
+
+      const data = await response.json();
+
+      // Update local state
+      updateRow(rowId, {
+        reviewStatus: "REQUESTED",
+        flaggedForReview: true,
+        flaggedAt: new Date().toISOString(),
+        flaggedBy: session?.user?.name || session?.user?.email || "Unknown User",
+        flagNote: reviewNote || undefined,
+      });
+
+      if (data.slackSent) {
+        toast.success("Review requested! Slack notification sent.");
+      } else {
+        toast.success("Review requested!");
+      }
+    } catch (error) {
+      console.error("Failed to send for review:", error);
+      toast.error("Failed to send for review. Please try again.");
+    } finally {
+      setSendingReviewRowId(null);
+    }
+  };
+
+  // Mark a row as approved
+  const handleApproveRow = async (rowId: string) => {
+    if (!project) return;
+
+    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/rows/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewStatus: "APPROVED",
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: reviewerName,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to approve row");
+      }
+
+      updateRow(rowId, {
+        reviewStatus: "APPROVED",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewerName,
+      });
+
+      toast.success("Answer approved!");
+    } catch (error) {
+      console.error("Failed to approve row:", error);
+      toast.error("Failed to approve. Please try again.");
+    }
+  };
+
+  // Mark a row as corrected (with the current edited response)
+  const handleCorrectRow = async (rowId: string) => {
+    if (!project) return;
+    const row = project.rows.find((r) => r.id === rowId);
+    if (!row) return;
+
+    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
+
+    try {
+      const response = await fetch(`/api/projects/${project.id}/rows/${rowId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewStatus: "CORRECTED",
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: reviewerName,
+          userEditedAnswer: row.response, // Save the current (edited) response
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to mark as corrected");
+      }
+
+      updateRow(rowId, {
+        reviewStatus: "CORRECTED",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewerName,
+        userEditedAnswer: row.response,
+      });
+
+      toast.success("Answer marked as corrected!");
+    } catch (error) {
+      console.error("Failed to mark as corrected:", error);
+      toast.error("Failed to save correction. Please try again.");
+    }
+  };
+
   const handleSaveCustomerProfiles = async (selectedIds: string[]) => {
     if (!project) return;
 
@@ -545,6 +679,7 @@ export default function BulkResponsesPage() {
     <div style={styles.container}>
       <ConfirmDialog />
       <NotePromptDialog />
+      <ReviewNoteDialog />
       <div style={{ marginBottom: "16px" }}>
         <Link href="/projects/" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
           ← Back to Projects
@@ -798,26 +933,40 @@ export default function BulkResponsesPage() {
       <div style={styles.card}>
         <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
           <strong>Filter:</strong>
-          {(["all", "high", "medium", "low", "error", "flagged"] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setStatusFilter(filter)}
-              style={{
-                ...styles.button,
-                padding: "6px 12px",
-                backgroundColor: statusFilter === filter ? "#0ea5e9" : filter === "flagged" && stats.flagged > 0 ? "#fef3c7" : "#f1f5f9",
-                color: statusFilter === filter ? "#fff" : filter === "flagged" && stats.flagged > 0 ? "#92400e" : "#0f172a",
-                textTransform: "capitalize",
-              }}
-            >
-              {filter === "all" ? `All (${stats.total})` :
-               filter === "high" ? `High (${stats.high})` :
-               filter === "medium" ? `Medium (${stats.medium})` :
-               filter === "low" ? `Low (${stats.low})` :
-               filter === "error" ? `Error (${stats.errors})` :
-               `🚩 Flagged (${stats.flagged})`}
-            </button>
-          ))}
+          {(["all", "high", "medium", "low", "error", "flagged", "pending-review", "reviewed"] as const).map((filter) => {
+            const getFilterStyle = () => {
+              if (statusFilter === filter) return { backgroundColor: "#0ea5e9", color: "#fff" };
+              if (filter === "pending-review" && stats.pendingReview > 0) return { backgroundColor: "#fef3c7", color: "#92400e" };
+              if (filter === "reviewed" && stats.approved > 0) return { backgroundColor: "#dcfce7", color: "#166534" };
+              if (filter === "flagged" && stats.flagged > 0) return { backgroundColor: "#fef3c7", color: "#92400e" };
+              return { backgroundColor: "#f1f5f9", color: "#0f172a" };
+            };
+            const getFilterLabel = () => {
+              switch (filter) {
+                case "all": return `All (${stats.total})`;
+                case "high": return `High (${stats.high})`;
+                case "medium": return `Medium (${stats.medium})`;
+                case "low": return `Low (${stats.low})`;
+                case "error": return `Error (${stats.errors})`;
+                case "flagged": return `🚩 Flagged (${stats.flagged})`;
+                case "pending-review": return `📝 Pending Review (${stats.pendingReview})`;
+                case "reviewed": return `✓ Reviewed (${stats.approved})`;
+              }
+            };
+            return (
+              <button
+                key={filter}
+                onClick={() => setStatusFilter(filter)}
+                style={{
+                  ...styles.button,
+                  padding: "6px 12px",
+                  ...getFilterStyle(),
+                }}
+              >
+                {getFilterLabel()}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -926,57 +1075,147 @@ export default function BulkResponsesPage() {
           {filteredRows.map((row) => (
             <div key={row.id} style={{ borderTop: "1px solid #e2e8f0", paddingTop: "12px", marginTop: "12px" }}>
               {/* Header with status */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                <div style={{ fontSize: "0.9rem", color: "#475569", display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px", gap: "8px" }}>
+                <div style={{ fontSize: "0.9rem", color: "#475569", display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
                   Row {row.rowNumber} • {renderStatus(row.status)}
-                  {row.flaggedForReview && (
+                  {/* Review Status Badge */}
+                  {row.reviewStatus === "REQUESTED" && (
                     <span style={{
                       ...styles.statusPill,
                       backgroundColor: "#fef3c7",
                       color: "#92400e",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "4px"
                     }}>
-                      🚩 Flagged
+                      📝 Review Requested
+                    </span>
+                  )}
+                  {row.reviewStatus === "APPROVED" && (
+                    <span style={{
+                      ...styles.statusPill,
+                      backgroundColor: "#dcfce7",
+                      color: "#166534",
+                    }}>
+                      ✓ Approved
+                    </span>
+                  )}
+                  {row.reviewStatus === "CORRECTED" && (
+                    <span style={{
+                      ...styles.statusPill,
+                      backgroundColor: "#dbeafe",
+                      color: "#1e40af",
+                    }}>
+                      ✎ Corrected
+                    </span>
+                  )}
+                  {/* Show reviewer info if reviewed */}
+                  {row.reviewedBy && (
+                    <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                      by {row.reviewedBy}
                     </span>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (row.flaggedForReview) {
-                      // Unflag the question
-                      updateRow(row.id, {
-                        flaggedForReview: false,
-                        flaggedAt: undefined,
-                        flaggedBy: undefined,
-                        flagNote: undefined,
-                      });
-                    } else {
-                      // Flag for review - prompt for optional note
-                      const note = await promptForNote();
-                      // note is null if cancelled, empty string if skipped
-                      const userName = session?.user?.name || session?.user?.email || "Unknown User";
-                      updateRow(row.id, {
-                        flaggedForReview: true,
-                        flaggedAt: new Date().toISOString(),
-                        flaggedBy: userName,
-                        flagNote: note || undefined,
-                      });
-                    }
-                  }}
-                  style={{
-                    ...styles.button,
-                    padding: "4px 10px",
-                    fontSize: "0.8rem",
-                    backgroundColor: row.flaggedForReview ? "#fee2e2" : "#fef3c7",
-                    color: row.flaggedForReview ? "#b91c1c" : "#92400e",
-                  }}
-                >
-                  {row.flaggedForReview ? "Remove Flag" : "🚩 Flag for Review"}
-                </button>
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {/* Send for Review button - only show if response exists and not already reviewed */}
+                  {row.response && (!row.reviewStatus || row.reviewStatus === "NONE") && (
+                    <button
+                      type="button"
+                      onClick={() => handleSendForReview(row.id)}
+                      disabled={sendingReviewRowId === row.id}
+                      style={{
+                        ...styles.button,
+                        padding: "4px 10px",
+                        fontSize: "0.8rem",
+                        backgroundColor: sendingReviewRowId === row.id ? "#94a3b8" : "#0ea5e9",
+                        color: "#fff",
+                        cursor: sendingReviewRowId === row.id ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      {sendingReviewRowId === row.id ? "Sending..." : "📤 Send for Review"}
+                    </button>
+                  )}
+                  {/* Approve/Correct buttons - only show if review requested */}
+                  {row.reviewStatus === "REQUESTED" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleApproveRow(row.id)}
+                        style={{
+                          ...styles.button,
+                          padding: "4px 10px",
+                          fontSize: "0.8rem",
+                          backgroundColor: "#22c55e",
+                          color: "#fff",
+                        }}
+                      >
+                        ✓ Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCorrectRow(row.id)}
+                        style={{
+                          ...styles.button,
+                          padding: "4px 10px",
+                          fontSize: "0.8rem",
+                          backgroundColor: "#3b82f6",
+                          color: "#fff",
+                        }}
+                        title="Mark current answer as corrected (save your edits)"
+                      >
+                        ✎ Mark Corrected
+                      </button>
+                    </>
+                  )}
+                  {/* Flag button - always available */}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (row.flaggedForReview) {
+                        // Unflag the question
+                        updateRow(row.id, {
+                          flaggedForReview: false,
+                          flaggedAt: undefined,
+                          flaggedBy: undefined,
+                          flagNote: undefined,
+                          reviewStatus: "NONE",
+                        });
+                      } else {
+                        // Flag for review - prompt for optional note
+                        const note = await promptForNote();
+                        // note is null if cancelled, empty string if skipped
+                        const userName = session?.user?.name || session?.user?.email || "Unknown User";
+                        updateRow(row.id, {
+                          flaggedForReview: true,
+                          flaggedAt: new Date().toISOString(),
+                          flaggedBy: userName,
+                          flagNote: note || undefined,
+                        });
+                      }
+                    }}
+                    style={{
+                      ...styles.button,
+                      padding: "4px 10px",
+                      fontSize: "0.8rem",
+                      backgroundColor: row.flaggedForReview ? "#fee2e2" : "#f1f5f9",
+                      color: row.flaggedForReview ? "#b91c1c" : "#64748b",
+                    }}
+                  >
+                    {row.flaggedForReview ? "✕ Unflag" : "🚩 Flag"}
+                  </button>
+                </div>
               </div>
+              {/* Review Note - show if present */}
+              {row.flagNote && (
+                <div style={{
+                  fontSize: "0.85rem",
+                  color: "#64748b",
+                  backgroundColor: "#fefce8",
+                  padding: "8px 12px",
+                  borderRadius: "6px",
+                  marginBottom: "8px",
+                  border: "1px solid #fef08a",
+                }}>
+                  <strong>Review note:</strong> {row.flagNote}
+                </div>
+              )}
 
               {/* Question - Compact */}
               <label style={{ ...styles.label, fontSize: "0.9rem", marginTop: "4px" }}>Question</label>

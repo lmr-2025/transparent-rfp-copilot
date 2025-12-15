@@ -129,6 +129,12 @@ model BulkRow {
   flaggedBy            String?
   flagNote             String?  @db.Text
 
+  // Review workflow fields
+  reviewStatus         RowReviewStatus @default(NONE)
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  userEditedAnswer     String?  @db.Text  // If user manually corrected the answer
+
   project              BulkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, rowNumber])
@@ -148,6 +154,13 @@ enum RowStatus {
   PENDING
   COMPLETED
   ERROR
+}
+
+enum RowReviewStatus {
+  NONE              // No review requested
+  REQUESTED         // Review requested, awaiting reviewer
+  APPROVED          // Reviewer approved the answer
+  CORRECTED         // Reviewer corrected the answer
 }
 
 model KnowledgeDocument {
@@ -435,6 +448,13 @@ model QuestionHistory {
   remarks         String?  @db.Text
   skillsUsed      Json?    // Array of {id, title}
   createdAt       DateTime @default(now())
+
+  // Review workflow fields
+  reviewStatus    RowReviewStatus @default(NONE)
+  reviewNote      String?  @db.Text  // Note from requester to reviewer
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  userEditedAnswer String? @db.Text  // If user/reviewer corrected the answer
 
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
