@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { useShallow } from "zustand/shallow";
 
 // Types (moved from page.tsx for reusability)
 export type DraftContent = {
@@ -273,15 +274,18 @@ export const useBulkImportStore = create<BulkImportState>((set, get) => ({
 }));
 
 // Selector hooks for computed values
+// Use useShallow to prevent infinite re-renders when returning objects
 export const useBulkImportCounts = () =>
-  useBulkImportStore((state) => ({
-    pendingCount: state.skillGroups.filter((g) => g.status === "pending").length,
-    approvedCount: state.skillGroups.filter((g) => g.status === "approved")
-      .length,
-    readyForReviewCount: state.skillGroups.filter(
-      (g) => g.status === "ready_for_review"
-    ).length,
-    reviewedCount: state.skillGroups.filter((g) => g.status === "reviewed")
-      .length,
-    totalGroups: state.skillGroups.length,
-  }));
+  useBulkImportStore(
+    useShallow((state) => ({
+      pendingCount: state.skillGroups.filter((g) => g.status === "pending").length,
+      approvedCount: state.skillGroups.filter((g) => g.status === "approved")
+        .length,
+      readyForReviewCount: state.skillGroups.filter(
+        (g) => g.status === "ready_for_review"
+      ).length,
+      reviewedCount: state.skillGroups.filter((g) => g.status === "reviewed")
+        .length,
+      totalGroups: state.skillGroups.length,
+    }))
+  );
