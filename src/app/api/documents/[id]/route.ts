@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { logDocumentChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 // GET - Get a single document (with content)
 export async function GET(
@@ -16,16 +17,13 @@ export async function GET(
     });
 
     if (!document) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      return errors.notFound("Document not found");
     }
 
-    return NextResponse.json({ document });
+    return apiSuccess({ document });
   } catch (error) {
     console.error("Failed to fetch document:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch document" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to fetch document");
   }
 }
 
@@ -45,7 +43,7 @@ export async function DELETE(
     // Get document before deleting for audit log
     const document = await prisma.knowledgeDocument.findUnique({ where: { id } });
     if (!document) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      return errors.notFound("Document not found");
     }
 
     await prisma.knowledgeDocument.delete({
@@ -62,13 +60,10 @@ export async function DELETE(
       { deletedDocument: { title: document.title, filename: document.filename } }
     );
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
     console.error("Failed to delete document:", error);
-    return NextResponse.json(
-      { error: "Failed to delete document" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to delete document");
   }
 }
 
@@ -90,7 +85,7 @@ export async function PATCH(
     // Get existing document for audit log
     const existing = await prisma.knowledgeDocument.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Document not found" }, { status: 404 });
+      return errors.notFound("Document not found");
     }
 
     const document = await prisma.knowledgeDocument.update({
@@ -118,7 +113,7 @@ export async function PATCH(
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json({
+    return apiSuccess({
       document: {
         id: document.id,
         title: document.title,
@@ -132,9 +127,6 @@ export async function PATCH(
     });
   } catch (error) {
     console.error("Failed to update document:", error);
-    return NextResponse.json(
-      { error: "Failed to update document" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to update document");
   }
 }

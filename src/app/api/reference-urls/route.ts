@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createReferenceUrlSchema, bulkImportUrlsSchema, validateBody } from "@/lib/validations";
 import { logReferenceUrlChange, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 // GET /api/reference-urls - List all reference URLs
 export async function GET(request: NextRequest) {
@@ -18,13 +19,10 @@ export async function GET(request: NextRequest) {
       orderBy: { addedAt: "desc" },
     });
 
-    return NextResponse.json(urls);
+    return apiSuccess(urls);
   } catch (error) {
     console.error("Failed to fetch reference URLs:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch reference URLs" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to fetch reference URLs");
   }
 }
 
@@ -40,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const validation = validateBody(createReferenceUrlSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -63,13 +61,10 @@ export async function POST(request: NextRequest) {
       { url: data.url, categories: data.categories }
     );
 
-    return NextResponse.json(url, { status: 201 });
+    return apiSuccess(url, { status: 201 });
   } catch (error) {
     console.error("Failed to create reference URL:", error);
-    return NextResponse.json(
-      { error: "Failed to create reference URL" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to create reference URL");
   }
 }
 
@@ -85,7 +80,7 @@ export async function PUT(request: NextRequest) {
 
     const validation = validateBody(bulkImportUrlsSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const { urls } = validation.data;
@@ -110,12 +105,9 @@ export async function PUT(request: NextRequest) {
       )
     );
 
-    return NextResponse.json({ imported: results.length, urls: results });
+    return apiSuccess({ imported: results.length, urls: results });
   } catch (error) {
     console.error("Failed to import reference URLs:", error);
-    return NextResponse.json(
-      { error: "Failed to import reference URLs" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to import reference URLs");
   }
 }

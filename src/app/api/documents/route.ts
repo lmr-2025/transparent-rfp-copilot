@@ -1,10 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import * as mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { logDocumentChange, getUserFromSession } from "@/lib/auditLog";
 import { getAnthropicClient } from "@/lib/apiHelpers";
 import { CLAUDE_MODEL } from "@/lib/config";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 export const maxDuration = 60;
 
@@ -38,13 +39,10 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ documents });
+    return apiSuccess({ documents });
   } catch (error) {
     console.error("Failed to fetch documents:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch documents" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to fetch documents");
   }
 }
 
@@ -69,26 +67,23 @@ export async function POST(request: NextRequest) {
           categories = parsed.filter((c): c is string => typeof c === "string");
         }
       } catch {
-        return NextResponse.json({ error: "Invalid categories format" }, { status: 400 });
+        return errors.badRequest("Invalid categories format");
       }
     }
     const saveAsTemplate = formData.get("saveAsTemplate") === "true";
 
     if (!file) {
-      return NextResponse.json({ error: "File is required" }, { status: 400 });
+      return errors.badRequest("File is required");
     }
 
     // File size limit: 10MB
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: "File size exceeds 10MB limit" },
-        { status: 400 }
-      );
+      return errors.badRequest("File size exceeds 10MB limit");
     }
 
     if (!title?.trim()) {
-      return NextResponse.json({ error: "Title is required" }, { status: 400 });
+      return errors.badRequest("Title is required");
     }
 
     // Determine file type
@@ -105,10 +100,7 @@ export async function POST(request: NextRequest) {
     } else if (filename.endsWith(".pptx")) {
       fileType = "pptx";
     } else {
-      return NextResponse.json(
-        { error: "Unsupported file type. Please upload PDF, DOC, DOCX, PPTX, or TXT files." },
-        { status: 400 }
-      );
+      return errors.badRequest("Unsupported file type. Please upload PDF, DOC, DOCX, PPTX, or TXT files.");
     }
 
     // Read file buffer
@@ -120,17 +112,11 @@ export async function POST(request: NextRequest) {
       content = await extractTextContent(buffer, fileType);
     } catch (extractError) {
       console.error("Text extraction failed:", extractError);
-      return NextResponse.json(
-        { error: "Failed to extract text from document. Please ensure the file is not corrupted." },
-        { status: 400 }
-      );
+      return errors.badRequest("Failed to extract text from document. Please ensure the file is not corrupted.");
     }
 
     if (!content.trim()) {
-      return NextResponse.json(
-        { error: "No text content could be extracted from the document." },
-        { status: 400 }
-      );
+      return errors.badRequest("No text content could be extracted from the document.");
     }
 
     // Generate markdown template if requested
@@ -164,7 +150,7 @@ export async function POST(request: NextRequest) {
       { filename: file.name, fileType, fileSize: file.size, categories }
     );
 
-    return NextResponse.json({
+    return apiSuccess({
       document: {
         id: document.id,
         title: document.title,
@@ -177,13 +163,10 @@ export async function POST(request: NextRequest) {
         contentLength: content.length,
         isTemplate: document.isTemplate,
       },
-    });
+    }, { status: 201 });
   } catch (error) {
     console.error("Failed to upload document:", error);
-    return NextResponse.json(
-      { error: "Failed to upload document" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to upload document");
   }
 }
 

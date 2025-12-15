@@ -8,11 +8,12 @@
  * @module /api/customers
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 /**
  * GET /api/customers - List customer profiles
@@ -76,13 +77,10 @@ export async function GET(request: NextRequest) {
       skip: offset,
     });
 
-    return NextResponse.json({ profiles }, { status: 200 });
+    return apiSuccess({ profiles });
   } catch (error) {
     console.error("Error fetching customer profiles:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch customer profiles" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to fetch customer profiles");
   }
 }
 
@@ -123,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     const validation = validateBody(createCustomerSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -162,12 +160,9 @@ export async function POST(request: NextRequest) {
       { industry: data.industry }
     );
 
-    return NextResponse.json({ profile }, { status: 201 });
+    return apiSuccess({ profile }, { status: 201 });
   } catch (error) {
     console.error("Error creating customer profile:", error);
-    return NextResponse.json(
-      { error: "Failed to create customer profile" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to create customer profile");
   }
 }
