@@ -58,6 +58,7 @@ export function ChatInput({
         disabled={!value.trim() || isLoading}
         size="icon"
         className="h-12 w-12 shrink-0"
+        aria-label={isLoading ? "Sending message" : "Send message"}
       >
         {isLoading ? (
           <Loader2 className="h-5 w-5 animate-spin" />

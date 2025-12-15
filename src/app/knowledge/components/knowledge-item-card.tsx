@@ -106,7 +106,7 @@ export function KnowledgeItemCard({
                 size="sm"
                 onClick={() => setShowOwnerDialog(true)}
                 className="h-8 w-8 p-0 text-muted-foreground hover:text-blue-600"
-                title="Manage owners"
+                aria-label="Manage owners"
               >
                 <UserCog className="h-4 w-4" />
               </Button>
@@ -116,6 +116,8 @@ export function KnowledgeItemCard({
               size="sm"
               onClick={() => setIsExpanded(!isExpanded)}
               className="h-8 w-8 p-0"
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? "Collapse details" : "Expand details"}
             >
               {isExpanded ? (
                 <ChevronUp className="h-4 w-4" />
@@ -130,6 +132,7 @@ export function KnowledgeItemCard({
                 onClick={onDelete}
                 disabled={isDeleting}
                 className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                aria-label={isDeleting ? "Deleting item" : "Delete item"}
               >
                 {isDeleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

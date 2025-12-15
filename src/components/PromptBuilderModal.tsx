@@ -60,6 +60,9 @@ export default function PromptBuilderModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="prompt-builder-modal-title"
       style={{
         position: "fixed",
         inset: 0,
@@ -94,7 +97,7 @@ export default function PromptBuilderModal({
           alignItems: "flex-start",
         }}>
           <div>
-            <h2 style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>{title}</h2>
+            <h2 id="prompt-builder-modal-title" style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>{title}</h2>
             {subtitle && (
               <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#64748b" }}>{subtitle}</p>
             )}
@@ -202,7 +205,17 @@ export default function PromptBuilderModal({
                 >
                   {/* Dropdown Header */}
                   <div
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    aria-controls={`section-content-${section.id}`}
                     onClick={() => toggleSection(section.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleSection(section.id);
+                      }
+                    }}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -249,11 +262,14 @@ export default function PromptBuilderModal({
 
                   {/* Dropdown Content */}
                   {isExpanded && (
-                    <div style={{
-                      padding: "16px",
-                      borderTop: `1px solid ${section.borderColor}`,
-                      backgroundColor: section.bgColor,
-                    }}>
+                    <div
+                      id={`section-content-${section.id}`}
+                      style={{
+                        padding: "16px",
+                        borderTop: `1px solid ${section.borderColor}`,
+                        backgroundColor: section.bgColor,
+                      }}
+                    >
                       {section.editable ? (
                         <textarea
                           value={section.editableValue || ""}

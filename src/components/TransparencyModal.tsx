@@ -55,6 +55,9 @@ export default function TransparencyModal({
 }: TransparencyModalProps) {
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="transparency-modal-title"
       style={{
         position: "fixed",
         inset: 0,
@@ -93,7 +96,7 @@ export default function TransparencyModal({
           }}
         >
           <div>
-            <h3 style={{ margin: 0, fontSize: "18px", fontWeight: 600, color: titleColors[headerColor] }}>
+            <h3 id="transparency-modal-title" style={{ margin: 0, fontSize: "18px", fontWeight: 600, color: titleColors[headerColor] }}>
               {title}
             </h3>
             <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>

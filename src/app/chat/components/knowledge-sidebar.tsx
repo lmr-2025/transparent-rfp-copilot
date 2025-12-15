@@ -160,6 +160,8 @@ export function KnowledgeSidebar({
             <button
               onClick={() => setInstructionsExpanded(!instructionsExpanded)}
               className="w-full flex items-center justify-between"
+              aria-expanded={instructionsExpanded}
+              aria-controls="instructions-content"
             >
               <CardTitle className="text-sm flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -171,21 +173,22 @@ export function KnowledgeSidebar({
                 )}
               </CardTitle>
               {instructionsExpanded ? (
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                <ChevronUp className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               ) : (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
               )}
             </button>
           </CardHeader>
           {instructionsExpanded && (
-            <CardContent className="py-2 px-4 space-y-3">
+            <CardContent id="instructions-content" className="py-2 px-4 space-y-3">
               {/* Preset Selector */}
               {!presetsLoading && presets.length > 0 && (
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">
+                  <label htmlFor="instruction-preset-select" className="text-xs text-muted-foreground">
                     Select a preset or write custom instructions
                   </label>
                   <select
+                    id="instruction-preset-select"
                     value={selectedPresetId || "custom"}
                     onChange={(e) => handlePresetChange(e.target.value)}
                     className="w-full h-9 px-3 text-sm border border-input rounded-md bg-background"
@@ -224,10 +227,12 @@ export function KnowledgeSidebar({
               })()}
 
               <Textarea
+                id="user-instructions-textarea"
                 value={userInstructions}
                 onChange={(e) => handleInstructionsChange(e.target.value)}
                 placeholder="Enter instructions for how the AI should behave..."
                 className="min-h-[120px] text-sm resize-none"
+                aria-label="User instructions for AI behavior"
               />
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">
@@ -456,7 +461,8 @@ function SelectableItem({ label, selected, onClick }: SelectableItemProps) {
   return (
     <button
       onClick={onClick}
-      title={label}
+      aria-pressed={selected}
+      aria-label={`${label}${selected ? " (selected)" : ""}`}
       className={cn(
         "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
         selected
@@ -465,6 +471,7 @@ function SelectableItem({ label, selected, onClick }: SelectableItemProps) {
       )}
     >
       <div
+        aria-hidden="true"
         className={cn(
           "flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center",
           selected

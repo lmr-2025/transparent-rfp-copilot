@@ -114,18 +114,31 @@ export default function SkillHistoryViewer({ history }: SkillHistoryViewerProps)
 
   return (
     <div style={styles.container}>
-      <div style={styles.header} onClick={() => setIsExpanded(!isExpanded)}>
+      <div
+        style={styles.header}
+        onClick={() => setIsExpanded(!isExpanded)}
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-controls="skill-history-content"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setIsExpanded(!isExpanded);
+          }
+        }}
+      >
         <h4 style={styles.title}>
           Change History ({sortedHistory.length} {sortedHistory.length === 1 ? 'entry' : 'entries'})
         </h4>
-        <button type="button" style={styles.toggleBtn}>
+        <span style={styles.toggleBtn} aria-hidden="true">
           {isExpanded ? 'Hide' : 'Show'}
-        </button>
+        </span>
       </div>
 
       {isExpanded && (
         sortedHistory.length > 0 ? (
-          <div style={styles.timeline}>
+          <div id="skill-history-content" style={styles.timeline}>
             {sortedHistory.map((entry, idx) => {
               const colors = actionColors[entry.action] || actionColors.updated;
               return (

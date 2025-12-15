@@ -170,7 +170,7 @@ export default function SkillOwnerEditor({
                   type="button"
                   onClick={() => handleRemoveOwner(idx)}
                   style={styles.removeBtn}
-                  title="Remove owner"
+                  aria-label={`Remove ${owner.name}`}
                 >
                   ×
                 </button>
@@ -185,8 +185,9 @@ export default function SkillOwnerEditor({
       {isAdding && (
         <div style={styles.addForm}>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Name *</label>
+            <label htmlFor="owner-name-input" style={styles.label}>Name *</label>
             <input
+              id="owner-name-input"
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
@@ -196,8 +197,9 @@ export default function SkillOwnerEditor({
             />
           </div>
           <div style={styles.inputGroup}>
-            <label style={styles.label}>Email (optional)</label>
+            <label htmlFor="owner-email-input" style={styles.label}>Email (optional)</label>
             <input
+              id="owner-email-input"
               type="email"
               value={newEmail}
               onChange={(e) => setNewEmail(e.target.value)}

@@ -178,10 +178,28 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 - Pattern established for other routes to follow
 - Remaining routes can be documented incrementally when modified
 
-### 14. Accessibility Issues
-**Risk:** No ARIA labels, focus management in modals, color-only indicators
-**Fix:** Audit and add accessibility features
-**Effort:** Medium
+### ~~14. Accessibility Issues~~ ✅ PARTIAL FIX
+**Fixed:** 2025-12-15
+- Added ARIA modal attributes (`role="dialog"`, `aria-modal`, `aria-labelledby`) to:
+  - `TransparencyModal.tsx`
+  - `PromptBuilderModal.tsx`
+- Added `aria-expanded` and `aria-controls` to expandable sections:
+  - `PromptBuilderModal.tsx` section headers
+  - `SkillHistoryViewer.tsx` history toggle
+  - `knowledge-sidebar.tsx` instructions section
+  - `knowledge-item-card.tsx` expand/collapse button
+- Added `aria-label` to icon-only buttons:
+  - `chat-input.tsx` send button
+  - `knowledge-item-card.tsx` (manage owners, expand, delete)
+  - `knowledge-sidebar.tsx` selectable items with `aria-pressed`
+- Added keyboard support (Enter/Space) to clickable divs:
+  - `PromptBuilderModal.tsx` section headers
+  - `SkillHistoryViewer.tsx` history toggle
+- Added `htmlFor` label associations:
+  - `SkillOwnerEditor.tsx` name/email inputs
+  - `knowledge-sidebar.tsx` preset selector
+- `ConfirmModal.tsx` already had proper ARIA attributes
+- Remaining: Color-only status indicators (would need visual patterns)
 
 ### ~~15. Duplicate Business Logic~~ ✅ FIXED
 **Status:** Already fixed - Owner logic extracted to `owner-management-dialog.tsx` component with `isOwner()` helper.
