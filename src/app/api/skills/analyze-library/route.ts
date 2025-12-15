@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { LibraryRecommendation, AnalyzeLibraryResponse } from "@/types/libraryAnalysis";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export const maxDuration = 120;
 
@@ -18,6 +19,13 @@ type AnalyzeLibraryRequest = {
 };
 
 export async function POST(request: NextRequest) {
+  // Rate limit check - LLM tier for expensive AI calls
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(identifier, "llm");
+  if (!rateLimitResult.success && rateLimitResult.error) {
+    return rateLimitResult.error;
+  }
+
   let body: AnalyzeLibraryRequest;
   try {
     body = (await request.json()) as AnalyzeLibraryRequest;

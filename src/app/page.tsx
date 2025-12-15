@@ -59,7 +59,7 @@ function Card({ href, title, description, accentColor, bgColor, featured }: Card
 }
 
 export default function HomePage() {
-  const { branding } = useBranding();
+  const { branding, isLoading } = useBranding();
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "PROMPT_ADMIN";
 
@@ -72,23 +72,44 @@ export default function HomePage() {
     }}>
       {/* Hero Section */}
       <div style={{ textAlign: "center", marginBottom: "48px" }}>
-        <h1 style={{
-          fontSize: "2rem",
-          fontWeight: 700,
-          marginBottom: "12px",
-          color: "#1e293b",
-        }}>
-          {branding.appName}
-        </h1>
-        <p style={{
-          fontSize: "1.05rem",
-          color: "#64748b",
-          maxWidth: "600px",
-          margin: "0 auto",
-          lineHeight: 1.6,
-        }}>
-          {branding.tagline}
-        </p>
+        {isLoading ? (
+          <>
+            <div style={{
+              height: "2rem",
+              width: "200px",
+              backgroundColor: "#e2e8f0",
+              borderRadius: "4px",
+              margin: "0 auto 12px",
+            }} />
+            <div style={{
+              height: "1rem",
+              width: "400px",
+              backgroundColor: "#f1f5f9",
+              borderRadius: "4px",
+              margin: "0 auto",
+            }} />
+          </>
+        ) : (
+          <>
+            <h1 style={{
+              fontSize: "2rem",
+              fontWeight: 700,
+              marginBottom: "12px",
+              color: "#1e293b",
+            }}>
+              {branding.appName}
+            </h1>
+            <p style={{
+              fontSize: "1.05rem",
+              color: "#64748b",
+              maxWidth: "600px",
+              margin: "0 auto",
+              lineHeight: 1.6,
+            }}>
+              {branding.tagline}
+            </p>
+          </>
+        )}
       </div>
 
       {/* Foundation Section */}

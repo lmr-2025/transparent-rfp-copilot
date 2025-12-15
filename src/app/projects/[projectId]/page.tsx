@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { toast } from "sonner";
+import { useConfirm, usePrompt } from "@/components/ConfirmModal";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
 import { QUESTION_PROMPT_STORAGE_KEY } from "@/lib/promptStorage";
@@ -131,6 +133,25 @@ export default function BulkResponsesPage() {
   const [allCustomerProfiles, setAllCustomerProfiles] = useState<CustomerProfile[]>([]);
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [savingCustomers, setSavingCustomers] = useState(false);
+
+  const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
+    title: "Delete Project",
+    message: "This cannot be undone.",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
+  const { prompt: promptForName, PromptDialog: NamePromptDialog } = usePrompt({
+    title: "Enter Your Name",
+    placeholder: "Your name",
+    submitLabel: "Continue",
+  });
+  const { prompt: promptForNote, PromptDialog: NotePromptDialog } = usePrompt({
+    title: "Flag for Review",
+    message: "Add a note for the reviewer (optional)",
+    placeholder: "What should the reviewer focus on?",
+    submitLabel: "Flag",
+    cancelLabel: "Skip Note",
+  });
   const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
 
   // Load project by ID on mount
@@ -170,15 +191,15 @@ export default function BulkResponsesPage() {
 
   // Load skills, reference URLs, and customer profiles on mount
   useEffect(() => {
-    loadSkillsFromApi().then(setAvailableSkills).catch(console.error);
+    loadSkillsFromApi().then(setAvailableSkills).catch(() => toast.error("Failed to load skills"));
     // Load reference URLs from database API
     fetch("/api/reference-urls")
       .then(res => res.json())
       .then(data => setReferenceUrls(data.urls || []))
-      .catch(err => console.error("Failed to load reference URLs:", err));
+      .catch(() => toast.error("Failed to load reference URLs"));
     fetchActiveProfiles()
       .then(profiles => setAllCustomerProfiles(profiles))
-      .catch(err => console.error("Failed to load customer profiles:", err));
+      .catch(() => toast.error("Failed to load customer profiles"));
   }, []);
 
   // Handle filter query param from URL (e.g., ?filter=flagged)
@@ -379,72 +400,31 @@ export default function BulkResponsesPage() {
     setGenerateProgress({ current: 0, total: 0 });
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleChallenge = async (rowId: string) => {
-    if (!project) return;
-    const row = project.rows.find((item) => item.id === rowId);
-    if (!row) return;
-    if (!row.response.trim()) {
-      updateRow(rowId, {
-        challengeStatus: "error",
-        challengeError: "Generate a response before sending a challenge.",
-      });
-      return;
-    }
-    updateRow(rowId, { challengeStatus: "generating", challengeError: undefined });
-    setErrorMessage(null);
-
-    const compositePrompt = [
-      `Original question: ${row.question}`,
-      `Generated answer:\n${row.response}`,
-      "",
-      "Challenge:",
-      row.challengePrompt,
-      "",
-      "Respond with analysis of weaknesses, accuracy gaps, and recommended prompt or skill updates.",
-    ].join("\n");
-
-    try {
-      const response = await fetch("/api/questions/answer", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: compositePrompt, prompt: promptText }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.answer) {
-        throw new Error(data?.error || "Failed to generate challenge response.");
-      }
-      updateRow(rowId, {
-        challengeResponse: data.answer,
-        challengeStatus: "completed",
-        challengeError: undefined,
-      });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Unexpected error while challenging the response.";
-      updateRow(rowId, { challengeStatus: "error", challengeError: message });
-    }
-  };
-
   const clearProject = async () => {
     if (!project) return;
-    if (confirm(`Delete "${project.name}"? This cannot be undone.`)) {
-      try {
-        await deleteProjectApi(project.id);
-        router.push("/projects");
-      } catch (error) {
-        console.error("Failed to delete project:", error);
-        alert("Failed to delete project. Please try again.");
-      }
+    const confirmed = await confirmDelete({
+      message: `Delete "${project.name}"? This cannot be undone.`,
+    });
+    if (!confirmed) return;
+
+    try {
+      await deleteProjectApi(project.id);
+      router.push("/projects");
+    } catch (error) {
+      console.error("Failed to delete project:", error);
+      toast.error("Failed to delete project. Please try again.");
     }
   };
 
   const handleRequestReview = async () => {
     if (!project) return;
 
-    // Use session user name, or prompt if not signed in
-    const requesterName = session?.user?.name || prompt("Your name (requesting review):");
-    if (!requesterName?.trim()) return;
+    // Use session user name, or prompt via modal if not signed in
+    let requesterName = session?.user?.name;
+    if (!requesterName) {
+      requesterName = await promptForName({ message: "Enter your name to request a review" });
+      if (!requesterName) return;
+    }
 
     setIsRequestingReview(true);
     try {
@@ -457,23 +437,35 @@ export default function BulkResponsesPage() {
       await updateProject(updatedProject);
       setProject(updatedProject);
 
-      // Send Slack notification
+      // Send Slack notification with proper error handling
       const projectUrl = `${window.location.origin}/projects/${project.id}`;
-      await fetch("/api/slack/notify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectName: project.name,
-          projectUrl,
-          customerName: project.customerName,
-          requesterName: requesterName.trim(),
-        }),
-      });
+      try {
+        const slackResponse = await fetch("/api/slack/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            projectName: project.name,
+            projectUrl,
+            customerName: project.customerName,
+            requesterName: requesterName.trim(),
+          }),
+        });
 
-      alert("Review requested! A notification has been sent.");
+        if (slackResponse.ok) {
+          toast.success("Review requested! A notification has been sent.");
+        } else {
+          // Slack failed but project was updated
+          toast.success("Review requested!");
+          console.warn("Slack notification failed:", await slackResponse.text());
+        }
+      } catch (slackError) {
+        // Slack failed but project was updated - don't fail the whole operation
+        toast.success("Review requested!");
+        console.warn("Slack notification failed:", slackError);
+      }
     } catch (error) {
       console.error("Failed to request review:", error);
-      alert("Failed to request review. Please try again.");
+      toast.error("Failed to request review. Please try again.");
     } finally {
       setIsRequestingReview(false);
     }
@@ -482,9 +474,12 @@ export default function BulkResponsesPage() {
   const handleApprove = async () => {
     if (!project) return;
 
-    // Use session user name, or prompt if not signed in
-    const reviewerName = session?.user?.name || prompt("Your name (reviewer):");
-    if (!reviewerName?.trim()) return;
+    // Use session user name, or prompt via modal if not signed in
+    let reviewerName = session?.user?.name;
+    if (!reviewerName) {
+      reviewerName = await promptForName({ message: "Enter your name to approve this project" });
+      if (!reviewerName) return;
+    }
 
     setIsApproving(true);
     try {
@@ -496,10 +491,10 @@ export default function BulkResponsesPage() {
       };
       await updateProject(updatedProject);
       setProject(updatedProject);
-      alert("Project approved!");
+      toast.success("Project approved!");
     } catch (error) {
       console.error("Failed to approve project:", error);
-      alert("Failed to approve project. Please try again.");
+      toast.error("Failed to approve project. Please try again.");
     } finally {
       setIsApproving(false);
     }
@@ -527,7 +522,7 @@ export default function BulkResponsesPage() {
       setShowCustomerSelector(false);
     } catch (error) {
       console.error("Failed to save customer profiles:", error);
-      alert("Failed to save customer profiles. Please try again.");
+      toast.error("Failed to save customer profiles. Please try again.");
     } finally {
       setSavingCustomers(false);
     }
@@ -558,6 +553,9 @@ export default function BulkResponsesPage() {
 
   return (
     <div style={styles.container}>
+      <ConfirmDialog />
+      <NamePromptDialog />
+      <NotePromptDialog />
       <div style={{ marginBottom: "16px" }}>
         <Link href="/projects/" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
           ← Back to Projects
@@ -957,7 +955,7 @@ export default function BulkResponsesPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     if (row.flaggedForReview) {
                       // Unflag the question
                       updateRow(row.id, {
@@ -967,8 +965,9 @@ export default function BulkResponsesPage() {
                         flagNote: undefined,
                       });
                     } else {
-                      // Flag for review
-                      const note = prompt("Add a note for the reviewer (optional):");
+                      // Flag for review - prompt for optional note
+                      const note = await promptForNote();
+                      // note is null if cancelled, empty string if skipped
                       const userName = session?.user?.name || "Anonymous";
                       updateRow(row.id, {
                         flaggedForReview: true,

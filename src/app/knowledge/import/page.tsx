@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Skill } from "@/types/skill";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
+import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
 
 type RFPEntry = {
   question: string;
@@ -24,6 +26,14 @@ type SkillSuggestion = {
 type AnalysisResult = {
   suggestions: SkillSuggestion[];
   unmatchedEntries: RFPEntry[];
+};
+
+type SnippetDraft = {
+  name: string;
+  key: string;
+  content: string;
+  category: string | null;
+  description: string | null;
 };
 
 const styles = {
@@ -75,6 +85,10 @@ export default function ImportRFPPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
 
+  // Build type selector
+  const [buildType, setBuildType] = useState<BuildType>("skill");
+  const [snippetDraft, setSnippetDraft] = useState<SnippetDraft | null>(null);
+
   // Column mapping state
   const [columns, setColumns] = useState<string[]>([]);
   const [questionColumn, setQuestionColumn] = useState("");
@@ -82,7 +96,7 @@ export default function ImportRFPPage() {
 
   // Load skills from API on mount
   useEffect(() => {
-    loadSkillsFromApi().then(setSkills).catch(console.error);
+    loadSkillsFromApi().then(setSkills).catch(() => toast.error("Failed to load skills"));
   }, []);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,6 +180,30 @@ export default function ImportRFPPage() {
     setErrorMessage(null);
 
     try {
+      // For snippets, build source text from Q&A and call snippet suggest API
+      if (buildType === "snippet") {
+        const sourceText = rfpEntries
+          .map((e) => `Q: ${e.question}\nA: ${e.answer}`)
+          .join("\n\n---\n\n");
+
+        const response = await fetch("/api/context-snippets/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sourceText }),
+        });
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Analysis failed");
+        }
+
+        const data = await response.json();
+        setSnippetDraft(data.draft);
+        setIsAnalyzing(false);
+        return;
+      }
+
+      // For skills, use the existing RFP analysis API
       const response = await fetch("/api/skills/analyze-rfp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -194,6 +232,40 @@ export default function ImportRFPPage() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  const handleSaveSnippet = async () => {
+    if (!snippetDraft) return;
+
+    try {
+      const response = await fetch("/api/context-snippets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: snippetDraft.name,
+          key: snippetDraft.key,
+          content: snippetDraft.content,
+          category: snippetDraft.category,
+          description: snippetDraft.description,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save snippet");
+      }
+
+      setSuccessMessage(`Snippet "${snippetDraft.name}" saved successfully!`);
+      setSnippetDraft(null);
+      setRfpEntries([]);
+      setFileName("");
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to save snippet");
+    }
+  };
+
+  const handleCancelSnippet = () => {
+    setSnippetDraft(null);
   };
 
   const toggleSuggestion = (index: number) => {
@@ -287,12 +359,22 @@ export default function ImportRFPPage() {
     <div style={styles.container}>
       <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Import from Docs)</span></h1>
       <p style={{ color: "#475569", marginBottom: "24px" }}>
-        Upload completed RFP spreadsheets to extract knowledge and enrich your skills library.
-        The system will analyze Q&A pairs and suggest updates to existing skills or new skills to create.
+        Upload completed RFP spreadsheets to extract knowledge and enrich your {buildType === "skill" ? "skills library" : "context snippets"}.
+        The system will analyze Q&A pairs and {buildType === "skill" ? "suggest updates to existing skills or new skills to create" : "extract reusable boilerplate content"}.
       </p>
 
       {errorMessage && <div style={styles.error}>{errorMessage}</div>}
       {successMessage && <div style={styles.success}>{successMessage}</div>}
+
+      {/* Build Type Selection */}
+      <div style={styles.card}>
+        <h3 style={{ marginTop: 0 }}>What do you want to build?</h3>
+        <BuildTypeSelector
+          value={buildType}
+          onChange={setBuildType}
+          disabled={rfpEntries.length > 0 || analysisResult !== null || snippetDraft !== null}
+        />
+      </div>
 
       {/* Step 1: File Upload */}
       <div style={styles.card}>
@@ -382,11 +464,11 @@ export default function ImportRFPPage() {
       )}
 
       {/* Step 3: Preview & Analyze */}
-      {rfpEntries.length > 0 && !analysisResult && (
+      {rfpEntries.length > 0 && !analysisResult && !snippetDraft && (
         <div style={styles.card}>
           <h3 style={{ marginTop: 0 }}>Step 3: Review & Analyze</h3>
           <p style={{ color: "#166534", fontWeight: 500, marginBottom: "16px" }}>
-            Found {rfpEntries.length} Q&A pairs to analyze against {skills.length} existing skills.
+            Found {rfpEntries.length} Q&A pairs to {buildType === "skill" ? `analyze against ${skills.length} existing skills` : "extract content from"}.
           </p>
 
           <div
@@ -456,7 +538,7 @@ export default function ImportRFPPage() {
               color: "#fff",
             }}
           >
-            {isAnalyzing ? "Analyzing..." : "Analyze Against Skills"}
+            {isAnalyzing ? "Analyzing..." : buildType === "skill" ? "Analyze Against Skills" : "Build Snippet"}
           </button>
 
           {isAnalyzing && (
@@ -470,7 +552,7 @@ export default function ImportRFPPage() {
               }}
             >
               <p style={{ margin: 0, color: "#1e40af" }}>
-                Analyzing RFP content against your skill library...
+                {buildType === "skill" ? "Analyzing RFP content against your skill library..." : "Extracting reusable content..."}
                 <br />
                 <span style={{ fontSize: "13px", color: "#60a5fa" }}>
                   This may take 30-60 seconds depending on the number of entries.
@@ -478,6 +560,90 @@ export default function ImportRFPPage() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Snippet Review */}
+      {snippetDraft && (
+        <div style={{
+          ...styles.card,
+          backgroundColor: "#f0fdf4",
+          border: "2px solid #10b981",
+        }}>
+          <h3 style={{ marginTop: 0, color: "#059669" }}>Generated Context Snippet - Review & Save</h3>
+          <div style={{ marginBottom: "16px" }}>
+            <strong>Name:</strong> {snippetDraft.name}
+          </div>
+          <div style={{ marginBottom: "16px" }}>
+            <strong>Key:</strong>{" "}
+            <code style={{
+              backgroundColor: "#f0f9ff",
+              color: "#0ea5e9",
+              padding: "2px 8px",
+              borderRadius: "4px",
+              fontSize: "13px",
+            }}>
+              {`{{${snippetDraft.key}}}`}
+            </code>
+          </div>
+          {snippetDraft.category && (
+            <div style={{ marginBottom: "16px" }}>
+              <strong>Category:</strong>{" "}
+              <span style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                backgroundColor: "#e0f2fe",
+                color: "#0369a1",
+                borderRadius: "4px",
+                fontSize: "13px",
+              }}>
+                {snippetDraft.category}
+              </span>
+            </div>
+          )}
+          {snippetDraft.description && (
+            <div style={{ marginBottom: "16px" }}>
+              <strong>Description:</strong>{" "}
+              <span style={{ color: "#64748b" }}>{snippetDraft.description}</span>
+            </div>
+          )}
+          <div style={{ marginBottom: "16px" }}>
+            <strong>Content:</strong>
+            <pre style={{
+              backgroundColor: "#fff",
+              padding: "12px",
+              borderRadius: "6px",
+              overflow: "auto",
+              maxHeight: "300px",
+              fontSize: "13px",
+              whiteSpace: "pre-wrap",
+              border: "1px solid #e2e8f0",
+            }}>
+              {snippetDraft.content}
+            </pre>
+          </div>
+          <div style={{ display: "flex", gap: "12px" }}>
+            <button
+              onClick={handleSaveSnippet}
+              style={{
+                ...styles.button,
+                backgroundColor: "#059669",
+                color: "#fff",
+              }}
+            >
+              Save to Snippets Library
+            </button>
+            <button
+              onClick={handleCancelSnippet}
+              style={{
+                ...styles.button,
+                backgroundColor: "#94a3b8",
+                color: "#fff",
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 

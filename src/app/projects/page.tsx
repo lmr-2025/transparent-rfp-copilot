@@ -1,181 +1,55 @@
 "use client";
 
-import { useEffect, useState, useMemo, Suspense } from "react";
+import { useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { toast } from "sonner";
+import { Plus, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { usePrompt } from "@/components/ConfirmModal";
+import {
+  useProjects,
+  useUpdateProject,
+  getStatusLabel,
+} from "@/hooks/use-project-data";
+import { ProjectsTable } from "./components/projects-table";
+import {
+  StatusFilter,
+  StatusSummaryCards,
+  calculateFilterCounts,
+} from "./components/status-filter";
 import { BulkProject } from "@/types/bulkProject";
-import { fetchAllProjects, deleteProject as deleteProjectApi, updateProject } from "@/lib/projectApi";
-
-const styles = {
-  container: {
-    maxWidth: "1100px",
-    margin: "0 auto",
-    padding: "24px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-  },
-  card: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "8px",
-    padding: "16px",
-    marginBottom: "16px",
-    backgroundColor: "#fff",
-  },
-  button: {
-    padding: "10px 16px",
-    borderRadius: "6px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  table: {
-    width: "100%",
-    borderCollapse: "collapse" as const,
-    marginTop: "16px",
-  },
-  th: {
-    textAlign: "left" as const,
-    padding: "12px",
-    borderBottom: "2px solid #e2e8f0",
-    fontWeight: 600,
-    fontSize: "0.9rem",
-    color: "#475569",
-  },
-  td: {
-    padding: "12px",
-    borderBottom: "1px solid #f1f5f9",
-    fontSize: "0.9rem",
-  },
-  statusBadge: {
-    padding: "4px 8px",
-    borderRadius: "4px",
-    fontSize: "0.8rem",
-    fontWeight: 600,
-    display: "inline-block",
-  },
-};
-
-type StatusFilter = "all" | "draft" | "in_progress" | "needs_review" | "approved" | "has_flagged";
-
-const getStatusColor = (status: BulkProject["status"]) => {
-  switch (status) {
-    case "draft":
-      return { backgroundColor: "#f1f5f9", color: "#64748b" };
-    case "in_progress":
-      return { backgroundColor: "#dbeafe", color: "#1e40af" };
-    case "needs_review":
-      return { backgroundColor: "#fef3c7", color: "#92400e" };
-    case "approved":
-      return { backgroundColor: "#dcfce7", color: "#166534" };
-    default:
-      return { backgroundColor: "#f1f5f9", color: "#64748b" };
-  }
-};
-
-const getStatusLabel = (status: BulkProject["status"]) => {
-  switch (status) {
-    case "draft":
-      return "Draft";
-    case "in_progress":
-      return "In Progress";
-    case "needs_review":
-      return "Needs Review";
-    case "approved":
-      return "Approved";
-    default:
-      return status;
-  }
-};
 
 function ProjectsListContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: session } = useSession();
-  const [projects, setProjects] = useState<BulkProject[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  // Handle URL query param for filter
-  useEffect(() => {
+  // State
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     const filterParam = searchParams.get("filter");
     if (filterParam && ["all", "draft", "in_progress", "needs_review", "approved", "has_flagged"].includes(filterParam)) {
-      setStatusFilter(filterParam as StatusFilter);
+      return filterParam as StatusFilter;
     }
-  }, [searchParams]);
+    return "all";
+  });
+  const [approvingId, setApprovingId] = useState<string | null>(null);
 
-  const loadProjects = async () => {
-    try {
-      const data = await fetchAllProjects();
-      setProjects(data);
-    } catch (err) {
-      console.error("Failed to load projects:", err);
-      setError("Failed to load projects. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // React Query
+  const { data: projects = [], isLoading, error } = useProjects();
+  const updateProjectMutation = useUpdateProject();
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  const handleDeleteProject = async (id: string, projectName: string) => {
-    if (confirm(`Delete "${projectName}"? This cannot be undone.`)) {
-      try {
-        await deleteProjectApi(id);
-        await loadProjects();
-      } catch (err) {
-        console.error("Failed to delete project:", err);
-        alert("Failed to delete project. Please try again.");
-      }
-    }
-  };
-
-  const handleApprove = async (project: BulkProject) => {
-    const reviewerName = session?.user?.name || prompt("Your name (reviewer):");
-    if (!reviewerName?.trim()) return;
-
-    setApprovingId(project.id);
-    try {
-      await updateProject({
-        ...project,
-        status: "approved",
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: reviewerName.trim(),
-      });
-      await loadProjects();
-    } catch (err) {
-      console.error("Failed to approve project:", err);
-      alert("Failed to approve project. Please try again.");
-    } finally {
-      setApprovingId(null);
-    }
-  };
-
-  const getProgressStats = (project: BulkProject) => {
-    const total = project.rows.length;
-    const completed = project.rows.filter((row) => row.response && row.response.trim().length > 0).length;
-    const high = project.rows.filter((row) => row.confidence && row.confidence.toLowerCase().includes("high")).length;
-    const medium = project.rows.filter((row) => row.confidence && row.confidence.toLowerCase().includes("medium")).length;
-    const low = project.rows.filter((row) => row.confidence && row.confidence.toLowerCase().includes("low")).length;
-    const errors = project.rows.filter((row) => row.status === "error").length;
-    const flagged = project.rows.filter((row) => row.flaggedForReview).length;
-
-    return { total, completed, high, medium, low, errors, flagged };
-  };
+  // Prompt for reviewer name
+  const { prompt: promptForReviewerName, PromptDialog } = usePrompt({
+    title: "Enter Your Name",
+    message: "Enter your name to approve this project",
+    placeholder: "Your name",
+    submitLabel: "Approve",
+  });
 
   // Calculate filter counts
-  const filterCounts = useMemo(() => {
-    return {
-      all: projects.length,
-      draft: projects.filter((p) => p.status === "draft").length,
-      in_progress: projects.filter((p) => p.status === "in_progress").length,
-      needs_review: projects.filter((p) => p.status === "needs_review").length,
-      approved: projects.filter((p) => p.status === "approved").length,
-      has_flagged: projects.filter((p) => p.rows.some((r) => r.flaggedForReview)).length,
-    };
-  }, [projects]);
+  const filterCounts = useMemo(() => calculateFilterCounts(projects), [projects]);
 
   // Filter and sort projects
   const filteredProjects = useMemo(() => {
@@ -187,384 +61,158 @@ function ProjectsListContent() {
       filtered = projects.filter((p) => p.status === statusFilter);
     }
 
-    // Sort by most recently modified first (for needs_review, sort by review requested time)
+    // Sort by most recently modified first (FIFO for review queue)
     return [...filtered].sort((a, b) => {
       if (statusFilter === "needs_review") {
         const aTime = a.reviewRequestedAt ? new Date(a.reviewRequestedAt).getTime() : 0;
         const bTime = b.reviewRequestedAt ? new Date(b.reviewRequestedAt).getTime() : 0;
-        return aTime - bTime; // FIFO for review queue
+        return aTime - bTime;
       }
       return new Date(b.lastModifiedAt).getTime() - new Date(a.lastModifiedAt).getTime();
     });
   }, [projects, statusFilter]);
 
-  // Projects with flagged questions (for the flagged section)
-  const projectsWithFlaggedQuestions = useMemo(() => {
-    return projects.filter((p) => p.rows.some((r) => r.flaggedForReview));
-  }, [projects]);
+  // Handlers
+  const handleApprove = async (project: BulkProject) => {
+    let reviewerName = session?.user?.name;
+    if (!reviewerName) {
+      reviewerName = await promptForReviewerName();
+      if (!reviewerName) return;
+    }
 
-  // Get recent projects (top 4 by last modified)
-  const recentProjects = useMemo(() => {
-    return [...projects]
-      .sort((a, b) => new Date(b.lastModifiedAt).getTime() - new Date(a.lastModifiedAt).getTime())
-      .slice(0, 4);
-  }, [projects]);
-
-  // Check if we should show the dashboard view (no filter selected or "all")
-  const showDashboard = statusFilter === "all" && !loading;
+    setApprovingId(project.id);
+    try {
+      await updateProjectMutation.mutateAsync({
+        ...project,
+        status: "approved",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewerName.trim(),
+      });
+      toast.success("Project approved");
+    } catch (err) {
+      toast.error("Failed to approve project");
+    } finally {
+      setApprovingId(null);
+    }
+  };
 
   return (
-    <div style={styles.container}>
+    <div className="max-w-5xl mx-auto p-6">
+      <PromptDialog />
+
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "32px" }}>
+      <div className="flex justify-between items-start mb-8">
         <div>
-          <h1 style={{ margin: 0, fontSize: "1.75rem", fontWeight: 700, color: "#1e293b" }}>RFP Projects</h1>
-          <p style={{ color: "#64748b", marginTop: "8px", fontSize: "0.95rem" }}>
+          <h1 className="text-2xl font-bold text-foreground">RFP Projects</h1>
+          <p className="text-muted-foreground mt-2">
             Upload questionnaires, generate AI responses, and track progress through review.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => router.push("/projects/upload")}
-          style={{
-            ...styles.button,
-            backgroundColor: "#0ea5e9",
-            color: "#fff",
-            padding: "12px 20px",
-            fontSize: "0.95rem",
-          }}
-        >
-          + Upload New
-        </button>
+        <Button onClick={() => router.push("/projects/upload")} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Upload New
+        </Button>
       </div>
 
+      {/* Error state */}
       {error && (
-        <div style={{ backgroundColor: "#fee2e2", color: "#b91c1c", border: "1px solid #fecaca", borderRadius: "6px", padding: "12px", marginBottom: "16px" }}>
-          {error}
-        </div>
+        <Card className="mb-4 border-destructive bg-destructive/10">
+          <CardContent className="py-3 text-destructive">
+            Failed to load projects. Please try again.
+          </CardContent>
+        </Card>
       )}
 
-      {loading ? (
-        <div style={styles.card}>
-          <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
-            Loading projects...
-          </div>
-        </div>
+      {/* Loading state */}
+      {isLoading ? (
+        <Card>
+          <CardContent className="py-12 flex items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </CardContent>
+        </Card>
       ) : projects.length === 0 ? (
         /* Empty state */
-        <div style={{
-          ...styles.card,
-          textAlign: "center",
-          padding: "60px 40px",
-          borderStyle: "dashed",
-          borderWidth: "2px",
-        }}>
-          <div style={{ fontSize: "1.1rem", fontWeight: 600, color: "#1e293b", marginBottom: "8px" }}>
-            No projects yet
-          </div>
-          <p style={{ color: "#64748b", marginBottom: "24px", maxWidth: "400px", margin: "0 auto 24px" }}>
-            Upload a CSV or Excel questionnaire to create your first project. AI will generate responses that you review and approve.
-          </p>
-          <button
-            type="button"
-            onClick={() => router.push("/projects/upload")}
-            style={{
-              ...styles.button,
-              backgroundColor: "#0ea5e9",
-              color: "#fff",
-              padding: "12px 24px",
-            }}
-          >
-            Upload Your First Questionnaire
-          </button>
-        </div>
+        <Card className="border-dashed border-2">
+          <CardContent className="py-16 text-center">
+            <h3 className="font-semibold text-foreground mb-2">No projects yet</h3>
+            <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+              Upload a CSV or Excel questionnaire to create your first project. AI will generate
+              responses that you review and approve.
+            </p>
+            <Button onClick={() => router.push("/projects/upload")}>
+              Upload Your First Questionnaire
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <>
           {/* Status Summary Cards */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "16px", marginBottom: "32px" }}>
-            {[
-              { key: "needs_review" as const, label: "Needs Review", color: "#f59e0b", bgColor: "#fffbeb", borderColor: "#fcd34d" },
-              { key: "has_flagged" as const, label: "Has Flagged", color: "#f59e0b", bgColor: "#fffbeb", borderColor: "#fcd34d" },
-              { key: "in_progress" as const, label: "In Progress", color: "#0ea5e9", bgColor: "#f0f9ff", borderColor: "#7dd3fc" },
-              { key: "approved" as const, label: "Approved", color: "#22c55e", bgColor: "#f0fdf4", borderColor: "#86efac" },
-            ].map(({ key, label, color, bgColor, borderColor }) => (
-              <button
-                key={key}
-                onClick={() => setStatusFilter(statusFilter === key ? "all" : key)}
-                style={{
-                  padding: "16px",
-                  backgroundColor: statusFilter === key ? bgColor : "#fff",
-                  border: statusFilter === key ? `2px solid ${borderColor}` : "1px solid #e2e8f0",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <div style={{ fontSize: "1.75rem", fontWeight: 700, color: filterCounts[key] > 0 ? color : "#94a3b8" }}>
-                  {filterCounts[key]}
-                </div>
-                <div style={{ fontSize: "0.85rem", color: "#64748b", marginTop: "4px" }}>
-                  {label}
-                </div>
-              </button>
-            ))}
+          <div className="mb-8">
+            <StatusSummaryCards
+              currentFilter={statusFilter}
+              onFilterChange={setStatusFilter}
+              counts={filterCounts}
+            />
           </div>
-
-          {/* Recent Projects (only show on dashboard view) */}
-          {showDashboard && recentProjects.length > 0 && (
-            <div style={{ marginBottom: "32px" }}>
-              <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "16px" }}>
-                Recent Projects
-              </h2>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
-                {recentProjects.map((project) => {
-                  const stats = getProgressStats(project);
-                  const progressPercent = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
-                  return (
-                    <div
-                      key={project.id}
-                      onClick={() => router.push(`/projects/${project.id}`)}
-                      style={{
-                        ...styles.card,
-                        marginBottom: 0,
-                        cursor: "pointer",
-                        borderLeft: `4px solid ${
-                          project.status === "approved" ? "#22c55e" :
-                          project.status === "needs_review" ? "#f59e0b" :
-                          project.status === "in_progress" ? "#0ea5e9" :
-                          "#94a3b8"
-                        }`,
-                        transition: "all 0.15s ease",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = "translateY(-2px)";
-                        e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = "translateY(0)";
-                        e.currentTarget.style.boxShadow = "none";
-                      }}
-                    >
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: "1rem", fontWeight: 600, color: "#1e293b", marginBottom: "4px" }}>
-                            {project.name}
-                          </div>
-                          {project.customerProfiles && project.customerProfiles.length > 0 ? (
-                            <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                              {project.customerProfiles.slice(0, 2).map((cp) => (
-                                <span
-                                  key={cp.id}
-                                  style={{
-                                    fontSize: "0.75rem",
-                                    backgroundColor: "#e0e7ff",
-                                    color: "#4338ca",
-                                    padding: "2px 6px",
-                                    borderRadius: "4px",
-                                  }}
-                                >
-                                  {cp.name}
-                                </span>
-                              ))}
-                            </div>
-                          ) : project.customerName ? (
-                            <div style={{ fontSize: "0.85rem", color: "#64748b" }}>{project.customerName}</div>
-                          ) : null}
-                        </div>
-                        <span style={{ ...styles.statusBadge, ...getStatusColor(project.status), flexShrink: 0 }}>
-                          {getStatusLabel(project.status)}
-                        </span>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div style={{ marginBottom: "8px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.8rem", color: "#64748b", marginBottom: "4px" }}>
-                          <span>{stats.completed} of {stats.total} answered</span>
-                          <span>{progressPercent}%</span>
-                        </div>
-                        <div style={{ height: "6px", backgroundColor: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
-                          <div style={{
-                            width: `${progressPercent}%`,
-                            height: "100%",
-                            backgroundColor: progressPercent === 100 ? "#22c55e" : "#0ea5e9",
-                            transition: "width 0.3s ease",
-                          }} />
-                        </div>
-                      </div>
-
-                      {/* Footer info */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem", color: "#94a3b8" }}>
-                        <span>Modified {new Date(project.lastModifiedAt).toLocaleDateString()}</span>
-                        {stats.flagged > 0 && (
-                          <span style={{ color: "#f59e0b", fontWeight: 600 }}>
-                            {stats.flagged} flagged
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           {/* All Projects Section */}
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0 }}>
-                {statusFilter === "all" ? "All Projects" :
-                 statusFilter === "has_flagged" ? "Projects with Flagged Questions" :
-                 `${getStatusLabel(statusFilter)} Projects`}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                {statusFilter === "all"
+                  ? "All Projects"
+                  : statusFilter === "has_flagged"
+                  ? "Projects with Flagged Questions"
+                  : `${getStatusLabel(statusFilter)} Projects`}
               </h2>
-
-              {/* Filter pills */}
-              <div style={{ display: "flex", gap: "6px" }}>
-                {(["all", "draft", "in_progress", "needs_review", "approved"] as const).map((key) => (
-                  <button
-                    key={key}
-                    onClick={() => setStatusFilter(key)}
-                    style={{
-                      padding: "6px 12px",
-                      fontSize: "0.8rem",
-                      fontWeight: 500,
-                      backgroundColor: statusFilter === key ? "#0ea5e9" : "#f1f5f9",
-                      color: statusFilter === key ? "#fff" : "#64748b",
-                      border: "none",
-                      borderRadius: "16px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {key === "all" ? "All" : getStatusLabel(key)} ({filterCounts[key]})
-                  </button>
-                ))}
-              </div>
+              <StatusFilter
+                currentFilter={statusFilter}
+                onFilterChange={setStatusFilter}
+                counts={filterCounts}
+              />
             </div>
 
-            {filteredProjects.length === 0 ? (
-              <div style={styles.card}>
-                <div style={{ textAlign: "center", padding: "32px", color: "#94a3b8" }}>
-                  No {statusFilter === "has_flagged" ? "projects with flagged questions" : statusFilter.replace("_", " ")} projects.
-                </div>
-              </div>
-            ) : (
-              <div style={styles.card}>
-                <table style={styles.table}>
-                  <thead>
-                    <tr>
-                      <th style={styles.th}>Project</th>
-                      <th style={styles.th}>Status</th>
-                      <th style={styles.th}>Progress</th>
-                      <th style={styles.th}>Modified</th>
-                      <th style={styles.th}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredProjects.map((project) => {
-                      const stats = getProgressStats(project);
-                      const isApproving = approvingId === project.id;
-                      return (
-                        <tr key={project.id} style={{ cursor: "pointer" }} onClick={() => router.push(`/projects/${project.id}`)}>
-                          <td style={styles.td}>
-                            <div style={{ fontWeight: 500, color: "#1e293b" }}>{project.name}</div>
-                            <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "2px" }}>
-                              {project.customerProfiles && project.customerProfiles.length > 0 ? (
-                                project.customerProfiles.map((cp) => cp.name).join(", ")
-                              ) : (
-                                project.customerName || project.ownerName || "—"
-                              )}
-                            </div>
-                          </td>
-                          <td style={styles.td}>
-                            <span style={{ ...styles.statusBadge, ...getStatusColor(project.status) }}>
-                              {getStatusLabel(project.status)}
-                            </span>
-                          </td>
-                          <td style={styles.td}>
-                            <div style={{ fontSize: "0.85rem" }}>
-                              <div>{stats.completed}/{stats.total}</div>
-                              {stats.flagged > 0 && (
-                                <div style={{ color: "#f59e0b", fontWeight: 600 }}>
-                                  {stats.flagged} flagged
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                          <td style={styles.td}>
-                            <div style={{ fontSize: "0.85rem", color: "#64748b" }}>
-                              {new Date(project.lastModifiedAt).toLocaleDateString()}
-                            </div>
-                          </td>
-                          <td style={styles.td} onClick={(e) => e.stopPropagation()}>
-                            <div style={{ display: "flex", gap: "8px" }}>
-                              {project.status === "needs_review" && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleApprove(project)}
-                                  disabled={isApproving}
-                                  style={{
-                                    ...styles.button,
-                                    padding: "6px 12px",
-                                    backgroundColor: isApproving ? "#94a3b8" : "#22c55e",
-                                    color: "#fff",
-                                    fontSize: "0.85rem",
-                                    cursor: isApproving ? "not-allowed" : "pointer",
-                                  }}
-                                >
-                                  {isApproving ? "..." : "Approve"}
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteProject(project.id, project.name)}
-                                style={{
-                                  ...styles.button,
-                                  padding: "6px 12px",
-                                  backgroundColor: "#fee2e2",
-                                  color: "#b91c1c",
-                                  fontSize: "0.85rem",
-                                }}
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+            <ProjectsTable
+              projects={filteredProjects}
+              onApprove={handleApprove}
+              approvingId={approvingId}
+            />
+
+            {/* Flagged Questions Detail Section */}
+            {statusFilter === "has_flagged" && filteredProjects.length > 0 && (
+              <Card className="mt-4">
+                <CardContent className="py-4">
+                  <h3 className="font-semibold mb-4">Flagged Question Details</h3>
+                  {filteredProjects.map((project) => {
+                    const flaggedRows = project.rows.filter((r) => r.flaggedForReview);
+                    return (
+                      <div
+                        key={project.id}
+                        className="mb-4 pb-4 border-b border-border last:border-0 last:mb-0 last:pb-0"
+                      >
+                        <div className="font-medium mb-2">
+                          {project.customerName || "No customer"} — {project.name}
+                        </div>
+                        {flaggedRows.map((row) => (
+                          <div key={row.id} className="text-sm text-muted-foreground ml-4 mb-1">
+                            <span className="font-medium">Row {row.rowNumber}:</span>{" "}
+                            {row.question.slice(0, 80)}
+                            {row.question.length > 80 ? "..." : ""}
+                            {row.flagNote && (
+                              <span className="text-amber-700 italic"> — "{row.flagNote}"</span>
+                            )}
+                            {row.flaggedBy && (
+                              <span className="text-muted-foreground/70"> (by {row.flaggedBy})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
             )}
           </div>
-
-          {/* Flagged Questions Detail Section - show when has_flagged filter is active */}
-          {statusFilter === "has_flagged" && projectsWithFlaggedQuestions.length > 0 && (
-            <div style={{ ...styles.card, marginTop: "16px" }}>
-              <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem" }}>Flagged Question Details</h3>
-              {projectsWithFlaggedQuestions.map((project) => {
-                const flaggedRows = project.rows.filter((r) => r.flaggedForReview);
-                return (
-                  <div key={project.id} style={{ marginBottom: "16px", paddingBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
-                    <div style={{ fontWeight: 600, marginBottom: "8px" }}>
-                      {project.customerName || "No customer"} — {project.name}
-                    </div>
-                    {flaggedRows.map((row) => (
-                      <div key={row.id} style={{ fontSize: "0.85rem", color: "#64748b", marginLeft: "16px", marginBottom: "4px" }}>
-                        • <strong>Row {row.rowNumber}:</strong> {row.question.slice(0, 80)}{row.question.length > 80 ? "..." : ""}
-                        {row.flagNote && (
-                          <span style={{ color: "#92400e", fontStyle: "italic" }}> — &quot;{row.flagNote}&quot;</span>
-                        )}
-                        {row.flaggedBy && (
-                          <span style={{ color: "#94a3b8" }}> (by {row.flaggedBy})</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </>
       )}
     </div>
@@ -573,15 +221,17 @@ function ProjectsListContent() {
 
 export default function ProjectsListPage() {
   return (
-    <Suspense fallback={
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <div style={{ textAlign: "center", padding: "40px", color: "#94a3b8" }}>
-            Loading projects...
-          </div>
+    <Suspense
+      fallback={
+        <div className="max-w-5xl mx-auto p-6">
+          <Card>
+            <CardContent className="py-12 flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
         </div>
-      </div>
-    }>
+      }
+    >
       <ProjectsListContent />
     </Suspense>
   );

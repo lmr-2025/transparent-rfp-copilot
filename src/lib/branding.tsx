@@ -5,12 +5,14 @@ import { createContext, useContext, useState, useEffect, ReactNode } from "react
 export type BrandingSettings = {
   appName: string;
   tagline: string;
+  sidebarSubtitle: string;
   primaryColor: string;
 };
 
 const defaultBranding: BrandingSettings = {
   appName: "Transparent Trust",
-  tagline: "AI-powered RFP and security questionnaire assistant",
+  tagline: "Turn your knowledge into trustworthy answers. An LLM-powered assistant telling you not just the answer, but why.",
+  sidebarSubtitle: "Transparent LLM Assistant",
   primaryColor: "#0ea5e9",
 };
 

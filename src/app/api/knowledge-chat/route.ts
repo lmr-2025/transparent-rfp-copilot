@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { logUsage } from "@/lib/usageTracking";
 import { knowledgeChatSchema, validateBody } from "@/lib/validations";
 import { getAnthropicClient } from "@/lib/apiHelpers";
+import { interpolateSnippets } from "@/lib/snippetInterpolation";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
 
@@ -31,6 +33,13 @@ type ChatResponse = {
 };
 
 export async function POST(request: NextRequest) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   let body;
   try {
     body = await request.json();
@@ -134,11 +143,16 @@ ${keyFactsText}`;
     // Load base system prompt from the new block-based system
     const baseSystemPrompt = await loadSystemPrompt("chat", "You are a helpful assistant.");
 
+    // Interpolate context snippets in user instructions (replace {{key}} with snippet content)
+    const expandedInstructions = userInstructions
+      ? await interpolateSnippets(userInstructions)
+      : "";
+
     // Build full system prompt by adding context sections
     const contextParts: string[] = [baseSystemPrompt];
 
-    if (userInstructions) {
-      contextParts.push(`## User Instructions\n${userInstructions}`);
+    if (expandedInstructions) {
+      contextParts.push(`## User Instructions\n${expandedInstructions}`);
     }
 
     if (customerContext) {

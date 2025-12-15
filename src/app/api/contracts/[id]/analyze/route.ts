@@ -11,6 +11,7 @@ import {
   EditableContractAnalysisSection,
 } from "@/lib/contractAnalysisPromptSections";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export const maxDuration = 120; // 2 minutes for analysis
 
@@ -31,6 +32,13 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   try {
     const authSession = await getServerSession(authOptions);
     const { id } = await params;

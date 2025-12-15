@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
+import { useConfirm } from "@/components/ConfirmModal";
 import Link from "next/link";
 import {
   PromptBlock,
@@ -25,6 +26,13 @@ export default function PromptBlocksPage() {
   const [loaded, setLoaded] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [previewContext, setPreviewContext] = useState<PromptContext>("questions");
+
+  const { confirm: confirmReset, ConfirmDialog } = useConfirm({
+    title: "Reset to Defaults",
+    message: "Reset all blocks and modifiers to defaults? This cannot be undone.",
+    confirmLabel: "Reset",
+    variant: "warning",
+  });
 
   // Check if user has admin access
   const userRole = (session?.user as { role?: string })?.role;
@@ -101,8 +109,9 @@ export default function PromptBlocksPage() {
     ));
   };
 
-  const resetToDefaults = () => {
-    if (confirm("Reset all blocks and modifiers to defaults? This cannot be undone.")) {
+  const resetToDefaults = async () => {
+    const confirmed = await confirmReset();
+    if (confirmed) {
       setHasChanges(true);
       setBlocks(defaultBlocks);
       setModifiers(defaultModifiers);
@@ -141,6 +150,7 @@ export default function PromptBlocksPage() {
       height: "100vh",
       fontFamily: "system-ui, -apple-system, sans-serif",
     }}>
+      <ConfirmDialog />
       {/* Header */}
       <div style={{
         display: "flex",

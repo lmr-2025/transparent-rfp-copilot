@@ -6,6 +6,7 @@ import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerPr
 import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 type SuggestRequestBody = {
   sourceUrls: string[];
@@ -23,6 +24,13 @@ type SuggestRequestBody = {
 };
 
 export async function POST(request: NextRequest) {
+  // Rate limit check - LLM tier for expensive AI calls
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(identifier, "llm");
+  if (!rateLimitResult.success && rateLimitResult.error) {
+    return rateLimitResult.error;
+  }
+
   let body: SuggestRequestBody;
   try {
     body = (await request.json()) as SuggestRequestBody;

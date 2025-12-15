@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createReferenceUrlSchema, bulkImportUrlsSchema, validateBody } from "@/lib/validations";
+import { logReferenceUrlChange, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/reference-urls - List all reference URLs
 export async function GET(request: NextRequest) {
@@ -51,6 +52,16 @@ export async function POST(request: NextRequest) {
         categories: data.categories,
       },
     });
+
+    // Audit log
+    await logReferenceUrlChange(
+      "CREATED",
+      url.id,
+      url.title || url.url,
+      getUserFromSession(auth.session),
+      undefined,
+      { url: data.url, categories: data.categories }
+    );
 
     return NextResponse.json(url, { status: 201 });
   } catch (error) {

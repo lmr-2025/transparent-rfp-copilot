@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
+import { logReferenceUrlChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -43,6 +44,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { id } = await context.params;
     const body = await request.json();
 
+    // Get existing URL for audit log
+    const existing = await prisma.referenceUrl.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: "Reference URL not found" }, { status: 404 });
+    }
+
     const url = await prisma.referenceUrl.update({
       where: { id },
       data: {
@@ -54,6 +61,22 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         usageCount: body.usageCount,
       },
     });
+
+    // Compute changes for audit log
+    const changes = computeChanges(
+      existing as unknown as Record<string, unknown>,
+      url as unknown as Record<string, unknown>,
+      ["url", "title", "description", "categories"]
+    );
+
+    // Audit log
+    await logReferenceUrlChange(
+      "UPDATED",
+      url.id,
+      url.title || url.url,
+      getUserFromSession(auth.session),
+      Object.keys(changes).length > 0 ? changes : undefined
+    );
 
     return NextResponse.json(url);
   } catch (error) {
@@ -75,9 +98,25 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
 
+    // Get URL before deleting for audit log
+    const url = await prisma.referenceUrl.findUnique({ where: { id } });
+    if (!url) {
+      return NextResponse.json({ error: "Reference URL not found" }, { status: 404 });
+    }
+
     await prisma.referenceUrl.delete({
       where: { id },
     });
+
+    // Audit log
+    await logReferenceUrlChange(
+      "DELETED",
+      id,
+      url.title || url.url,
+      getUserFromSession(auth.session),
+      undefined,
+      { deletedUrl: { title: url.title, url: url.url } }
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {

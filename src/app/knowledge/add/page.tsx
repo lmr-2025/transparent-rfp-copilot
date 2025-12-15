@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import {
   Link2,
   FileUp,
@@ -10,7 +12,8 @@ import {
   Users,
   Globe,
   FileText,
-  Sparkles
+  Sparkles,
+  FileCode,
 } from "lucide-react";
 
 const styles = {
@@ -194,6 +197,16 @@ const skillMethods = [
 ];
 
 const otherMethods = [
+  {
+    href: "/knowledge/from-url?type=snippet",
+    icon: FileCode,
+    iconBg: "#d1fae5",
+    iconColor: "#059669",
+    borderColor: "#a7f3d0",
+    title: "Create Context Snippet",
+    description: "Build reusable boilerplate text from URLs or documents. Use {{key}} variables in instruction presets.",
+    bestFor: "Company descriptions, value props, certifications",
+  },
   {
     href: "/knowledge/documents",
     icon: FileText,

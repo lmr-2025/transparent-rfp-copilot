@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategories } from "@/lib/categoryStorage";
 
 interface CategoryItem {
@@ -28,6 +29,13 @@ export default function DocumentsPage() {
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
+
+  const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
+    title: "Delete Document",
+    message: "Are you sure you want to delete this document?",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
   const [description, setDescription] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -109,7 +117,8 @@ export default function DocumentsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this document?")) return;
+    const confirmed = await confirmDelete();
+    if (!confirmed) return;
 
     try {
       const response = await fetch(`/api/documents/${id}`, {
@@ -160,6 +169,7 @@ export default function DocumentsPage() {
 
   return (
     <div style={{ padding: "32px", maxWidth: "900px", margin: "0 auto" }}>
+      <ConfirmDialog />
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "8px" }}>
           Knowledge Documents

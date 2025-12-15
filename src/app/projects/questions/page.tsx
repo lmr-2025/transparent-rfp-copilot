@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { useStoredPrompt } from "@/hooks/useStoredPrompt";
@@ -203,7 +204,7 @@ export default function QuestionsPage() {
 
   // Load skills on mount
   useEffect(() => {
-    loadSkillsFromApi().then(setAvailableSkills).catch(console.error);
+    loadSkillsFromApi().then(setAvailableSkills).catch(() => toast.error("Failed to load skills"));
   }, []);
 
   // Load history when session is available

@@ -1,107 +1,35 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
 import { loadCategories } from "@/lib/categoryStorage";
+import { INPUT_LIMITS } from "@/lib/constants";
+import { toast } from "sonner";
 import LoadingSpinner from "@/components/LoadingSpinner";
-
-
-type UploadStatus = {
-  id: string;
-  filename: string;
-  status: "pending" | "processing" | "saved" | "error";
-  message?: string;
-};
-
-type SkillDraft = {
-  title: string;
-  tags: string[];
-  content: string;
-  sourceMapping?: string[];
-  // Store source URLs directly in the draft so they survive any re-renders
-  _sourceUrls?: string[];
-};
-
-// Analysis result types
-type SplitSuggestion = {
-  title: string;
-  category?: string;
-  description: string;
-  relevantUrls: string[];
-};
-
-type SkillSuggestion = {
-  action: "create_new" | "update_existing" | "split_topics";
-  existingSkillId?: string;
-  existingSkillTitle?: string;
-  suggestedTitle?: string;
-  suggestedCategory?: string;
-  suggestedTags?: string[];
-  splitSuggestions?: SplitSuggestion[];
-  reason: string;
-};
-
-type AnalysisResult = {
-  suggestion: SkillSuggestion;
-  sourcePreview: string;
-  urlAlreadyUsed?: {
-    skillId: string;
-    skillTitle: string;
-    matchedUrls: string[];
-  };
-};
-
-const styles = {
-  container: {
-    maxWidth: "820px",
-    margin: "0 auto",
-    padding: "24px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-  },
-  card: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "10px",
-    padding: "16px",
-    marginBottom: "16px",
-    backgroundColor: "#fff",
-  },
-  label: {
-    display: "block",
-    fontWeight: 600,
-    marginTop: "12px",
-  },
-  queueCard: {
-    border: "1px dashed #cbd5f5",
-    borderRadius: "10px",
-    padding: "12px",
-    marginTop: "12px",
-    backgroundColor: "#f8fafc",
-  },
-  queueItem: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "8px 0",
-    borderBottom: "1px solid #e2e8f0",
-  },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "6px",
-    padding: "10px 12px",
-    marginTop: "12px",
-  },
-};
+import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
+import SkillDraftReview from "./components/SkillDraftReview";
+import SnippetDraftReview from "./components/SnippetDraftReview";
+import AnalysisResultPanel from "./components/AnalysisResultPanel";
+import { styles } from "./styles";
+import { UploadStatus, SkillDraft, SnippetDraft, AnalysisResult, SplitSuggestion } from "./types";
 
 const deriveTitleFromFilename = (filename: string) =>
   filename.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim() || "Untitled document";
 
-export default function KnowledgeUploadPage() {
+function KnowledgeUploadPageContent() {
+  const searchParams = useSearchParams();
+  const typeParam = searchParams.get("type");
+
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
   const [queue, setQueue] = useState<UploadStatus[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Build type selector (skill vs snippet) - initialize from URL param
+  const [buildType, setBuildType] = useState<BuildType>(() =>
+    typeParam === "snippet" ? "snippet" : "skill"
+  );
 
   // Skill builder from URLs
   const [urlInput, setUrlInput] = useState("");
@@ -110,6 +38,7 @@ export default function KnowledgeUploadPage() {
   const [buildError, setBuildError] = useState<string | null>(null);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [generatedDraft, setGeneratedDraft] = useState<SkillDraft | null>(null);
+  const [generatedSnippetDraft, setGeneratedSnippetDraft] = useState<SnippetDraft | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [categories] = useState<SkillCategoryItem[]>(() => loadCategories());
   const [selectedSplitIndex, setSelectedSplitIndex] = useState<number | null>(null);
@@ -118,18 +47,19 @@ export default function KnowledgeUploadPage() {
 
   // Load skills from API on mount
   useEffect(() => {
-    loadSkillsFromApi().then(setSkills).catch(console.error);
+    loadSkillsFromApi().then(setSkills).catch(() => toast.error("Failed to load skills"));
   }, []);
 
   const updateQueueItem = (id: string, patch: Partial<UploadStatus>) => {
     setQueue((prev) => prev.map((item) => (item.id === id ? { ...item, ...patch } : item)));
   };
 
-  // Step 1: Analyze URLs to determine routing
+  // Step 1: Analyze URLs to determine routing (or build snippet directly)
   const handleAnalyzeUrls = async () => {
     setBuildError(null);
     setAnalysisResult(null);
     setGeneratedDraft(null);
+    setGeneratedSnippetDraft(null);
     setSelectedSplitIndex(null);
 
     const urls = urlInput
@@ -139,6 +69,12 @@ export default function KnowledgeUploadPage() {
 
     if (urls.length === 0) {
       setBuildError("Please enter at least one URL");
+      return;
+    }
+
+    // For snippets, skip analysis and build directly
+    if (buildType === "snippet") {
+      await handleBuildSnippet(urls);
       return;
     }
 
@@ -174,6 +110,32 @@ export default function KnowledgeUploadPage() {
       setBuildError(error instanceof Error ? error.message : "Failed to analyze URLs");
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Build a context snippet from URLs
+  const handleBuildSnippet = async (urls: string[]) => {
+    setBuildError(null);
+    setIsBuilding(true);
+
+    try {
+      const response = await fetch("/api/context-snippets/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrls: urls }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to build snippet");
+      }
+
+      const data = await response.json();
+      setGeneratedSnippetDraft({ ...data.draft, _sourceUrls: urls });
+    } catch (error) {
+      setBuildError(error instanceof Error ? error.message : "Failed to build snippet");
+    } finally {
+      setIsBuilding(false);
     }
   };
 
@@ -248,9 +210,9 @@ export default function KnowledgeUploadPage() {
             setSkills((prev) => prev.map((s) => (s.id === existingSkill.id ? updatedSkill : s)));
             setAnalysisResult(null);
             setUrlInput("");
-            alert(`Updated skill: "${existingSkill.title}"`);
+            toast.success(`Updated skill: "${existingSkill.title}"`);
           } else {
-            alert("No significant changes found. The existing skill already covers this content.");
+            toast.info("No significant changes found. The existing skill already covers this content.");
             setAnalysisResult(null);
           }
         }
@@ -333,12 +295,46 @@ export default function KnowledgeUploadPage() {
       buildUrlsRef.current = [];
     } catch (error) {
       console.error("Failed to save skill:", error);
-      alert("Failed to save skill. Please try again.");
+      toast.error("Failed to save skill. Please try again.");
     }
   };
 
   const handleCancelDraft = () => {
     setGeneratedDraft(null);
+  };
+
+  const handleSaveSnippetDraft = async () => {
+    if (!generatedSnippetDraft) return;
+
+    try {
+      const response = await fetch("/api/context-snippets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: generatedSnippetDraft.name,
+          key: generatedSnippetDraft.key,
+          content: generatedSnippetDraft.content,
+          category: generatedSnippetDraft.category,
+          description: generatedSnippetDraft.description,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to save snippet");
+      }
+
+      setGeneratedSnippetDraft(null);
+      setUrlInput("");
+      toast.success(`Snippet "${generatedSnippetDraft.name}" saved!`);
+    } catch (error) {
+      console.error("Failed to save snippet:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to save snippet. Please try again.");
+    }
+  };
+
+  const handleCancelSnippetDraft = () => {
+    setGeneratedSnippetDraft(null);
   };
 
   const handleFiles = (list: FileList | null) => {
@@ -399,17 +395,24 @@ export default function KnowledgeUploadPage() {
 
   return (
     <div style={styles.container}>
-        <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Skill Builder)</span></h1>
+        <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Content Builder)</span></h1>
       <p style={{ color: "#475569" }}>
-        Build skills from documentation URLs or upload finalized files. Skills appear in the
+        Build knowledge skills or context snippets from documentation URLs. Content appears in the
         Knowledge Library instantly.
       </p>
 
-      {/* Build Skill from URLs */}
+      {/* Build from URLs */}
       <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>Build Skill from Documentation URLs</h3>
+        <h3 style={{ marginTop: 0 }}>What do you want to build?</h3>
+        <BuildTypeSelector
+          value={buildType}
+          onChange={setBuildType}
+          disabled={isBuilding || isAnalyzing || generatedDraft !== null || generatedSnippetDraft !== null || analysisResult !== null}
+        />
+
+        <h3 style={{ marginTop: "24px", marginBottom: "12px" }}>Build from Documentation URLs</h3>
         <p style={{ color: "#64748b", fontSize: "14px" }}>
-          Paste documentation URLs (one per line). The system will fetch and compile them into a skill.
+          Paste documentation URLs (one per line). The system will fetch and compile them into {buildType === "skill" ? "a skill" : "a context snippet"}.
         </p>
         <p style={{ color: "#94a3b8", fontSize: "13px", marginTop: "8px" }}>
           <strong>Limits:</strong> Each URL is capped at 20,000 characters, with a total combined limit of 100,000 characters.
@@ -417,10 +420,10 @@ export default function KnowledgeUploadPage() {
         </p>
         <textarea
           value={urlInput}
-          onChange={(e) => setUrlInput(e.target.value.slice(0, 10000))}
+          onChange={(e) => setUrlInput(e.target.value.slice(0, INPUT_LIMITS.URL_INPUT))}
           placeholder="https://example.com/docs/security&#10;https://example.com/docs/compliance&#10;https://example.com/docs/privacy"
-          disabled={isBuilding || isAnalyzing || generatedDraft !== null || analysisResult !== null}
-          maxLength={10000}
+          disabled={isBuilding || isAnalyzing || generatedDraft !== null || generatedSnippetDraft !== null || analysisResult !== null}
+          maxLength={INPUT_LIMITS.URL_INPUT}
           style={{
             width: "100%",
             minHeight: "120px",
@@ -443,19 +446,19 @@ export default function KnowledgeUploadPage() {
         </div>
         <button
           onClick={handleAnalyzeUrls}
-          disabled={isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null}
+          disabled={isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || generatedSnippetDraft !== null || analysisResult !== null}
           style={{
             marginTop: "12px",
             padding: "10px 20px",
-            backgroundColor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null ? "#cbd5e1" : "#2563eb",
+            backgroundColor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || generatedSnippetDraft !== null || analysisResult !== null ? "#cbd5e1" : "#2563eb",
             color: "#fff",
             border: "none",
             borderRadius: "6px",
             fontWeight: 600,
-            cursor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || analysisResult !== null ? "not-allowed" : "pointer",
+            cursor: isBuilding || isAnalyzing || !urlInput.trim() || generatedDraft !== null || generatedSnippetDraft !== null || analysisResult !== null ? "not-allowed" : "pointer",
           }}
         >
-          {isAnalyzing ? "Analyzing..." : "Analyze & Build Skill"}
+          {isAnalyzing ? "Analyzing..." : isBuilding ? "Building..." : buildType === "skill" ? "Analyze & Build Skill" : "Build Snippet"}
         </button>
         {buildError && <div style={styles.error}>{buildError}</div>}
         {isAnalyzing && (
@@ -466,399 +469,43 @@ export default function KnowledgeUploadPage() {
         )}
         {isBuilding && (
           <LoadingSpinner
-            title="Building skill from documentation..."
-            subtitle="Fetching URLs and generating structured knowledge. This may take 20-30 seconds."
+            title={buildType === "skill" ? "Building skill from documentation..." : "Building snippet from documentation..."}
+            subtitle={buildType === "skill" ? "Fetching URLs and generating structured knowledge. This may take 20-30 seconds." : "Fetching URLs and extracting reusable content. This may take 15-20 seconds."}
           />
         )}
 
         {/* Analysis Result UI */}
         {analysisResult && !generatedDraft && !isBuilding && (
-          <div style={{ marginTop: "16px" }}>
-            {/* URL Already Used Notice */}
-            {analysisResult.urlAlreadyUsed && (
-              <div style={{
-                padding: "12px",
-                backgroundColor: "#fef9c3",
-                borderRadius: "8px",
-                border: "1px solid #fde047",
-                marginBottom: "16px",
-                display: "flex",
-                alignItems: "flex-start",
-                gap: "8px",
-              }}>
-                <span style={{ fontSize: "16px" }}>⚠️</span>
-                <div>
-                  <strong style={{ fontSize: "13px", color: "#854d0e" }}>
-                    URL already used in &quot;{analysisResult.urlAlreadyUsed.skillTitle}&quot;
-                  </strong>
-                  <p style={{ margin: "4px 0 0 0", color: "#a16207", fontSize: "12px" }}>
-                    {analysisResult.urlAlreadyUsed.matchedUrls.length === 1
-                      ? "This URL was"
-                      : `${analysisResult.urlAlreadyUsed.matchedUrls.length} URLs were`} previously used to build that skill.
-                    Updating will refresh the content from the source.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Source Preview */}
-            <div style={{
-              padding: "12px",
-              backgroundColor: "#f8fafc",
-              borderRadius: "8px",
-              border: "1px solid #e2e8f0",
-              marginBottom: "16px",
-            }}>
-              <strong style={{ fontSize: "13px", color: "#475569" }}>Content detected:</strong>
-              <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "13px" }}>
-                {analysisResult.sourcePreview}
-              </p>
-            </div>
-
-            {/* Recommendation based on action type */}
-            {analysisResult.suggestion.action === "update_existing" && (
-              <div style={{
-                padding: "16px",
-                backgroundColor: "#fef3c7",
-                borderRadius: "8px",
-                border: "1px solid #fcd34d",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "18px" }}>📝</span>
-                  <strong style={{ color: "#92400e" }}>Suggested: Update existing skill</strong>
-                </div>
-                <p style={{ margin: "0 0 12px 0", color: "#78350f", fontSize: "14px" }}>
-                  This content looks related to <strong>&quot;{analysisResult.suggestion.existingSkillTitle}&quot;</strong>.
-                </p>
-                <p style={{ margin: "0 0 12px 0", color: "#92400e", fontSize: "13px" }}>
-                  {analysisResult.suggestion.reason}
-                </p>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => handleBuildFromUrls(undefined, { skillId: analysisResult.suggestion.existingSkillId! })}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#f59e0b",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Update &quot;{analysisResult.suggestion.existingSkillTitle}&quot;
-                  </button>
-                  <button
-                    onClick={handleSkipAnalysis}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#fff",
-                      color: "#475569",
-                      border: "1px solid #cbd5e1",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Create New Skill Instead
-                  </button>
-                  <button
-                    onClick={() => setAnalysisResult(null)}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#fff",
-                      color: "#64748b",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {analysisResult.suggestion.action === "create_new" && (
-              <div style={{
-                padding: "16px",
-                backgroundColor: "#dcfce7",
-                borderRadius: "8px",
-                border: "1px solid #86efac",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "18px" }}>✨</span>
-                  <strong style={{ color: "#166534" }}>Ready to create new skill</strong>
-                </div>
-                <p style={{ margin: "0 0 8px 0", color: "#15803d", fontSize: "14px" }}>
-                  Suggested title: <strong>&quot;{analysisResult.suggestion.suggestedTitle}&quot;</strong>
-                </p>
-                <p style={{ margin: "0 0 12px 0", color: "#166534", fontSize: "13px" }}>
-                  {analysisResult.suggestion.reason}
-                </p>
-                {analysisResult.suggestion.suggestedTags && analysisResult.suggestion.suggestedTags.length > 0 && (
-                  <div style={{ marginBottom: "12px" }}>
-                    <span style={{ fontSize: "12px", color: "#166534" }}>Suggested tags: </span>
-                    {analysisResult.suggestion.suggestedTags.map((tag, i) => (
-                      <span key={i} style={{
-                        display: "inline-block",
-                        padding: "2px 8px",
-                        marginLeft: "4px",
-                        backgroundColor: "#bbf7d0",
-                        color: "#166534",
-                        borderRadius: "4px",
-                        fontSize: "11px",
-                      }}>
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => handleBuildFromUrls()}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#22c55e",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Build Skill
-                  </button>
-                  <button
-                    onClick={() => setAnalysisResult(null)}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#fff",
-                      color: "#64748b",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {analysisResult.suggestion.action === "split_topics" && analysisResult.suggestion.splitSuggestions && (
-              <div style={{
-                padding: "16px",
-                backgroundColor: "#ede9fe",
-                borderRadius: "8px",
-                border: "1px solid #c4b5fd",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "18px" }}>🔀</span>
-                  <strong style={{ color: "#5b21b6" }}>Multiple topics detected</strong>
-                </div>
-                <p style={{ margin: "0 0 12px 0", color: "#6d28d9", fontSize: "14px" }}>
-                  {analysisResult.suggestion.reason}
-                </p>
-                <p style={{ margin: "0 0 12px 0", color: "#7c3aed", fontSize: "13px" }}>
-                  Consider creating separate, focused skills for each topic:
-                </p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "12px" }}>
-                  {analysisResult.suggestion.splitSuggestions.map((split, idx) => (
-                    <div key={idx} style={{
-                      padding: "12px",
-                      backgroundColor: "#fff",
-                      borderRadius: "6px",
-                      border: "1px solid #ddd6fe",
-                    }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
-                        <div style={{ flex: 1 }}>
-                          <strong style={{ color: "#5b21b6", fontSize: "14px" }}>{split.title}</strong>
-                          <p style={{ margin: "4px 0 0 0", color: "#64748b", fontSize: "12px" }}>
-                            {split.description}
-                          </p>
-                          <p style={{ margin: "4px 0 0 0", color: "#94a3b8", fontSize: "11px" }}>
-                            {split.relevantUrls.length} URL(s)
-                          </p>
-                        </div>
-                        <button
-                          onClick={() => handleBuildSplitSkill(split, idx)}
-                          disabled={selectedSplitIndex !== null}
-                          style={{
-                            padding: "8px 12px",
-                            backgroundColor: selectedSplitIndex === idx ? "#94a3b8" : "#8b5cf6",
-                            color: "#fff",
-                            border: "none",
-                            borderRadius: "6px",
-                            fontWeight: 600,
-                            cursor: selectedSplitIndex !== null ? "not-allowed" : "pointer",
-                            fontSize: "13px",
-                          }}
-                        >
-                          {selectedSplitIndex === idx ? "Building..." : "Build This"}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px solid #ddd6fe" }}>
-                  <button
-                    onClick={handleSkipAnalysis}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#fff",
-                      color: "#5b21b6",
-                      border: "1px solid #c4b5fd",
-                      borderRadius: "6px",
-                      fontWeight: 600,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Build All as One Skill Anyway
-                  </button>
-                  <button
-                    onClick={() => setAnalysisResult(null)}
-                    style={{
-                      padding: "10px 16px",
-                      backgroundColor: "#fff",
-                      color: "#64748b",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <AnalysisResultPanel
+            analysisResult={analysisResult}
+            selectedSplitIndex={selectedSplitIndex}
+            onBuildFromUrls={handleBuildFromUrls}
+            onSkipAnalysis={handleSkipAnalysis}
+            onBuildSplitSkill={handleBuildSplitSkill}
+            onCancel={() => setAnalysisResult(null)}
+          />
         )}
       </div>
 
       {/* Generated Draft Review */}
       {generatedDraft && (
-        <div style={{
-          ...styles.card,
-          backgroundColor: "#f0fdf4",
-          border: "2px solid #86efac",
-        }}>
-          <h3 style={{ marginTop: 0, color: "#15803d" }}>Generated Skill - Review & Save</h3>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Title:</strong> {generatedDraft.title}
-          </div>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Categories:</strong>
-            <div style={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "8px",
-              marginTop: "8px",
-            }}>
-              {categories.map((cat) => {
-                const isSelected = selectedCategories.includes(cat.name);
-                return (
-                  <label
-                    key={cat.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      padding: "6px 12px",
-                      borderRadius: "6px",
-                      border: isSelected ? "1px solid #818cf8" : "1px solid #cbd5e1",
-                      backgroundColor: isSelected ? "#e0e7ff" : "#fff",
-                      color: isSelected ? "#3730a3" : "#475569",
-                      cursor: "pointer",
-                      fontSize: "13px",
-                      transition: "all 0.15s ease",
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCategories([...selectedCategories, cat.name]);
-                        } else {
-                          setSelectedCategories(selectedCategories.filter(c => c !== cat.name));
-                        }
-                      }}
-                      style={{ margin: 0 }}
-                    />
-                    {cat.name}
-                  </label>
-                );
-              })}
-            </div>
-            {selectedCategories.length === 0 && (
-              <p style={{ color: "#94a3b8", fontSize: "12px", marginTop: "4px" }}>
-                Select at least one category (optional)
-              </p>
-            )}
-          </div>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Tags:</strong> {generatedDraft.tags.join(", ") || "None"}
-          </div>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Content:</strong>
-            <pre style={{
-              backgroundColor: "#fff",
-              padding: "12px",
-              borderRadius: "6px",
-              overflow: "auto",
-              maxHeight: "300px",
-              fontSize: "13px",
-              whiteSpace: "pre-wrap",
-            }}>
-              {generatedDraft.content}
-            </pre>
-          </div>
-          {generatedDraft.sourceMapping && generatedDraft.sourceMapping.length > 0 && (
-            <div style={{ marginBottom: "16px" }}>
-              <strong>Sources:</strong>
-              <ul style={{ margin: "4px 0 0 20px", fontSize: "13px" }}>
-                {generatedDraft.sourceMapping.map((url, index) => (
-                  <li key={index} style={{ marginBottom: "4px" }}>
-                    <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: "#2563eb" }}>
-                      {url}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button
-              onClick={handleSaveDraft}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: "#15803d",
-                color: "#fff",
-                border: "none",
-                borderRadius: "6px",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Save to Library
-            </button>
-            <button
-              onClick={handleCancelDraft}
-              style={{
-                padding: "10px 20px",
-                backgroundColor: "#94a3b8",
-                color: "#fff",
-                border: "none",
-                borderRadius: "6px",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <SkillDraftReview
+          draft={generatedDraft}
+          categories={categories}
+          selectedCategories={selectedCategories}
+          onCategoryChange={setSelectedCategories}
+          onSave={handleSaveDraft}
+          onCancel={handleCancelDraft}
+        />
+      )}
+
+      {/* Generated Snippet Draft Review */}
+      {generatedSnippetDraft && (
+        <SnippetDraftReview
+          draft={generatedSnippetDraft}
+          onSave={handleSaveSnippetDraft}
+          onCancel={handleCancelSnippetDraft}
+        />
       )}
 
       {/* File Upload Section */}
@@ -934,5 +581,13 @@ export default function KnowledgeUploadPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function KnowledgeUploadPage() {
+  return (
+    <Suspense fallback={<div style={styles.container}><p style={{ color: "#64748b", textAlign: "center" }}>Loading...</p></div>}>
+      <KnowledgeUploadPageContent />
+    </Suspense>
   );
 }

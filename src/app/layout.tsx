@@ -4,6 +4,8 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 import AuthProvider from "@/components/AuthProvider";
 import { BrandingProvider } from "@/lib/branding";
+import { QueryProvider } from "@/providers/query-provider";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -31,12 +33,15 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          <BrandingProvider>
-            <Sidebar />
-            <main style={{ marginLeft: "240px" }}>
-              {children}
-            </main>
-          </BrandingProvider>
+          <QueryProvider>
+            <BrandingProvider>
+              <Toaster position="top-right" richColors closeButton />
+              <Sidebar />
+              <main style={{ marginLeft: "240px" }}>
+                {children}
+              </main>
+            </BrandingProvider>
+          </QueryProvider>
         </AuthProvider>
       </body>
     </html>

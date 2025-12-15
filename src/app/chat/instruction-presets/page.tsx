@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
+import { useConfirm } from "@/components/ConfirmModal";
 import Link from "next/link";
+import SnippetPicker from "@/components/SnippetPicker";
 
 type InstructionPreset = {
   id: string;
@@ -73,17 +75,49 @@ export default function InstructionPresetsAdminPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
 
+  const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
+    title: "Delete Preset",
+    message: "Are you sure you want to delete this preset?",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
+
   // Edit modal state
   const [editingPreset, setEditingPreset] = useState<InstructionPreset | null>(null);
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editContent, setEditContent] = useState("");
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Create modal state
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newContent, setNewContent] = useState("");
+  const createTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Helper to insert snippet at cursor position
+  const insertAtCursor = (
+    textareaRef: React.RefObject<HTMLTextAreaElement | null>,
+    snippet: string,
+    setValue: (value: string) => void,
+    currentValue: string
+  ) => {
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      setValue(currentValue + snippet);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const newValue = currentValue.slice(0, start) + snippet + currentValue.slice(end);
+    setValue(newValue);
+    // Reset cursor position after React re-renders
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(start + snippet.length, start + snippet.length);
+    }, 0);
+  };
 
   const userRole = (session?.user as { role?: string })?.role;
   const isAdmin = userRole === "ADMIN" || userRole === "PROMPT_ADMIN";
@@ -161,7 +195,8 @@ export default function InstructionPresetsAdminPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this preset?")) return;
+    const confirmed = await confirmDelete();
+    if (!confirmed) return;
     setActionInProgress(id);
     try {
       const res = await fetch(`/api/instruction-presets/${id}`, {
@@ -262,6 +297,7 @@ export default function InstructionPresetsAdminPage() {
 
   return (
     <div style={styles.container}>
+      <ConfirmDialog />
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
@@ -722,10 +758,16 @@ export default function InstructionPresetsAdminPage() {
               />
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}>
-                Instructions
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 500 }}>
+                  Instructions
+                </label>
+                <SnippetPicker
+                  onInsert={(snippet) => insertAtCursor(editTextareaRef, snippet, setEditContent, editContent)}
+                />
+              </div>
               <textarea
+                ref={editTextareaRef}
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 style={{
@@ -739,6 +781,9 @@ export default function InstructionPresetsAdminPage() {
                   resize: "vertical",
                 }}
               />
+              <p style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
+                Use {"{{snippet_key}}"} to insert context snippets. They'll be expanded when the preset is applied.
+              </p>
             </div>
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
               <button
@@ -829,10 +874,16 @@ export default function InstructionPresetsAdminPage() {
               />
             </div>
             <div style={{ marginBottom: "16px" }}>
-              <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}>
-                Instructions *
-              </label>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                <label style={{ fontSize: "13px", fontWeight: 500 }}>
+                  Instructions *
+                </label>
+                <SnippetPicker
+                  onInsert={(snippet) => insertAtCursor(createTextareaRef, snippet, setNewContent, newContent)}
+                />
+              </div>
               <textarea
+                ref={createTextareaRef}
                 value={newContent}
                 onChange={(e) => setNewContent(e.target.value)}
                 placeholder="Enter the instruction text that will guide the AI's behavior..."
@@ -847,6 +898,9 @@ export default function InstructionPresetsAdminPage() {
                   resize: "vertical",
                 }}
               />
+              <p style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
+                Use {"{{snippet_key}}"} to insert context snippets. They'll be expanded when the preset is applied.
+              </p>
             </div>
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
               <button

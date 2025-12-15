@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, CheckCircle, X } from 'lucide-react';
+import { Send, Loader2, CheckCircle, X, Lightbulb } from 'lucide-react';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -104,8 +104,12 @@ const styles = {
     backgroundColor: '#0ea5e9',
     color: '#fff',
   },
-  useButton: {
+  acceptButton: {
     backgroundColor: '#22c55e',
+    color: '#fff',
+  },
+  suggestButton: {
+    backgroundColor: '#f59e0b',
     color: '#fff',
   },
   closeButton: {
@@ -246,10 +250,105 @@ If the user asks you to generate a new/updated response, format it the same way 
     }
   };
 
-  const handleUseResponse = () => {
+  const handleAcceptAnswer = () => {
     if (latestSuggestion) {
       onResponseUpdate(latestSuggestion);
       setLatestSuggestion(null);
+    }
+    onClose();
+  };
+
+  const handleGetSuggestions = async () => {
+    if (isProcessing) return;
+
+    const suggestionPrompt = "What additional information or context would help you provide a better, more confident answer to this question? Please be specific about what's missing or unclear.";
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: 'user',
+        content: suggestionPrompt,
+        timestamp: new Date(),
+      },
+    ]);
+    setIsProcessing(true);
+
+    try {
+      const conversationContext = messages.map((msg) => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      const originalContextSection = originalConversationHistory && originalConversationHistory.length > 0
+        ? `\n\nORIGINAL GENERATION CONVERSATION:
+Below is the conversation that led to this response. This shows your reasoning process, what skills you matched, and how you arrived at your answer.
+
+${originalConversationHistory.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\n\n')}`
+        : '';
+
+      const systemPrompt = `${promptText}
+
+CONVERSATION CONTEXT:
+You are refining a response to a security questionnaire question.
+
+Original Question: "${originalQuestion}"
+Current Response: "${currentResponse}"
+${originalContextSection}
+
+The user is asking what additional information would help improve your answer. Be specific and actionable about what's missing:
+- What specific details about the company's practices would help?
+- What documentation or policies would be useful?
+- What technical specifics are you uncertain about?
+
+Focus on concrete, actionable suggestions for what the user could provide to improve the answer quality and confidence.`;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          systemPrompt,
+          messages: [
+            ...conversationContext,
+            {
+              role: 'user',
+              content: suggestionPrompt,
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to get response');
+      }
+
+      const data = await response.json();
+      const assistantContent = (data.content as ContentBlock[])
+        .filter((block) => block.type === 'text')
+        .map((block) => block.text ?? '')
+        .join('\n');
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: assistantContent,
+          timestamp: new Date(),
+        },
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to process your request';
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: `Error: ${message}`,
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -278,13 +377,28 @@ If the user asks you to generate a new/updated response, format it the same way 
               index === messages.length - 1 &&
               latestSuggestion &&
               (message.content.includes('Answer:') || message.content.includes('Confidence:')) && (
-                <button
-                  onClick={handleUseResponse}
-                  style={{ ...styles.button, ...styles.useButton, marginTop: '10px' }}
-                >
-                  <CheckCircle size={16} />
-                  Use This Answer
-                </button>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={handleAcceptAnswer}
+                    style={{ ...styles.button, ...styles.acceptButton }}
+                  >
+                    <CheckCircle size={16} />
+                    Accept Answer
+                  </button>
+                  <button
+                    onClick={handleGetSuggestions}
+                    disabled={isProcessing}
+                    style={{
+                      ...styles.button,
+                      ...styles.suggestButton,
+                      opacity: isProcessing ? 0.5 : 1,
+                      cursor: isProcessing ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    <Lightbulb size={16} />
+                    Get Suggestions
+                  </button>
+                </div>
               )}
           </div>
         ))}

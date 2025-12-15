@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
+import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
+import { encrypt, decrypt, isEncryptionConfigured } from "@/lib/encryption";
 
 // Settings are stored in a simple key-value table
-// Sensitive values are encrypted at rest (TODO: security engineer to implement)
+// Sensitive values (secrets, tokens, keys) are encrypted at rest using AES-256-GCM
+
+// Keys that contain sensitive data and should be encrypted
+const SENSITIVE_KEY_PATTERNS = ["SECRET", "TOKEN", "KEY", "PASSWORD", "CREDENTIAL"];
+
+function isSensitiveKey(key: string): boolean {
+  return SENSITIVE_KEY_PATTERNS.some(pattern => key.toUpperCase().includes(pattern));
+}
 
 type IntegrationStatus = {
   configured: boolean;
@@ -62,10 +71,7 @@ export async function GET() {
 }
 
 // POST /api/admin/settings - Update settings (admin only)
-// NOTE: This is a light implementation. Security engineer should:
-// 1. Encrypt sensitive values before storing
-// 2. Add audit logging
-// 3. Implement proper secret management (e.g., Vault, AWS Secrets Manager)
+// Sensitive values are encrypted using AES-256-GCM before storage
 export async function POST(request: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.authorized) {
@@ -101,15 +107,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const isSensitive = isSensitiveKey(key);
+
+    // Require encryption to be configured for sensitive values
+    if (isSensitive && !isEncryptionConfigured()) {
+      return NextResponse.json(
+        { error: "ENCRYPTION_KEY environment variable must be configured to store sensitive settings" },
+        { status: 500 }
+      );
+    }
+
+    // Get existing value for audit log
+    const existing = await prisma.appSetting.findUnique({ where: { key } });
+    const isCreate = !existing;
+
+    // Encrypt sensitive values before storing
+    const valueToStore = isSensitive && value ? encrypt(value) : (value || "");
+
     // Store in database (AppSetting table)
-    // TODO: Security engineer - encrypt value before storing
     await prisma.appSetting.upsert({
       where: { key },
-      create: { key, value: value || "", updatedBy: auth.session?.user?.email || "unknown" },
-      update: { value: value || "", updatedBy: auth.session?.user?.email || "unknown" },
+      create: {
+        key,
+        value: valueToStore,
+        updatedBy: auth.session?.user?.email || "unknown",
+      },
+      update: {
+        value: valueToStore,
+        updatedBy: auth.session?.user?.email || "unknown",
+      },
     });
 
-    return NextResponse.json({ success: true, key });
+    // Audit log the setting change (never log sensitive values)
+    await createAuditLog({
+      entityType: "SETTING",
+      entityId: key,
+      entityTitle: key,
+      action: isCreate ? "CREATED" : "UPDATED",
+      user: auth.session ? getUserFromSession(auth.session) : undefined,
+      changes: isSensitive ? undefined : {
+        value: {
+          from: existing?.value || null,
+          to: value || "",
+        },
+      },
+      metadata: isSensitive ? { note: "Sensitive value changed (encrypted, not logged)" } : undefined,
+    });
+
+    return NextResponse.json({ success: true, key, encrypted: isSensitive });
   } catch (error) {
     console.error("Failed to update setting:", error);
     return NextResponse.json(
@@ -134,11 +179,20 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "key parameter required" }, { status: 400 });
     }
 
-    await prisma.appSetting.delete({
-      where: { key },
-    }).catch(() => {
-      // Ignore if doesn't exist
-    });
+    const existing = await prisma.appSetting.findUnique({ where: { key } });
+
+    if (existing) {
+      await prisma.appSetting.delete({ where: { key } });
+
+      // Audit log the deletion
+      await createAuditLog({
+        entityType: "SETTING",
+        entityId: key,
+        entityTitle: key,
+        action: "DELETED",
+        user: auth.session ? getUserFromSession(auth.session) : undefined,
+      });
+    }
 
     return NextResponse.json({ success: true, key });
   } catch (error) {

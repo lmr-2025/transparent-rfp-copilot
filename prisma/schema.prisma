@@ -344,6 +344,25 @@ enum InstructionShareStatus {
   REJECTED          // Admin rejected the share request
 }
 
+// Context Snippets - Reusable boilerplate text for instructions
+// e.g., company description, value props, certifications
+model ContextSnippet {
+  id          String   @id @default(uuid())
+  name        String   // Human-readable name, e.g., "Company Description"
+  key         String   @unique // Variable key, e.g., "company_description"
+  content     String   @db.Text // The actual snippet text
+  category    String?  // Optional grouping: "Company", "Product", "Compliance"
+  description String?  // Brief description of what this snippet is for
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdBy   String?  // User email who created it
+
+  @@index([category])
+  @@index([isActive])
+  @@index([key])
+}
+
 // Chat Prompt Categories
 model ChatPromptCategory {
   id          String   @id @default(uuid())
@@ -494,6 +513,8 @@ enum AuditEntityType {
   CONTRACT
   USER
   SETTING
+  PROMPT
+  CONTEXT_SNIPPET
 }
 
 enum AuditAction {

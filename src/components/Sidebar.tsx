@@ -58,9 +58,6 @@ const navItems: NavSection[] = [
     adminOnly: true,
     items: [
       { href: "/admin/prompt-blocks", label: "Prompt Builder" },
-      { href: "/admin/categories", label: "Categories" },
-      { href: "/admin/usage", label: "API Usage" },
-      { href: "/audit-log", label: "Audit Log" },
       { href: "/admin/settings", label: "Settings" },
     ],
   },
@@ -108,7 +105,7 @@ export default function Sidebar() {
           marginTop: "4px",
           marginBottom: 0,
         }}>
-          Transparent LLM Assistant
+          {branding.sidebarSubtitle}
         </p>
       </div>
 

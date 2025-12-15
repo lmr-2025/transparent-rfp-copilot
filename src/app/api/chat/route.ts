@@ -5,6 +5,7 @@ import { CLAUDE_MODEL } from '@/lib/config';
 import { simpleChatSchema, validateBody } from '@/lib/validations';
 import { getAnthropicClient } from '@/lib/apiHelpers';
 import { requireAuth } from '@/lib/apiAuth';
+import { checkRateLimit, getRateLimitIdentifier } from '@/lib/rateLimit';
 import Anthropic from '@anthropic-ai/sdk';
 
 export const maxDuration = 60;
@@ -14,6 +15,13 @@ export async function POST(req: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {
     return auth.response;
+  }
+
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(req);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
   }
 
   try {

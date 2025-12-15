@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
+import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
 
 // GET /api/system-prompts - List all system prompts
 export async function GET() {
@@ -37,6 +38,16 @@ export async function POST(request: NextRequest) {
         sections: body.sections,
         updatedBy: auth.session.user.email || auth.session.user.id,
       },
+    });
+
+    // Audit log
+    await createAuditLog({
+      entityType: "PROMPT",
+      entityId: prompt.key,
+      entityTitle: prompt.name,
+      action: "CREATED",
+      user: getUserFromSession(auth.session),
+      metadata: { sectionCount: Array.isArray(body.sections) ? body.sections.length : 0 },
     });
 
     return NextResponse.json(prompt, { status: 201 });

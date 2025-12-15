@@ -190,6 +190,32 @@ export const createCategorySchema = z.object({
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
 });
 
+// Context Snippet schemas
+export const createContextSnippetSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200),
+  key: z.string()
+    .min(1, "Key is required")
+    .max(100)
+    .regex(/^[a-z][a-z0-9_]*$/, "Key must be lowercase letters, numbers, and underscores, starting with a letter"),
+  content: z.string().min(1, "Content is required").max(50000),
+  category: z.string().max(100).nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const updateContextSnippetSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  key: z.string()
+    .min(1)
+    .max(100)
+    .regex(/^[a-z][a-z0-9_]*$/, "Key must be lowercase letters, numbers, and underscores, starting with a letter")
+    .optional(),
+  content: z.string().min(1).max(50000).optional(),
+  category: z.string().max(100).nullable().optional(),
+  description: z.string().max(1000).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
 // Contract schemas
 export const createContractSchema = z.object({
   title: z.string().min(1, "Title is required").max(500),

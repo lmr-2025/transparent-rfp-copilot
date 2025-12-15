@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2, Edit2, FolderOpen, GripVertical } from "lucide-react";
+import { Plus, Trash2, Edit2, FolderOpen, GripVertical, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { SkillCategoryItem } from "@/types/skill";
 import {
   loadCategories,
@@ -18,8 +19,10 @@ export default function CategoriesPage() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     setError(null);
 
     if (!newName.trim()) {
@@ -33,14 +36,24 @@ export default function CategoriesPage() {
       return;
     }
 
-    const added = addCategory(newName, newDescription);
-    setCategories([...categories, added]);
-    setNewName("");
-    setNewDescription("");
-    setShowForm(false);
+    setIsSaving(true);
+    try {
+      const added = await addCategory(newName, newDescription);
+      setCategories([...categories, added]);
+      setNewName("");
+      setNewDescription("");
+      setShowForm(false);
+      toast.success("Category created");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to create category";
+      toast.error(message);
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleUpdate = (id: string) => {
+  const handleUpdate = async (id: string) => {
     setError(null);
 
     if (!newName.trim()) {
@@ -54,18 +67,37 @@ export default function CategoriesPage() {
       return;
     }
 
-    updateCategory(id, { name: newName.trim(), description: newDescription.trim() || undefined });
-    setCategories(categories.map((cat) =>
-      cat.id === id ? { ...cat, name: newName.trim(), description: newDescription.trim() || undefined } : cat
-    ));
-    setEditingId(null);
-    setNewName("");
-    setNewDescription("");
+    setIsSaving(true);
+    try {
+      await updateCategory(id, { name: newName.trim(), description: newDescription.trim() || undefined });
+      setCategories(categories.map((cat) =>
+        cat.id === id ? { ...cat, name: newName.trim(), description: newDescription.trim() || undefined } : cat
+      ));
+      setEditingId(null);
+      setNewName("");
+      setNewDescription("");
+      toast.success("Category updated");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update category";
+      toast.error(message);
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    deleteCategory(id);
-    setCategories(categories.filter((cat) => cat.id !== id));
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await deleteCategory(id);
+      setCategories(categories.filter((cat) => cat.id !== id));
+      toast.success("Category deleted");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete category";
+      toast.error(message);
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const startEdit = (cat: SkillCategoryItem) => {
@@ -196,17 +228,22 @@ export default function CategoriesPage() {
           <div style={{ display: "flex", gap: "12px" }}>
             <button
               onClick={handleAdd}
+              disabled={isSaving}
               style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
                 padding: "10px 20px",
-                backgroundColor: "#6366f1",
+                backgroundColor: isSaving ? "#a5b4fc" : "#6366f1",
                 color: "#fff",
                 border: "none",
                 borderRadius: "6px",
-                cursor: "pointer",
+                cursor: isSaving ? "not-allowed" : "pointer",
                 fontWeight: 600,
               }}
             >
-              Add Category
+              {isSaving && <Loader2 size={16} className="animate-spin" />}
+              {isSaving ? "Adding..." : "Add Category"}
             </button>
             <button
               onClick={() => {
@@ -330,18 +367,23 @@ export default function CategoriesPage() {
                   <div style={{ display: "flex", gap: "8px" }}>
                     <button
                       onClick={() => handleUpdate(cat.id)}
+                      disabled={isSaving}
                       style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
                         padding: "6px 12px",
-                        backgroundColor: "#3b82f6",
+                        backgroundColor: isSaving ? "#93c5fd" : "#3b82f6",
                         color: "#fff",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: "pointer",
+                        cursor: isSaving ? "not-allowed" : "pointer",
                         fontSize: "0.85rem",
                         fontWeight: 500,
                       }}
                     >
-                      Save
+                      {isSaving && <Loader2 size={14} className="animate-spin" />}
+                      {isSaving ? "Saving..." : "Save"}
                     </button>
                     <button
                       onClick={cancelEdit}
@@ -389,17 +431,19 @@ export default function CategoriesPage() {
                   </button>
                   <button
                     onClick={() => handleDelete(cat.id)}
+                    disabled={deletingId === cat.id}
                     style={{
                       padding: "8px",
                       backgroundColor: "transparent",
                       border: "none",
-                      cursor: "pointer",
+                      cursor: deletingId === cat.id ? "not-allowed" : "pointer",
                       color: "#ef4444",
                       borderRadius: "4px",
+                      opacity: deletingId === cat.id ? 0.5 : 1,
                     }}
                     title="Delete category"
                   >
-                    <Trash2 size={16} />
+                    {deletingId === cat.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
                   </button>
                 </>
               )}

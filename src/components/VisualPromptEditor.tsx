@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
+import { useConfirm } from "@/components/ConfirmModal";
 
 type ParsedSection = {
   title: string;
@@ -74,6 +75,13 @@ export default function VisualPromptEditor({
 }: VisualPromptEditorProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [editingTitle, setEditingTitle] = useState<string | null>(null);
+
+  const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
+    title: "Delete Section",
+    message: "Delete this section?",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
 
   const sections = useMemo(() => parsePromptSections(prompt), [prompt]);
 
@@ -168,6 +176,7 @@ export default function VisualPromptEditor({
 
   return (
     <div>
+      <ConfirmDialog />
       {/* Toolbar */}
       <div style={{
         display: "flex",
@@ -330,9 +339,12 @@ export default function VisualPromptEditor({
                   </button>
                   {/* Delete button */}
                   <button
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      if (confirm(`Delete "${section.title}" section?`)) {
+                      const confirmed = await confirmDelete({
+                        message: `Delete "${section.title}" section?`,
+                      });
+                      if (confirmed) {
                         deleteSection(idx);
                       }
                     }}

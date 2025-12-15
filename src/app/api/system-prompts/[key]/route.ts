@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
+import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
 
 type RouteContext = {
   params: Promise<{ key: string }>;
@@ -44,6 +45,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { key } = await context.params;
     const body = await request.json();
 
+    // Check if it exists (for audit log action type)
+    const existing = await prisma.systemPrompt.findUnique({ where: { key } });
+    const isCreate = !existing;
+
     const prompt = await prisma.systemPrompt.upsert({
       where: { key },
       create: {
@@ -56,6 +61,18 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         name: body.name,
         sections: body.sections,
         updatedBy: auth.session.user.email || auth.session.user.id,
+      },
+    });
+
+    // Audit log
+    await createAuditLog({
+      entityType: "PROMPT",
+      entityId: key,
+      entityTitle: prompt.name,
+      action: isCreate ? "CREATED" : "UPDATED",
+      user: getUserFromSession(auth.session),
+      metadata: {
+        sectionCount: Array.isArray(body.sections) ? body.sections.length : 0,
       },
     });
 
@@ -80,8 +97,27 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     const { key } = await context.params;
 
+    // Get prompt for audit log
+    const prompt = await prisma.systemPrompt.findUnique({ where: { key } });
+
+    if (!prompt) {
+      return NextResponse.json(
+        { error: "System prompt not found" },
+        { status: 404 }
+      );
+    }
+
     await prisma.systemPrompt.delete({
       where: { key },
+    });
+
+    // Audit log
+    await createAuditLog({
+      entityType: "PROMPT",
+      entityId: key,
+      entityTitle: prompt.name,
+      action: "DELETED",
+      user: getUserFromSession(auth.session),
     });
 
     return NextResponse.json({ success: true });

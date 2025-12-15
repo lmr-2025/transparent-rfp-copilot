@@ -4,6 +4,7 @@ import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 type ExistingSkillInfo = {
   id: string;
@@ -68,6 +69,13 @@ type GroupedAnalyzeResponse = {
 };
 
 export async function POST(request: NextRequest) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   let body: AnalyzeRequestBody;
   try {
     body = (await request.json()) as AnalyzeRequestBody;

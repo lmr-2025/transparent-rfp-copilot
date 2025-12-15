@@ -204,5 +204,49 @@ export async function logContractChange(
   });
 }
 
+/**
+ * Log a reference URL change
+ */
+export async function logReferenceUrlChange(
+  action: AuditAction,
+  urlId: string,
+  urlTitle: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await createAuditLog({
+    entityType: "REFERENCE_URL",
+    entityId: urlId,
+    entityTitle: urlTitle,
+    action,
+    user,
+    changes,
+    metadata,
+  });
+}
+
+/**
+ * Log a context snippet change
+ */
+export async function logContextSnippetChange(
+  action: AuditAction,
+  snippetId: string,
+  snippetName: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await createAuditLog({
+    entityType: "CONTEXT_SNIPPET",
+    entityId: snippetId,
+    entityTitle: snippetName,
+    action,
+    user,
+    changes,
+    metadata,
+  });
+}
+
 // Re-export types for convenience
 export { AuditEntityType, AuditAction };

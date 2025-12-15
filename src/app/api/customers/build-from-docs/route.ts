@@ -7,6 +7,7 @@ import { requireAuth } from "@/lib/apiAuth";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export const maxDuration = 120; // Allow longer for multiple docs
 
@@ -22,6 +23,13 @@ type ExistingProfile = {
 
 // POST /api/customers/build-from-docs - Build/update customer profile from uploaded documents
 export async function POST(request: NextRequest) {
+  // Rate limit check - LLM tier for expensive AI calls
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimitResult = await checkRateLimit(identifier, "llm");
+  if (!rateLimitResult.success && rateLimitResult.error) {
+    return rateLimitResult.error;
+  }
+
   const auth = await requireAuth();
   if (!auth.authorized) {
     return auth.response;

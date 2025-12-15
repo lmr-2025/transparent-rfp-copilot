@@ -6,8 +6,16 @@ import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { logUsage } from "@/lib/usageTracking";
 import { questionAnswerSchema, validateBody } from "@/lib/validations";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   let body;
   try {
     body = await request.json();

@@ -5,6 +5,7 @@ import { authOptions } from "@/lib/auth";
 import { logUsage } from "@/lib/usageTracking";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 export const maxDuration = 120;
 
@@ -52,6 +53,13 @@ type OptimizePromptResponse = {
 const estimateTokens = (text: string): number => Math.ceil(text.length / 4);
 
 export async function POST(request: NextRequest) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   const session = await getServerSession(authOptions);
 
   let body: OptimizePromptRequest;

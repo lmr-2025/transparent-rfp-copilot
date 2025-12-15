@@ -3,9 +3,10 @@ import { Skill, SkillOwner, SourceUrl } from "@/types/skill";
 import { KnowledgeDocument } from "@/types/document";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import { CustomerProfile } from "@/types/customerProfile";
+import { ContextSnippet } from "@/types/contextSnippet";
 import { AnalyzeLibraryResponse, LibraryRecommendation } from "@/types/libraryAnalysis";
 
-export type TabType = "skills" | "documents" | "urls" | "customers";
+export type TabType = "skills" | "documents" | "urls" | "customers" | "snippets";
 
 export interface CategoryItem {
   id: string;
@@ -27,6 +28,7 @@ export interface LibraryItem {
   documentData?: KnowledgeDocument;
   urlData?: ReferenceUrl;
   customerData?: CustomerProfile;
+  snippetData?: ContextSnippet;
 }
 
 // Library analysis state

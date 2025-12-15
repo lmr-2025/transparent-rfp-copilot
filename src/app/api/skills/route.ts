@@ -32,9 +32,41 @@ export async function GET(request: NextRequest) {
     const skills = await prisma.skill.findMany({
       where,
       orderBy: { updatedAt: "desc" },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json(skills);
+    // Transform to include owner in owners array if not already present
+    const transformedSkills = skills.map((skill) => {
+      const existingOwners = (skill.owners as Array<{ userId?: string; name: string; email?: string; image?: string }>) || [];
+
+      // If there's an owner relation but not in owners array, add it
+      if (skill.owner && !existingOwners.some((o) => o.userId === skill.owner?.id)) {
+        existingOwners.unshift({
+          userId: skill.owner.id,
+          name: skill.owner.name || skill.owner.email || "Unknown",
+          email: skill.owner.email || undefined,
+          image: skill.owner.image || undefined,
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { owner: _owner, ...skillWithoutRelation } = skill;
+      return {
+        ...skillWithoutRelation,
+        owners: existingOwners.length > 0 ? existingOwners : undefined,
+      };
+    });
+
+    return NextResponse.json(transformedSkills);
   } catch (error) {
     console.error("Failed to fetch skills:", error);
     return NextResponse.json(

@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
+import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 
 type RFPEntry = {
   question: string;
@@ -36,6 +37,13 @@ type AnalysisResult = {
 export const maxDuration = 120; // 2 minutes for larger RFPs
 
 export async function POST(request: NextRequest) {
+  // Rate limit - LLM routes are expensive
+  const identifier = await getRateLimitIdentifier(request);
+  const rateLimit = await checkRateLimit(identifier, "llm");
+  if (!rateLimit.success && rateLimit.error) {
+    return rateLimit.error;
+  }
+
   try {
     const body = await request.json();
     const rfpEntries = body.rfpEntries as RFPEntry[];

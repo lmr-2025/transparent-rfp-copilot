@@ -87,54 +87,75 @@ export function saveCategories(categories: SkillCategoryItem[]): void {
   saveToLocalStorage(categories);
 }
 
-// Add a new category (with fire-and-forget API sync)
-export function addCategory(name: string, description?: string): SkillCategoryItem {
-  const newCategory: SkillCategoryItem = {
-    id: crypto.randomUUID(),
-    name: name.trim(),
-    description: description?.trim(),
-    createdAt: new Date().toISOString(),
-  };
-  cachedCategories = [...loadCategories(), newCategory];
-  saveToLocalStorage(cachedCategories);
-
-  // Fire and forget API call
-  fetch("/api/skill-categories", {
+// Add a new category via API (sync with proper error handling)
+export async function addCategory(name: string, description?: string): Promise<SkillCategoryItem> {
+  // Call API first - if it fails, we throw before updating local state
+  const response = await fetch("/api/skill-categories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: name.trim(), description: description?.trim() }),
-  }).catch((err) => console.error("Failed to sync category to API:", err));
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Failed to create category" }));
+    throw new Error(error.error || "Failed to create category");
+  }
+
+  const created = await response.json();
+  const newCategory: SkillCategoryItem = {
+    id: created.id,
+    name: created.name,
+    description: created.description,
+    color: created.color,
+    createdAt: created.createdAt,
+  };
+
+  // Update local cache after successful API call
+  cachedCategories = [...loadCategories(), newCategory];
+  saveToLocalStorage(cachedCategories);
 
   return newCategory;
 }
 
-// Update a category
-export function updateCategory(
+// Update a category via API (sync with proper error handling)
+export async function updateCategory(
   id: string,
   updates: Partial<Omit<SkillCategoryItem, "id" | "createdAt">>
-): void {
+): Promise<void> {
+  // Call API first - if it fails, we throw before updating local state
+  const response = await fetch(`/api/skill-categories/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Failed to update category" }));
+    throw new Error(error.error || "Failed to update category");
+  }
+
+  // Update local cache after successful API call
   cachedCategories = loadCategories().map((cat) =>
     cat.id === id ? { ...cat, ...updates } : cat
   );
   saveToLocalStorage(cachedCategories);
-
-  // Fire and forget API call
-  fetch(`/api/skill-categories/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates),
-  }).catch((err) => console.error("Failed to update category in API:", err));
 }
 
-// Delete a category
-export function deleteCategory(id: string): void {
+// Delete a category via API (sync with proper error handling)
+export async function deleteCategory(id: string): Promise<void> {
+  // Call API first - if it fails, we throw before updating local state
+  const response = await fetch(`/api/skill-categories/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: "Failed to delete category" }));
+    throw new Error(error.error || "Failed to delete category");
+  }
+
+  // Update local cache after successful API call
   cachedCategories = loadCategories().filter((cat) => cat.id !== id);
   saveToLocalStorage(cachedCategories);
-
-  // Fire and forget API call
-  fetch(`/api/skill-categories/${id}`, {
-    method: "DELETE",
-  }).catch((err) => console.error("Failed to delete category from API:", err));
 }
 
 // Get just the category names (for prompts)
