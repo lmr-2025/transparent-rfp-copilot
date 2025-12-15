@@ -165,19 +165,30 @@ Think: "Would this help answer an RFP question that the existing skill cannot?"
 - YES: Add the new fact
 - NO: Keep the original, return hasChanges: false
 
-CONTENT PRINCIPLES (when hasChanges: true):
-- Dense with facts, not prose
-- Bullet points over paragraphs
-- Keep complete lists (integrations, certifications)
-- Remove marketing language
-- Preserve existing structure unless new info requires reorganization
+DIFF-FRIENDLY EDITING (CRITICAL):
+The user will review your changes in a GitHub-style diff viewer showing line-by-line additions/deletions.
+To make changes easy to review:
+- Make SURGICAL edits - only change what needs to change
+- PRESERVE the original structure, formatting, and line breaks exactly
+- ADD new bullet points in logical places within existing sections
+- UPDATE specific values (numbers, versions, dates) in place
+- DO NOT rewrite or rephrase unchanged content
+- DO NOT reorganize sections unless absolutely necessary
+- DO NOT change formatting, indentation, or whitespace of unchanged lines
+- Each change should be clearly visible as a small, focused diff
+
+BAD (rewrites everything):
+"## Features\n- Feature A with new details\n- Feature B completely rewritten\n- Feature C"
+
+GOOD (surgical edit):
+Keep original exactly, just add "- Feature D: new capability" where appropriate
 
 OUTPUT (JSON only):
 {
   "hasChanges": true/false,
   "summary": "What new facts were added" OR "No meaningful updates - source material doesn't add new information",
   "title": "Keep same unless topic scope genuinely changed",
-  "content": "COMPLETE updated skill if hasChanges=true, OR copy of original if hasChanges=false",
+  "content": "COMPLETE skill with surgical edits preserving original formatting",
   "changeHighlights": ["Specific new fact added", ...] // Empty if no changes
 }`;
 
