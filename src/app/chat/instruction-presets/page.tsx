@@ -782,7 +782,7 @@ export default function InstructionPresetsAdminPage() {
                 }}
               />
               <p style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
-                Use {"{{snippet_key}}"} to insert context snippets. They'll be expanded when the preset is applied.
+                Use {"{{snippet_key}}"} to insert context snippets. They&apos;ll be expanded when the preset is applied.
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -899,7 +899,7 @@ export default function InstructionPresetsAdminPage() {
                 }}
               />
               <p style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
-                Use {"{{snippet_key}}"} to insert context snippets. They'll be expanded when the preset is applied.
+                Use {"{{snippet_key}}"} to insert context snippets. They&apos;ll be expanded when the preset is applied.
               </p>
             </div>
             <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>

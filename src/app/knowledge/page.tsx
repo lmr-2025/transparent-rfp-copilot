@@ -3,7 +3,7 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, Filter, CheckSquare, Square, Trash2 } from "lucide-react";
+import { Plus, Search, Loader2, Filter, CheckSquare, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -230,7 +230,7 @@ function KnowledgeLibraryContent() {
           break;
       }
       toast.success(`${item.type} deleted`);
-    } catch (err) {
+    } catch {
       toast.error(`Failed to delete ${item.type}`);
     } finally {
       setDeletingId(null);

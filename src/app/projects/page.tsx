@@ -89,7 +89,7 @@ function ProjectsListContent() {
         reviewedBy: reviewerName.trim(),
       });
       toast.success("Project approved");
-    } catch (err) {
+    } catch {
       toast.error("Failed to approve project");
     } finally {
       setApprovingId(null);
@@ -199,7 +199,7 @@ function ProjectsListContent() {
                             {row.question.slice(0, 80)}
                             {row.question.length > 80 ? "..." : ""}
                             {row.flagNote && (
-                              <span className="text-amber-700 italic"> — "{row.flagNote}"</span>
+                              <span className="text-amber-700 italic"> — &quot;{row.flagNote}&quot;</span>
                             )}
                             {row.flaggedBy && (
                               <span className="text-muted-foreground/70"> (by {row.flaggedBy})</span>

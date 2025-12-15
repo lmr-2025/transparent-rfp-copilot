@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
-import { encrypt, decrypt, isEncryptionConfigured } from "@/lib/encryption";
+import { encrypt, isEncryptionConfigured } from "@/lib/encryption";
 
 // Settings are stored in a simple key-value table
 // Sensitive values (secrets, tokens, keys) are encrypted at rest using AES-256-GCM

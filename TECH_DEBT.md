@@ -178,17 +178,11 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 ### ~~15. Duplicate Business Logic~~ ✅ FIXED
 **Status:** Already fixed - Owner logic extracted to `owner-management-dialog.tsx` component with `isOwner()` helper.
 
-### 16. Remaining Tags Code to Remove
-**Status:** Skills `tags` field removed (2025-12-15), but tag-related code exists elsewhere
-**Files with `tags`:**
-- `prisma/schema.prisma` - CustomerProfile has `tags String[]`, Document has `tags String[]`
-- `src/lib/validations.ts` - Customer schemas still have tags validation
-- `src/app/customers/` - Customer pages display/manage tags
-- `src/app/knowledge/documents/` - Document pages may display tags
-
-**Decision needed:** Are tags useful for CustomerProfile and Document, or should they be removed too?
-**Fix:** If not useful, remove tags from remaining models following the Skill pattern
-**Effort:** Medium (similar to Skill tags removal - ~20 files)
+### ~~16. Remaining Tags Code to Remove~~ ✅ FIXED
+**Fixed:** 2025-12-15
+- CustomerProfile `tags` field removed from schema, types, APIs, and frontend pages
+- Document model already uses `categories` (not `tags`) - no changes needed
+- Skills `tags` field was removed earlier (2025-12-15)
 
 ---
 

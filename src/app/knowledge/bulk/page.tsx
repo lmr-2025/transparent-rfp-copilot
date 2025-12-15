@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import LoadingSpinner from "@/components/LoadingSpinner";
-import { X, Check, AlertCircle, ChevronDown, ChevronUp, Eye, Edit3, ArrowLeft } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Eye, Edit3, ArrowLeft } from "lucide-react";
 import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 
@@ -100,10 +100,11 @@ export default function BulkUrlImportPage() {
   // Build type selector
   const [buildType, setBuildType] = useState<BuildType>("skill");
   const [snippetDraft, setSnippetDraft] = useState<SnippetDraft | null>(null);
-  const [isBuilding, setIsBuilding] = useState(false);
+  // isBuilding state available for future use when building skills
+  const [, setIsBuilding] = useState(false);
 
-  // Pending move-to-new-skill operation
-  const [pendingMoveToNew, setPendingMoveToNew] = useState<{ fromGroupId: string; url: string } | null>(null);
+  // Pending move-to-new-skill operation - available for future group management
+  const [, setPendingMoveToNew] = useState<{ fromGroupId: string; url: string } | null>(null);
 
   const { prompt: promptForSkillName, PromptDialog } = usePrompt({
     title: "New Skill Name",
@@ -613,7 +614,8 @@ export default function BulkUrlImportPage() {
     });
   };
 
-  const renameGroup = (groupId: string, newTitle: string) => {
+  // renameGroup available for future group management UI
+  const _renameGroup = (groupId: string, newTitle: string) => {
     setSkillGroups(prev => prev.map(g =>
       g.id === groupId ? { ...g, skillTitle: newTitle } : g
     ));
@@ -667,11 +669,10 @@ export default function BulkUrlImportPage() {
     }
 
     // Simple line-by-line diff
-    const originalLines = original.split("\n");
-    const updatedLines = updated.split("\n");
-
-    // Find common prefix/suffix for a simple visual diff
-    const maxLines = Math.max(originalLines.length, updatedLines.length);
+    // Lines available for future enhanced diff display
+    const _originalLines = original.split("\n");
+    const _updatedLines = updated.split("\n");
+    const _maxLines = Math.max(_originalLines.length, _updatedLines.length);
 
     return (
       <div style={{ fontSize: "13px", fontFamily: "monospace", lineHeight: "1.6" }}>

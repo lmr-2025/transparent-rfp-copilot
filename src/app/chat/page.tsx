@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Loader2, History, Plus, Eye } from "lucide-react";
+import { History, Plus, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
 import { useSelectionStore } from "@/stores/selection-store";
@@ -338,12 +338,12 @@ ${keyFactsText}`;
           handleNewChat();
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete session");
     }
   };
 
-  const handleViewTransparency = (message: ChatMessage) => {
+  const handleViewTransparency = (_message: ChatMessage) => {
     // Use the last transparency data or build new one
     const data = lastTransparency || buildTransparencyData();
     setTransparencyData(data);

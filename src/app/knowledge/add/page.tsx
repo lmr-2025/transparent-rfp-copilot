@@ -1,8 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
 import {
   Link2,
   FileUp,
@@ -254,7 +252,7 @@ export default function AddToKnowledgeBasePage() {
       <div>
         <h2 style={styles.sectionTitle}>Build Skills</h2>
         <p style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "16px", marginTop: "-8px" }}>
-          Skills are structured facts that are injected directly into prompts. They're the most reliable source for answers.
+          Skills are structured facts that are injected directly into prompts. They&apos;re the most reliable source for answers.
         </p>
         <div style={styles.methodsGrid}>
           {skillMethods.map((method) => (
@@ -299,7 +297,7 @@ export default function AddToKnowledgeBasePage() {
       <div>
         <h2 style={styles.sectionTitle}>Other Knowledge Types</h2>
         <p style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "16px", marginTop: "-8px" }}>
-          Documents and URLs are searched when skills don't have the answer. Customer profiles provide context for personalized responses.
+          Documents and URLs are searched when skills don&apos;t have the answer. Customer profiles provide context for personalized responses.
         </p>
         <div style={styles.methodsGrid}>
           {otherMethods.map((method) => (
@@ -356,7 +354,7 @@ export default function AddToKnowledgeBasePage() {
           <div style={styles.infoItem}>
             <div style={styles.infoNumber}>2</div>
             <div style={styles.infoText}>
-              <strong>Documents searched</strong> — If skills don't have the answer, documents are searched
+              <strong>Documents searched</strong> — If skills don&apos;t have the answer, documents are searched
             </div>
           </div>
           <div style={styles.infoItem}>

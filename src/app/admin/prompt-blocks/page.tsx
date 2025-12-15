@@ -23,7 +23,7 @@ export default function PromptBlocksPage() {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [, setLoaded] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
   const [previewContext, setPreviewContext] = useState<PromptContext>("questions");
 
