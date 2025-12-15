@@ -1,0 +1,287 @@
+import { create } from "zustand";
+
+// Types (moved from page.tsx for reusability)
+export type DraftContent = {
+  title: string;
+  content: string;
+  hasChanges?: boolean;
+  changeHighlights?: string[];
+};
+
+export type SkillGroup = {
+  id: string;
+  type: "create" | "update";
+  skillTitle: string;
+  existingSkillId?: string;
+  urls: string[];
+  status:
+    | "pending"
+    | "approved"
+    | "generating"
+    | "ready_for_review"
+    | "reviewed"
+    | "saving"
+    | "done"
+    | "error"
+    | "rejected";
+  error?: string;
+  reason?: string;
+  draft?: DraftContent;
+  originalContent?: string;
+  originalTitle?: string;
+  originalTags?: string[];
+};
+
+export type WorkflowStep =
+  | "input"
+  | "analyzing"
+  | "review_groups"
+  | "generating"
+  | "review_drafts"
+  | "saving"
+  | "done";
+
+export type ProcessedResult = {
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+};
+
+export type SnippetDraft = {
+  name: string;
+  key: string;
+  content: string;
+  category: string | null;
+  description: string | null;
+  _sourceUrls?: string[];
+};
+
+export type BuildType = "skill" | "snippet";
+
+interface BulkImportState {
+  // Workflow
+  workflowStep: WorkflowStep;
+  buildType: BuildType;
+
+  // Data
+  urlInput: string;
+  skillGroups: SkillGroup[];
+  snippetDraft: SnippetDraft | null;
+  processedResult: ProcessedResult | null;
+  errorMessage: string | null;
+
+  // UI State
+  expandedGroups: Set<string>;
+  previewGroup: SkillGroup | null;
+  editingDraft: { groupId: string; field: "title" | "content" } | null;
+
+  // Actions - Workflow
+  setWorkflowStep: (step: WorkflowStep) => void;
+  setBuildType: (type: BuildType) => void;
+
+  // Actions - Data
+  setUrlInput: (input: string) => void;
+  setSkillGroups: (groups: SkillGroup[]) => void;
+  updateSkillGroup: (
+    groupId: string,
+    updates: Partial<SkillGroup>
+  ) => void;
+  setSnippetDraft: (draft: SnippetDraft | null) => void;
+  setProcessedResult: (result: ProcessedResult | null) => void;
+  setErrorMessage: (message: string | null) => void;
+
+  // Actions - UI
+  setExpandedGroups: (groups: Set<string>) => void;
+  toggleGroupExpanded: (groupId: string) => void;
+  setPreviewGroup: (group: SkillGroup | null) => void;
+  setEditingDraft: (
+    editing: { groupId: string; field: "title" | "content" } | null
+  ) => void;
+
+  // Actions - Group Management
+  toggleGroupApproval: (groupId: string) => void;
+  rejectGroup: (groupId: string) => void;
+  approveAll: () => void;
+  approveDraft: (groupId: string) => void;
+  approveAllDrafts: () => void;
+  rejectDraft: (groupId: string) => void;
+  updateDraftField: (
+    groupId: string,
+    field: "title" | "content",
+    value: string
+  ) => void;
+  moveUrl: (fromGroupId: string, url: string, toGroupId: string) => void;
+  createNewGroupFromUrl: (
+    fromGroupId: string,
+    url: string,
+    newTitle: string
+  ) => void;
+
+  // Actions - Reset
+  reset: () => void;
+}
+
+const initialState = {
+  workflowStep: "input" as WorkflowStep,
+  buildType: "skill" as BuildType,
+  urlInput: "",
+  skillGroups: [] as SkillGroup[],
+  snippetDraft: null as SnippetDraft | null,
+  processedResult: null as ProcessedResult | null,
+  errorMessage: null as string | null,
+  expandedGroups: new Set<string>(),
+  previewGroup: null as SkillGroup | null,
+  editingDraft: null as { groupId: string; field: "title" | "content" } | null,
+};
+
+export const useBulkImportStore = create<BulkImportState>((set, get) => ({
+  ...initialState,
+
+  // Workflow actions
+  setWorkflowStep: (workflowStep) => set({ workflowStep }),
+  setBuildType: (buildType) => set({ buildType }),
+
+  // Data actions
+  setUrlInput: (urlInput) => set({ urlInput }),
+  setSkillGroups: (skillGroups) => set({ skillGroups }),
+  updateSkillGroup: (groupId, updates) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) =>
+        g.id === groupId ? { ...g, ...updates } : g
+      ),
+    })),
+  setSnippetDraft: (snippetDraft) => set({ snippetDraft }),
+  setProcessedResult: (processedResult) => set({ processedResult }),
+  setErrorMessage: (errorMessage) => set({ errorMessage }),
+
+  // UI actions
+  setExpandedGroups: (expandedGroups) => set({ expandedGroups }),
+  toggleGroupExpanded: (groupId) =>
+    set((state) => {
+      const next = new Set(state.expandedGroups);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return { expandedGroups: next };
+    }),
+  setPreviewGroup: (previewGroup) => set({ previewGroup }),
+  setEditingDraft: (editingDraft) => set({ editingDraft }),
+
+  // Group management actions
+  toggleGroupApproval: (groupId) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) =>
+        g.id === groupId
+          ? { ...g, status: g.status === "approved" ? "pending" : "approved" }
+          : g
+      ),
+    })),
+
+  rejectGroup: (groupId) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) =>
+        g.id === groupId ? { ...g, status: "rejected" } : g
+      ),
+    })),
+
+  approveAll: () =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) => ({
+        ...g,
+        status: g.status === "pending" ? "approved" : g.status,
+      })),
+    })),
+
+  approveDraft: (groupId) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) =>
+        g.id === groupId ? { ...g, status: "reviewed" } : g
+      ),
+    })),
+
+  approveAllDrafts: () =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) => ({
+        ...g,
+        status: g.status === "ready_for_review" ? "reviewed" : g.status,
+      })),
+    })),
+
+  rejectDraft: (groupId) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) =>
+        g.id === groupId ? { ...g, status: "rejected" } : g
+      ),
+    })),
+
+  updateDraftField: (groupId, field, value) =>
+    set((state) => ({
+      skillGroups: state.skillGroups.map((g) => {
+        if (g.id === groupId && g.draft) {
+          return {
+            ...g,
+            draft: {
+              ...g.draft,
+              [field]: value,
+            },
+          };
+        }
+        return g;
+      }),
+    })),
+
+  moveUrl: (fromGroupId, url, toGroupId) =>
+    set((state) => {
+      const newGroups = state.skillGroups
+        .map((g) => {
+          if (g.id === fromGroupId)
+            return { ...g, urls: g.urls.filter((u) => u !== url) };
+          if (g.id === toGroupId) return { ...g, urls: [...g.urls, url] };
+          return g;
+        })
+        .filter((g) => g.urls.length > 0);
+      return { skillGroups: newGroups };
+    }),
+
+  createNewGroupFromUrl: (fromGroupId, url, newTitle) =>
+    set((state) => {
+      const newGroups = state.skillGroups
+        .map((g) => {
+          if (g.id === fromGroupId)
+            return { ...g, urls: g.urls.filter((u) => u !== url) };
+          return g;
+        })
+        .filter((g) => g.urls.length > 0);
+
+      newGroups.push({
+        id: `group-${Date.now()}`,
+        type: "create",
+        skillTitle: newTitle,
+        urls: [url],
+        status: "pending",
+      });
+
+      return { skillGroups: newGroups };
+    }),
+
+  // Reset
+  reset: () =>
+    set({
+      ...initialState,
+      expandedGroups: new Set<string>(), // Create fresh Set instance
+    }),
+}));
+
+// Selector hooks for computed values
+export const useBulkImportCounts = () =>
+  useBulkImportStore((state) => ({
+    pendingCount: state.skillGroups.filter((g) => g.status === "pending").length,
+    approvedCount: state.skillGroups.filter((g) => g.status === "approved")
+      .length,
+    readyForReviewCount: state.skillGroups.filter(
+      (g) => g.status === "ready_for_review"
+    ).length,
+    reviewedCount: state.skillGroups.filter((g) => g.status === "reviewed")
+      .length,
+    totalGroups: state.skillGroups.length,
+  }));
