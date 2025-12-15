@@ -38,6 +38,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
             rowNumber: "asc",
           },
         },
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
         customerProfiles: {
           include: {
             profile: {

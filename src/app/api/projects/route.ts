@@ -22,6 +22,9 @@ export async function GET(request: NextRequest) {
       skip: offset,
       include: {
         rows: true, // Include all rows with the project
+        owner: {
+          select: { id: true, name: true, email: true },
+        },
         customerProfiles: {
           include: {
             profile: {
