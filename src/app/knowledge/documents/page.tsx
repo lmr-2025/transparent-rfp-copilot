@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown, LayoutTemplate } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
+import { getApiErrorMessage } from "@/lib/utils";
 
 interface CategoryItem {
   id: string;
@@ -108,7 +109,7 @@ export default function DocumentsPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Failed to upload document");
+        throw new Error(getApiErrorMessage(data, "Failed to upload document"));
       }
 
       setDocuments([data.document, ...documents]);
