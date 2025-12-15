@@ -87,7 +87,6 @@ export const createCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).default([]),
-  tags: z.array(z.string()).default([]),
   sourceUrls: z.array(z.string().url()).default([]),
   isActive: z.boolean().default(true),
   owners: z.string().nullable().optional(),
@@ -107,7 +106,6 @@ export const updateCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).optional(),
-  tags: z.array(z.string()).optional(),
   sourceUrls: z.array(z.string().url()).optional(),
   isActive: z.boolean().optional(),
   owners: z.string().nullable().optional(),
@@ -161,7 +159,7 @@ export const createDocumentSchema = z.object({
   content: z.string().min(1, "Content is required"),
   fileType: z.string().max(50).optional(),
   fileSize: z.number().int().min(0).optional(),
-  tags: z.array(z.string()).default([]),
+  categories: z.array(z.string()).default([]),
 });
 
 // Reference URL schemas

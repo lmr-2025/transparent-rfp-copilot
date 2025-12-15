@@ -230,7 +230,6 @@ export function mapAccountToProfile(account: SalesforceAccount): {
   website: string | null;
   overview: string;
   keyFacts: { label: string; value: string }[];
-  tags: string[];
   salesforceId: string;
 } {
   const keyFacts: { label: string; value: string }[] = [];
@@ -261,18 +260,12 @@ export function mapAccountToProfile(account: SalesforceAccount): {
       account.BillingCountry || "unknown location"
     }.`;
 
-  // Generate tags
-  const tags: string[] = [];
-  if (account.Industry) tags.push(account.Industry);
-  if (account.Type) tags.push(account.Type);
-
   return {
     name: account.Name,
     industry: account.Industry || null,
     website: account.Website || null,
     overview,
     keyFacts,
-    tags,
     salesforceId: account.Id,
   };
 }

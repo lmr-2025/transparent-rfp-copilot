@@ -175,7 +175,6 @@ model CustomerProfile {
   products        String?  @db.Text // Products/services description
   challenges      String?  @db.Text // Known challenges/pain points
   keyFacts        Json?    // Array of {label, value} pairs
-  tags            String[] // For filtering/search
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())

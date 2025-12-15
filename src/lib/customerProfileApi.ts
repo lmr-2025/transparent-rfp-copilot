@@ -22,7 +22,6 @@ interface DbCustomerProfile {
   products?: string | null;
   challenges?: string | null;
   keyFacts?: CustomerProfileKeyFact[] | null;
-  tags: string[];
   sourceUrls?: CustomerProfileSourceUrl[] | null;
   isActive: boolean;
   createdAt: string;
@@ -118,7 +117,6 @@ function transformProfileFromDb(dbProfile: DbCustomerProfile): CustomerProfile {
     products: dbProfile.products ?? undefined,
     challenges: dbProfile.challenges ?? undefined,
     keyFacts: dbProfile.keyFacts ?? [],
-    tags: dbProfile.tags ?? [],
     sourceUrls: dbProfile.sourceUrls ?? [],
     isActive: dbProfile.isActive,
     createdAt: dbProfile.createdAt,

@@ -19,7 +19,6 @@ type SuggestRequestBody = {
     products?: string;
     challenges?: string;
     keyFacts: CustomerProfileKeyFact[];
-    tags: string[];
   };
 };
 
@@ -170,7 +169,6 @@ async function generateProfileUpdate(
     products?: string;
     challenges?: string;
     keyFacts: CustomerProfileKeyFact[];
-    tags: string[];
   },
   sourceContent: string,
   sourceUrls: string[],
@@ -210,13 +208,11 @@ OUTPUT FORMAT:
   "overview": "... (complete updated overview)",
   "products": "...",
   "challenges": "...",
-  "keyFacts": [...],
-  "tags": [...]
+  "keyFacts": [...]
 }`;
 
   const userPrompt = `EXISTING PROFILE:
 Name: ${existingProfile.name}
-Tags: ${existingProfile.tags.join(", ")}
 
 Overview:
 ${existingProfile.overview}
@@ -283,7 +279,6 @@ Return ONLY the JSON object.`;
       products: parsed.products,
       challenges: parsed.challenges,
       keyFacts: parsed.keyFacts,
-      tags: parsed.tags,
     },
   };
 }

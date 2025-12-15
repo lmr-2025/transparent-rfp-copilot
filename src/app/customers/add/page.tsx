@@ -32,7 +32,6 @@ type SalesforceEnrichment = {
   website: string | null;
   overview: string;
   keyFacts: { label: string; value: string }[];
-  tags: string[];
   salesforceId: string;
 };
 
@@ -132,16 +131,6 @@ const styles = {
     borderRadius: "6px",
     padding: "10px 12px",
     marginTop: "12px",
-  },
-  tag: {
-    display: "inline-block",
-    padding: "2px 8px",
-    backgroundColor: "#e0e7ff",
-    color: "#4338ca",
-    borderRadius: "4px",
-    fontSize: "12px",
-    marginRight: "4px",
-    marginBottom: "4px",
   },
   keyFact: {
     display: "flex",
@@ -259,7 +248,6 @@ export default function CustomerProfileBuilderPage() {
       website: sfEnrichment.website || undefined,
       overview: sfEnrichment.overview,
       keyFacts: sfEnrichment.keyFacts,
-      tags: sfEnrichment.tags,
     });
     setSfEnrichment(null);
   };
@@ -468,7 +456,6 @@ export default function CustomerProfileBuilderPage() {
         products: draft.products,
         challenges: draft.challenges,
         keyFacts: draft.keyFacts || [],
-        tags: draft.tags || [],
         sourceUrls: sourceUrlsToSave,
         isActive: true,
       });
@@ -793,13 +780,6 @@ export default function CustomerProfileBuilderPage() {
               </div>
             )}
 
-            {sfEnrichment.tags.length > 0 && (
-              <div style={{ marginTop: "12px" }}>
-                {sfEnrichment.tags.map((tag, idx) => (
-                  <span key={idx} style={styles.tag}>{tag}</span>
-                ))}
-              </div>
-            )}
           </div>
 
           <div style={{ display: "flex", gap: "8px" }}>
@@ -1041,29 +1021,6 @@ export default function CustomerProfileBuilderPage() {
           >
             + Add Fact
           </button>
-
-          <label style={styles.label}>Tags</label>
-          <input
-            style={styles.input}
-            value={(draft.tags || []).join(", ")}
-            onChange={(e) =>
-              updateDraft(
-                "tags",
-                e.target.value
-                  .split(",")
-                  .map((t) => t.trim().toLowerCase())
-                  .filter((t) => t)
-              )
-            }
-            placeholder="healthcare, saas, enterprise (comma separated)"
-          />
-          <div style={{ marginTop: "8px" }}>
-            {(draft.tags || []).map((tag, idx) => (
-              <span key={idx} style={styles.tag}>
-                {tag}
-              </span>
-            ))}
-          </div>
 
           <div
             style={{

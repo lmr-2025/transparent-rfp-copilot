@@ -18,7 +18,6 @@ type ExistingProfile = {
   products: string | null;
   challenges: string | null;
   keyFacts: CustomerProfileKeyFact[];
-  tags: string[];
 };
 
 // POST /api/customers/build-from-docs - Build/update customer profile from uploaded documents
@@ -121,7 +120,6 @@ export async function POST(request: NextRequest) {
           products: true,
           challenges: true,
           keyFacts: true,
-          tags: true,
         },
       }) as ExistingProfile | null;
     }
@@ -320,14 +318,12 @@ OUTPUT FORMAT:
   "overview": "... (complete updated overview)",
   "products": "...",
   "challenges": "...",
-  "keyFacts": [...],
-  "tags": [...]
+  "keyFacts": [...]
 }`;
 
   const keyFacts = existingProfile.keyFacts || [];
   const userPrompt = `EXISTING PROFILE:
 Name: ${existingProfile.name}
-Tags: ${existingProfile.tags?.join(", ") || "None"}
 
 Overview:
 ${existingProfile.overview}
@@ -405,7 +401,6 @@ Return ONLY the JSON object.`;
       products: parsed.products,
       challenges: parsed.challenges,
       keyFacts: parsed.keyFacts,
-      tags: parsed.tags,
     },
     transparency: {
       systemPrompt,

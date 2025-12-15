@@ -76,16 +76,6 @@ const styles = {
     color: "#b91c1c",
     border: "1px solid #fecaca",
   },
-  tag: {
-    display: "inline-block",
-    padding: "2px 8px",
-    backgroundColor: "#e0e7ff",
-    color: "#4338ca",
-    borderRadius: "4px",
-    fontSize: "11px",
-    marginRight: "4px",
-    marginBottom: "4px",
-  },
   industryBadge: {
     display: "inline-block",
     padding: "2px 8px",
@@ -148,8 +138,7 @@ export default function CustomerProfileLibraryPage() {
     const matchesSearch =
       search === "" ||
       p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.industry?.toLowerCase().includes(search.toLowerCase()) ||
-      p.tags.some((t) => t.includes(search.toLowerCase()));
+      p.industry?.toLowerCase().includes(search.toLowerCase());
     const matchesStatus =
       statusFilter === "all" ||
       (statusFilter === "active" && p.isActive) ||
@@ -188,7 +177,6 @@ export default function CustomerProfileLibraryPage() {
         products: editingProfile.products,
         challenges: editingProfile.challenges,
         keyFacts: editingProfile.keyFacts,
-        tags: editingProfile.tags,
         isActive: editingProfile.isActive,
       });
       setProfiles((prev) =>
@@ -306,7 +294,7 @@ export default function CustomerProfileLibraryPage() {
       <div style={styles.searchBar}>
         <input
           style={{ ...styles.input, maxWidth: "300px" }}
-          placeholder="Search by name, industry, or tag..."
+          placeholder="Search by name or industry..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -380,16 +368,6 @@ export default function CustomerProfileLibraryPage() {
                   <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
                     {profile.industry && (
                       <span style={styles.industryBadge}>{profile.industry}</span>
-                    )}
-                    {profile.tags.slice(0, 4).map((tag, idx) => (
-                      <span key={idx} style={styles.tag}>
-                        {tag}
-                      </span>
-                    ))}
-                    {profile.tags.length > 4 && (
-                      <span style={{ color: "#64748b", fontSize: "11px" }}>
-                        +{profile.tags.length - 4} more
-                      </span>
                     )}
                   </div>
                 </div>
@@ -486,18 +464,6 @@ export default function CustomerProfileLibraryPage() {
                       >
                         + Add Fact
                       </button>
-
-                      <label style={styles.label}>Tags (comma separated)</label>
-                      <input
-                        style={styles.input}
-                        value={editingProfile.tags.join(", ")}
-                        onChange={(e) =>
-                          updateEditField(
-                            "tags",
-                            e.target.value.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean)
-                          )
-                        }
-                      />
 
                       <div style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
                         <button

@@ -32,7 +32,6 @@ export type CustomerProfile = {
   products?: string;
   challenges?: string;
   keyFacts: CustomerProfileKeyFact[];
-  tags: string[];
   sourceUrls: CustomerProfileSourceUrl[];
   isActive: boolean;
   createdAt: string;
@@ -63,7 +62,6 @@ export type CustomerProfileDraft = {
   products?: string;
   challenges?: string;
   keyFacts: CustomerProfileKeyFact[];
-  tags: string[];
 };
 
 // Simplified profile for selection UI (chat, projects)
@@ -71,6 +69,5 @@ export type CustomerProfileSelection = {
   id: string;
   name: string;
   industry?: string;
-  tags: string[];
   selected: boolean;
 };

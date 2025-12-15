@@ -74,7 +74,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       products,
       challenges,
       keyFacts,
-      tags,
       sourceUrls,
       isActive,
       owners,
@@ -117,7 +116,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         ...(products !== undefined && { products: products || null }),
         ...(challenges !== undefined && { challenges: challenges || null }),
         ...(keyFacts !== undefined && { keyFacts }),
-        ...(tags !== undefined && { tags }),
         ...(sourceUrls !== undefined && { sourceUrls }),
         ...(isActive !== undefined && { isActive }),
         ...(owners !== undefined && { owners: owners || undefined }),
@@ -132,7 +130,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       profile as unknown as Record<string, unknown>,
-      ["name", "industry", "website", "overview", "products", "challenges", "keyFacts", "tags", "sourceUrls", "isActive", "owners"]
+      ["name", "industry", "website", "overview", "products", "challenges", "keyFacts", "sourceUrls", "isActive", "owners"]
     );
 
     // Audit log

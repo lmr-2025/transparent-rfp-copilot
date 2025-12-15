@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const where: {
       isActive?: boolean;
       industry?: string;
-      OR?: Array<{ name?: { contains: string; mode: "insensitive" }; tags?: { has: string } }>;
+      name?: { contains: string; mode: "insensitive" };
     } = {};
 
     if (activeOnly) {
@@ -34,10 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { tags: { has: search.toLowerCase() } },
-      ];
+      where.name = { contains: search, mode: "insensitive" };
     }
 
     const profiles = await prisma.customerProfile.findMany({
@@ -84,7 +81,6 @@ export async function POST(request: NextRequest) {
         products: data.products || null,
         challenges: data.challenges || null,
         keyFacts: data.keyFacts,
-        tags: data.tags,
         sourceUrls: data.sourceUrls,
         isActive: data.isActive,
         createdBy: auth.session.user.email || null,
@@ -108,7 +104,7 @@ export async function POST(request: NextRequest) {
       profile.name,
       getUserFromSession(auth.session),
       undefined,
-      { industry: data.industry, tags: data.tags }
+      { industry: data.industry }
     );
 
     return NextResponse.json({ profile }, { status: 201 });
