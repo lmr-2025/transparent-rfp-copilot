@@ -137,11 +137,20 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Use Zustand or React Context for state management
 **Effort:** High
 
-### 9. No Pagination in Library Views
+### 9. No Pagination in Library Views (Deferred)
 **File:** `src/app/knowledge/page.tsx`
+**Status:** Partially mitigated - API supports pagination (limit/offset), but frontend loads all items
 **Risk:** Memory issues at scale, slow renders with large libraries
-**Fix:** Implement server-side pagination, virtualization (react-window)
+**Mitigation in place:**
+- API routes (`/api/skills`, `/api/documents`, etc.) support `limit`/`offset` params (100/500 default)
+- React Query caches data efficiently
+- Client-side filtering is fast for typical library sizes (hundreds of items)
+**Full fix would require:**
+- Install `react-window` or `@tanstack/react-virtual` for virtualized list rendering
+- Add "Load more" or infinite scroll pagination in frontend
+- Refactor list rendering to use virtualized component
 **Effort:** Medium
+**Priority:** Low until users report performance issues with very large libraries (1000+ items)
 
 ### ~~10. Hardcoded Magic Numbers~~ ✅ FIXED
 **Status:** Already fixed - Created `src/lib/constants.ts` with named values (see "Recently Fixed" section).
