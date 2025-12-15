@@ -1,0 +1,29 @@
+# CODEOWNERS - Define code ownership for pull request reviews
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything (fallback)
+* @liseross
+
+# Frontend / UI components
+/src/app/ @liseross
+/src/components/ @liseross
+
+# API routes - require review for security-sensitive changes
+/src/app/api/ @liseross
+
+# Security-critical files - require careful review
+/src/lib/apiAuth.ts @liseross
+/src/lib/rateLimit.ts @liseross
+/src/lib/auditLog.ts @liseross
+/src/lib/encryption.ts @liseross
+SECURITY.md @liseross
+
+# Database schema changes
+/prisma/ @liseross
+
+# CI/CD and GitHub config
+/.github/ @liseross
+
+# Documentation
+/docs/ @liseross
+*.md @liseross

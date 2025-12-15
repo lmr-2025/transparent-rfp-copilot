@@ -6,8 +6,8 @@
 
 If you discover a security vulnerability in this project, please report it responsibly:
 
-1. **Email:** Contact the maintainers privately at [security contact - update this]
-2. **GitHub Security Advisories:** Use [GitHub's private vulnerability reporting](https://github.com/[owner]/[repo]/security/advisories/new) if available
+1. **Email:** Contact the maintainers privately (see Contact section below)
+2. **GitHub Security Advisories:** Use [GitHub's private vulnerability reporting](https://github.com/liseross/transparent-rfp-copilot/security/advisories/new) if available
 
 ### What to Include
 
@@ -67,8 +67,9 @@ This repository uses automated security scanning:
 - **CodeQL:** Static analysis for JavaScript/TypeScript vulnerabilities
 - **Gitleaks:** Secret detection in commits
 - **npm audit:** Dependency vulnerability scanning
+- **Trivy:** Container image vulnerability scanning
 
 ## Contact
 
-Security issues: [Update with your security contact]
-Maintainer: [Update with maintainer contact]
+Security issues: @liseross (via GitHub)
+Maintainer: @liseross
