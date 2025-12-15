@@ -58,7 +58,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^5.1.2",
-    "vitest": "^2.0.5"
+    "vitest": "^4.0.15"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
