@@ -255,9 +255,12 @@ async function buildSourceMaterial(sourceText: string, sourceUrls: string[]): Pr
 }
 
 function formatInitialMessage(sourceText: string): string {
-  return ["Source material:", sourceText.trim(), "", "Return ONLY JSON in the expected shape."].join(
-    "\n",
-  );
+  return [
+    "Source material:",
+    sourceText.trim(),
+    "",
+    "Return a SINGLE JSON object (not an array) with: { \"title\": \"...\", \"tags\": [...], \"content\": \"...\" }",
+  ].join("\n");
 }
 
 function extractConversationMessages(

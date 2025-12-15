@@ -58,7 +58,9 @@ export async function generateSkillDraftFromMessages(
     }
 
     const parsed = parseJsonContent(content.text.trim());
-    const draft = normalizeSkillDraft(parsed);
+    // If LLM returned an array of skills, take the first one
+    const skillData = Array.isArray(parsed) ? parsed[0] : parsed;
+    const draft = normalizeSkillDraft(skillData);
     draft.usage = {
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
