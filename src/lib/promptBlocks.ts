@@ -15,7 +15,7 @@
 
 // The contexts where prompts are used
 export type PromptContext =
-  | "questions"        // Answering RFP questions
+  | "questions"        // Answering questionnaire/assessment questions
   | "skills"           // Building knowledge skills
   | "analysis"         // Analyzing documents/libraries
   | "chat"             // Knowledge chat
@@ -115,8 +115,8 @@ export const defaultBlocks: PromptBlock[] = [
         "STRUCTURE: Use markdown headers and bullet points. Lead with important facts. Keep lists complete.",
       ].join("\n"),
       analysis: [
-        "You are a document analyst specializing in compliance and security documentation.",
-        "Your job is to review content and identify key information relevant to security questionnaires and compliance assessments.",
+        "You are a document analyst specializing in extracting structured knowledge from documentation.",
+        "Your job is to review content and identify key information that builds the organization's knowledge base.",
         "Prioritize extracting actionable, factual information over summaries.",
       ].join("\n"),
       chat: [
@@ -144,7 +144,7 @@ export const defaultBlocks: PromptBlock[] = [
       ].join("\n"),
       customer_profile: [
         "You are creating a customer profile document from publicly available information about a company.",
-        "This profile will be used to provide context when responding to RFPs, security questionnaires, and sales conversations for this customer.",
+        "This profile will be used to provide context when working with this customer across various use cases.",
         "Extract accurate, factual information that helps understand the customer's business, needs, and context.",
         "Think of yourself as a research analyst preparing a briefing document.",
       ].join("\n"),

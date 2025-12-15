@@ -150,7 +150,7 @@ RETURN hasChanges: false IF:
 - The source material is marketing fluff without concrete facts
 - The information is already captured in the existing skill (even if worded differently)
 - The "new" information is just rephrasing what's already there
-- The source doesn't add facts that would help answer RFP questions
+- The source doesn't add facts that would help answer questions about the organization
 - Changes would only be cosmetic (reformatting, rewording)
 
 RETURN hasChanges: true ONLY IF:
@@ -161,7 +161,7 @@ RETURN hasChanges: true ONLY IF:
 - Significant new details that would help answer customer questions
 
 WHAT MAKES CHANGES "MEANINGFUL":
-Think: "Would this help answer an RFP question that the existing skill cannot?"
+Think: "Would this help build the organization's knowledge base for AI to leverage when answering questions?"
 - YES: Add the new fact
 - NO: Keep the original, return hasChanges: false
 
