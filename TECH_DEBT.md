@@ -118,12 +118,19 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Files:**
 - `src/app/admin/settings/page.tsx` (1,316 lines) - already has extracted tab components
 - ~~`src/app/knowledge/bulk/page.tsx` (1,283 lines)~~ ✅ State extracted to Zustand store
-- `src/app/chat/components/ChatSidebar.tsx` (1,236 lines)
+- ~~`src/app/chat/components/ChatSidebar.tsx` (1,236 lines)~~ ✅ Outdated entry - file is actually `knowledge-sidebar.tsx` at 487 lines
 - ~~`src/app/chat/page.tsx` (1,170 lines)~~ ✅ Already refactored - only 470 lines, uses Zustand stores
 
 **Risk:** Unmaintainable, hard to test, slow IDE
 **Fix:** Extract sub-components to separate files
 **Effort:** High (incremental)
+
+**Note:** Chat components are already well-structured:
+- `knowledge-sidebar.tsx` (487 lines) - has repeated pattern for Skills/Documents/URLs/Customers sections
+- `chat-history-panel.tsx` (157 lines)
+- `message-list.tsx` (161 lines)
+- `transparency-modal.tsx` (271 lines)
+- `chat-input.tsx` (71 lines)
 
 ### 7. Inline Styles Everywhere
 **Files:** 20+ components use `style={{...}}`

@@ -1,14 +1,14 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
-import { BookOpen, FileText, Globe, Users, Check, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BookOpen, FileText, Globe, Users, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useChatStore } from "@/stores/chat-store";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
+import { KnowledgeSourceList } from "./knowledge-source-list";
 import type { Skill } from "@/types/skill";
 import type { ReferenceUrl } from "@/types/referenceUrl";
 import type { CustomerProfile } from "@/types/customerProfile";
@@ -118,26 +118,6 @@ export function KnowledgeSidebar({
   // Group presets by type
   const orgPresets = presets.filter((p) => p.isShared && p.shareStatus === "APPROVED");
   const myPresets = presets.filter((p) => !p.isShared);
-
-  const selectedSkillCount = useMemo(
-    () => Array.from(skillSelections.values()).filter(Boolean).length,
-    [skillSelections]
-  );
-
-  const selectedDocCount = useMemo(
-    () => Array.from(documentSelections.values()).filter(Boolean).length,
-    [documentSelections]
-  );
-
-  const selectedUrlCount = useMemo(
-    () => Array.from(urlSelections.values()).filter(Boolean).length,
-    [urlSelections]
-  );
-
-  const selectedCustomerCount = useMemo(
-    () => Array.from(customerSelections.values()).filter(Boolean).length,
-    [customerSelections]
-  );
 
   if (isLoading) {
     return (
@@ -255,233 +235,54 @@ export function KnowledgeSidebar({
           Knowledge Sources
         </h2>
 
-        {/* Skills Section */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                Skills
-                <span className="text-muted-foreground">
-                  ({selectedSkillCount}/{skills.length})
-                </span>
-              </CardTitle>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => selectAllSkills(skills.map((s) => s.id))}
-                >
-                  All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={selectNoSkills}
-                >
-                  None
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="py-2 px-4 max-h-48 overflow-y-auto">
-            <div className="space-y-1">
-              {skills.map((skill) => (
-                <SelectableItem
-                  key={skill.id}
-                  label={skill.title}
-                  selected={skillSelections.get(skill.id) || false}
-                  onClick={() => toggleSkill(skill.id)}
-                />
-              ))}
-              {skills.length === 0 && (
-                <p className="text-sm text-muted-foreground">No skills available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Skills */}
+        <KnowledgeSourceList
+          title="Skills"
+          icon={<BookOpen className="h-4 w-4" />}
+          items={skills.map((s) => ({ id: s.id, label: s.title }))}
+          selections={skillSelections}
+          onToggle={toggleSkill}
+          onSelectAll={selectAllSkills}
+          onSelectNone={selectNoSkills}
+          emptyMessage="No skills available"
+        />
 
-        {/* Documents Section */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileText className="h-4 w-4" />
-                Documents
-                <span className="text-muted-foreground">
-                  ({selectedDocCount}/{documents.length})
-                </span>
-              </CardTitle>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => selectAllDocuments(documents.map((d) => d.id))}
-                >
-                  All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={selectNoDocuments}
-                >
-                  None
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="py-2 px-4 max-h-48 overflow-y-auto">
-            <div className="space-y-1">
-              {documents.map((doc) => (
-                <SelectableItem
-                  key={doc.id}
-                  label={doc.title || doc.filename}
-                  selected={documentSelections.get(doc.id) || false}
-                  onClick={() => toggleDocument(doc.id)}
-                />
-              ))}
-              {documents.length === 0 && (
-                <p className="text-sm text-muted-foreground">No documents available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Documents */}
+        <KnowledgeSourceList
+          title="Documents"
+          icon={<FileText className="h-4 w-4" />}
+          items={documents.map((d) => ({ id: d.id, label: d.title || d.filename }))}
+          selections={documentSelections}
+          onToggle={toggleDocument}
+          onSelectAll={selectAllDocuments}
+          onSelectNone={selectNoDocuments}
+          emptyMessage="No documents available"
+        />
 
-        {/* URLs Section */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                URLs
-                <span className="text-muted-foreground">
-                  ({selectedUrlCount}/{urls.length})
-                </span>
-              </CardTitle>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => selectAllUrls(urls.map((u) => u.id))}
-                >
-                  All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={selectNoUrls}
-                >
-                  None
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="py-2 px-4 max-h-48 overflow-y-auto">
-            <div className="space-y-1">
-              {urls.map((url) => (
-                <SelectableItem
-                  key={url.id}
-                  label={url.title || url.url}
-                  selected={urlSelections.get(url.id) || false}
-                  onClick={() => toggleUrl(url.id)}
-                />
-              ))}
-              {urls.length === 0 && (
-                <p className="text-sm text-muted-foreground">No URLs available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* URLs */}
+        <KnowledgeSourceList
+          title="URLs"
+          icon={<Globe className="h-4 w-4" />}
+          items={urls.map((u) => ({ id: u.id, label: u.title || u.url }))}
+          selections={urlSelections}
+          onToggle={toggleUrl}
+          onSelectAll={selectAllUrls}
+          onSelectNone={selectNoUrls}
+          emptyMessage="No URLs available"
+        />
 
-        {/* Customers Section */}
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Customers
-                <span className="text-muted-foreground">
-                  ({selectedCustomerCount}/{customers.length})
-                </span>
-              </CardTitle>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={() => selectAllCustomers(customers.map((c) => c.id))}
-                >
-                  All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 text-xs"
-                  onClick={selectNoCustomers}
-                >
-                  None
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="py-2 px-4 max-h-48 overflow-y-auto">
-            <div className="space-y-1">
-              {customers.map((customer) => (
-                <SelectableItem
-                  key={customer.id}
-                  label={customer.name}
-                  selected={customerSelections.get(customer.id) || false}
-                  onClick={() => toggleCustomer(customer.id)}
-                />
-              ))}
-              {customers.length === 0 && (
-                <p className="text-sm text-muted-foreground">No customers available</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* Customers */}
+        <KnowledgeSourceList
+          title="Customers"
+          icon={<Users className="h-4 w-4" />}
+          items={customers.map((c) => ({ id: c.id, label: c.name }))}
+          selections={customerSelections}
+          onToggle={toggleCustomer}
+          onSelectAll={selectAllCustomers}
+          onSelectNone={selectNoCustomers}
+          emptyMessage="No customers available"
+        />
       </div>
     </div>
-  );
-}
-
-interface SelectableItemProps {
-  label: string;
-  selected: boolean;
-  onClick: () => void;
-}
-
-function SelectableItem({ label, selected, onClick }: SelectableItemProps) {
-  return (
-    <button
-      onClick={onClick}
-      aria-pressed={selected}
-      aria-label={`${label}${selected ? " (selected)" : ""}`}
-      className={cn(
-        "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
-        selected
-          ? "bg-primary/10 text-primary"
-          : "hover:bg-muted text-foreground"
-      )}
-    >
-      <div
-        aria-hidden="true"
-        className={cn(
-          "flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center",
-          selected
-            ? "bg-primary border-primary text-primary-foreground"
-            : "border-input"
-        )}
-      >
-        {selected && <Check className="h-3 w-3" />}
-      </div>
-      <span className="truncate">{label}</span>
-    </button>
   );
 }
