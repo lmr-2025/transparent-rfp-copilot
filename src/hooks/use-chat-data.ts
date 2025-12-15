@@ -37,8 +37,10 @@ export function useDocuments() {
     queryFn: async (): Promise<KnowledgeDocument[]> => {
       const res = await fetch("/api/documents");
       if (!res.ok) throw new Error("Failed to fetch documents");
-      const data = await res.json();
-      return (data.documents || []) as KnowledgeDocument[];
+      const json = await res.json();
+      // API returns { data: { documents: [...] } } format
+      const data = json.data?.documents ?? json.documents ?? [];
+      return Array.isArray(data) ? data : [];
     },
   });
 }
@@ -50,8 +52,10 @@ export function useReferenceUrls() {
     queryFn: async () => {
       const res = await fetch("/api/reference-urls");
       if (!res.ok) throw new Error("Failed to fetch URLs");
-      const data = await res.json();
-      return (data.urls || []) as ReferenceUrl[];
+      const json = await res.json();
+      // API returns { data: [...] } format
+      const data = json.data ?? json.urls ?? json;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

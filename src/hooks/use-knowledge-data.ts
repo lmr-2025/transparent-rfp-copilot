@@ -64,8 +64,10 @@ export function useAllDocuments() {
     queryFn: async (): Promise<KnowledgeDocument[]> => {
       const res = await fetch("/api/documents");
       if (!res.ok) throw new Error("Failed to fetch documents");
-      const data = await res.json();
-      return (data.documents || []) as KnowledgeDocument[];
+      const json = await res.json();
+      // API returns { data: { documents: [...] } } format
+      const data = json.data?.documents ?? json.documents ?? [];
+      return Array.isArray(data) ? data : [];
     },
   });
 }
@@ -100,8 +102,10 @@ export function useAllSnippets() {
     queryFn: async (): Promise<ContextSnippet[]> => {
       const res = await fetch("/api/context-snippets");
       if (!res.ok) throw new Error("Failed to fetch snippets");
-      const data = await res.json();
-      return (data.snippets || []) as ContextSnippet[];
+      const json = await res.json();
+      // API returns { data: [...] } format
+      const data = json.data ?? json.snippets ?? json;
+      return Array.isArray(data) ? data : [];
     },
   });
 }

@@ -190,7 +190,11 @@ export default function BulkResponsesPage() {
     // Load reference URLs from database API
     fetch("/api/reference-urls")
       .then(res => res.json())
-      .then(data => setReferenceUrls(data.urls || []))
+      .then(json => {
+        // API returns { data: [...] } format
+        const data = json.data ?? json.urls ?? json;
+        setReferenceUrls(Array.isArray(data) ? data : []);
+      })
       .catch(() => toast.error("Failed to load reference URLs"));
     fetchActiveProfiles()
       .then(profiles => setAllCustomerProfiles(profiles))
