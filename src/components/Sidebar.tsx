@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useBranding } from "@/lib/branding";
 import { features } from "@/lib/featureFlags";
+import ReviewInbox from "./ReviewInbox";
 
 type NavItem = {
   href: string;
@@ -175,6 +176,25 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* Review Inbox */}
+      <div style={{
+        padding: "0",
+        marginBottom: "16px",
+      }}>
+        <div style={{
+          padding: "0 20px",
+          fontSize: "11px",
+          fontWeight: 600,
+          color: "#94a3b8",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          marginBottom: "8px",
+        }}>
+          Reviews
+        </div>
+        <ReviewInbox />
+      </div>
 
       {/* User section at bottom */}
       <div style={{
