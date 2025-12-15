@@ -81,10 +81,10 @@ export async function POST(request: NextRequest) {
       return errors.badRequest("File is required");
     }
 
-    // File size limit: 10MB
-    const MAX_FILE_SIZE = 10 * 1024 * 1024;
+    // File size limit: 20MB
+    const MAX_FILE_SIZE = 20 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
-      return errors.badRequest("File size exceeds 10MB limit");
+      return errors.badRequest("File size exceeds 20MB limit");
     }
 
     if (!title?.trim()) {
@@ -117,11 +117,17 @@ export async function POST(request: NextRequest) {
       content = await extractTextContent(buffer, fileType);
     } catch (extractError) {
       console.error("Text extraction failed:", extractError);
-      return errors.badRequest("Failed to extract text from document. Please ensure the file is not corrupted.");
+      // If saving as template, text extraction is required
+      if (saveAsTemplate) {
+        return errors.badRequest("Failed to extract text from document. Text extraction is required for templates.");
+      }
+      // Otherwise, store with placeholder - document is still useful as a reference
+      content = `[Text extraction failed for ${fileType.toUpperCase()} file. Document stored for reference only.]`;
     }
 
-    if (!content.trim()) {
-      return errors.badRequest("No text content could be extracted from the document.");
+    // For templates, we need actual content
+    if (saveAsTemplate && !content.trim()) {
+      return errors.badRequest("No text content could be extracted from the document. Templates require extractable text.");
     }
 
     // Generate markdown template if requested

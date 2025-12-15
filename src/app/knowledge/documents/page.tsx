@@ -258,7 +258,7 @@ export default function DocumentsPage() {
               }}
             />
             <p style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "4px" }}>
-              Supported formats: PDF, DOC, DOCX, PPTX, TXT (max 10MB recommended)
+              Supported formats: PDF, DOC, DOCX, PPTX, TXT (max 20MB)
             </p>
           </div>
 
