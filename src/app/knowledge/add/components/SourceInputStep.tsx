@@ -2,12 +2,17 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine } from "lucide-react";
+import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine, MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/utils";
 import { createSkillViaApi } from "@/lib/skillStorage";
 import { type DocumentSource } from "@/stores/bulk-import-store";
 import { styles } from "./styles";
+
+interface ClarifyMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 type InputMode = "urls" | "documents" | "manual";
 
@@ -41,6 +46,13 @@ export default function SourceInputStep({
   const [manualContent, setManualContent] = useState("");
   const [isSavingManual, setIsSavingManual] = useState(false);
   const [manualError, setManualError] = useState<string | null>(null);
+
+  // Clarify conversation state
+  const [showClarify, setShowClarify] = useState(false);
+  const [clarifyMessages, setClarifyMessages] = useState<ClarifyMessage[]>([]);
+  const [clarifyInput, setClarifyInput] = useState("");
+  const [isClarifying, setIsClarifying] = useState(false);
+  const clarifyEndRef = useRef<HTMLDivElement>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -122,6 +134,67 @@ export default function SourceInputStep({
       setManualError(error instanceof Error ? error.message : "Failed to create skill");
     } finally {
       setIsSavingManual(false);
+    }
+  };
+
+  const handleClarifySubmit = async () => {
+    if (!clarifyInput.trim() || isClarifying) return;
+
+    const userMessage: ClarifyMessage = { role: 'user', content: clarifyInput.trim() };
+    setClarifyMessages(prev => [...prev, userMessage]);
+    setClarifyInput("");
+    setIsClarifying(true);
+
+    try {
+      const systemPrompt = `You are helping a user create a knowledge skill for an RFP/security questionnaire assistant.
+
+Current skill being created:
+- Title: "${manualTitle || '(not yet set)'}"
+- Content: "${manualContent || '(not yet set)'}"
+
+The user is asking for help refining this skill. Your role is to:
+1. Help them improve the title to be clear and searchable
+2. Help them write accurate, factual content
+3. Suggest corrections if they mention something that seems incorrect
+4. Help structure the content for clarity
+5. If they provide raw information, help them format it as a proper skill
+
+IMPORTANT: Do NOT hallucinate or make up facts. If you're unsure about something, ask the user to verify. If they're stating industry facts (like "SOC 2 is an attestation not a certification"), help them phrase it clearly.
+
+When suggesting updated content, format it clearly so they can copy it.`;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemPrompt,
+          messages: [
+            ...clarifyMessages.map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: clarifyInput.trim() },
+          ],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to get response');
+
+      const json = await response.json();
+      const content = json.data?.content ?? json.content;
+      const assistantContent = (content as { type: string; text?: string }[])
+        .filter(block => block.type === 'text')
+        .map(block => block.text ?? '')
+        .join('\n');
+
+      setClarifyMessages(prev => [...prev, { role: 'assistant', content: assistantContent }]);
+
+      // Scroll to bottom
+      setTimeout(() => clarifyEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (error) {
+      setClarifyMessages(prev => [...prev, {
+        role: 'assistant',
+        content: `Error: ${error instanceof Error ? error.message : 'Failed to get response'}`
+      }]);
+    } finally {
+      setIsClarifying(false);
     }
   };
 
@@ -368,6 +441,150 @@ export default function SourceInputStep({
                 lineHeight: "1.5",
               }}
             />
+          </div>
+
+          {/* Clarify with AI Section */}
+          <div style={{ marginBottom: "16px" }}>
+            <button
+              onClick={() => setShowClarify(!showClarify)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 12px",
+                backgroundColor: showClarify ? "#dbeafe" : "#f8fafc",
+                border: "1px solid #cbd5e1",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontSize: "13px",
+                fontWeight: 500,
+                color: showClarify ? "#1e40af" : "#475569",
+              }}
+            >
+              <MessageSquare size={16} />
+              {showClarify ? "Hide AI Assistant" : "Get Help from AI"}
+            </button>
+
+            {showClarify && (
+              <div style={{
+                marginTop: "12px",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                backgroundColor: "#f8fafc",
+                overflow: "hidden",
+              }}>
+                <div style={{
+                  padding: "10px 12px",
+                  backgroundColor: "#0ea5e9",
+                  color: "#fff",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                }}>
+                  AI Assistant - Help refine your skill
+                </div>
+
+                {/* Messages */}
+                <div style={{
+                  padding: "12px",
+                  maxHeight: "300px",
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "10px",
+                }}>
+                  {clarifyMessages.length === 0 && (
+                    <div style={{ color: "#64748b", fontSize: "13px", fontStyle: "italic" }}>
+                      Ask the AI for help writing your skill content. For example:
+                      <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                        <li>&quot;Help me explain that SOC 2 is an attestation, not a certification&quot;</li>
+                        <li>&quot;Is this content accurate?&quot;</li>
+                        <li>&quot;Can you suggest a better title?&quot;</li>
+                      </ul>
+                    </div>
+                  )}
+                  {clarifyMessages.map((msg, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        maxWidth: "100%",
+                        backgroundColor: msg.role === 'user' ? "#0ea5e9" : "#fff",
+                        color: msg.role === 'user' ? "#fff" : "#0f172a",
+                        border: msg.role === 'assistant' ? "1px solid #e2e8f0" : "none",
+                        alignSelf: msg.role === 'user' ? "flex-end" : "flex-start",
+                      }}
+                    >
+                      <div style={{ whiteSpace: "pre-wrap", fontSize: "13px", lineHeight: "1.5" }}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {isClarifying && (
+                    <div style={{
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      backgroundColor: "#fff",
+                      border: "1px solid #e2e8f0",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}>
+                      <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                      <span style={{ color: "#64748b", fontSize: "13px" }}>Thinking...</span>
+                    </div>
+                  )}
+                  <div ref={clarifyEndRef} />
+                </div>
+
+                {/* Input */}
+                <div style={{
+                  padding: "10px 12px",
+                  borderTop: "1px solid #e2e8f0",
+                  backgroundColor: "#fff",
+                  display: "flex",
+                  gap: "8px",
+                }}>
+                  <input
+                    type="text"
+                    value={clarifyInput}
+                    onChange={(e) => setClarifyInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleClarifySubmit();
+                      }
+                    }}
+                    placeholder="Ask the AI for help..."
+                    disabled={isClarifying}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "6px",
+                      fontSize: "13px",
+                    }}
+                  />
+                  <button
+                    onClick={handleClarifySubmit}
+                    disabled={!clarifyInput.trim() || isClarifying}
+                    style={{
+                      padding: "8px 12px",
+                      backgroundColor: clarifyInput.trim() && !isClarifying ? "#0ea5e9" : "#cbd5e1",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: clarifyInput.trim() && !isClarifying ? "pointer" : "not-allowed",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <Send size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{
