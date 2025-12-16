@@ -148,23 +148,55 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P2: Medium Priority
 
-### 6. Large Components (>1000 lines)
-**Files:**
-- `src/app/admin/settings/page.tsx` (1,316 lines) - already has extracted tab components
-- ~~`src/app/knowledge/bulk/page.tsx` (1,283 lines)~~ ✅ State extracted to Zustand store
-- ~~`src/app/chat/components/ChatSidebar.tsx` (1,236 lines)~~ ✅ Outdated entry - file is actually `knowledge-sidebar.tsx` at 487 lines
-- ~~`src/app/chat/page.tsx` (1,170 lines)~~ ✅ Already refactored - only 470 lines, uses Zustand stores
+### 6. Large Components - Refactoring Candidates
+
+**Recently Refactored (2025-12-16):**
+| File | Before | After | Reduction |
+|------|--------|-------|-----------|
+| `projects/[projectId]/page.tsx` | 1995 | 1030 | -48% |
+| `admin/settings/page.tsx` | 1563 | ~650 | -58% |
+| `knowledge/add/page.tsx` | 1413 | 634 | -55% |
+| `customers/add/page.tsx` | 1121 | 511 | -54% |
+| `projects/questions/page.tsx` | 1071 | 657 | -39% |
+| `chat/instruction-presets/page.tsx` | 934 | 389 | -58% |
+| `knowledge/import/page.tsx` | 892 | 393 | -56% |
+| `projects/upload/page.tsx` | 850 | 435 | -49% |
+| `audit-log/page.tsx` | 820 | 232 | -72% |
+
+**Remaining Candidates (400+ lines):**
+
+| File | Lines | Priority | Notes |
+|------|-------|----------|-------|
+| `knowledge/documents/page.tsx` | 668 | Medium | Document management page |
+| `accuracy/page.tsx` | 624 | Medium | Accuracy tracking dashboard |
+| `lib/chatPromptLibrary.ts` | 618 | Low | Prompt definitions - may be intentional |
+| `lib/promptBlocks.ts` | 605 | Low | Prompt blocks - may be intentional |
+| `components/ConfirmModal.tsx` | 599 | Medium | Modal component with many variants |
+| `customers/page.tsx` | 592 | Medium | Customer list page |
+| `knowledge/page.tsx` | 586 | Medium | Knowledge library main page |
+| `contracts/upload/page.tsx` | 568 | Medium | Contract upload wizard |
+| `knowledge/components/knowledge-item-card.tsx` | 552 | Medium | Reusable card component |
+| `lib/llm.ts` | 530 | Low | LLM utilities - may be intentional |
+| `reviews/page.tsx` | 505 | Medium | Review inbox page |
+| `contracts/[id]/page.tsx` | 496 | Medium | Contract detail page |
+| `api/skills/analyze/route.ts` | 495 | Low | API route - complex logic |
+| `admin/categories/page.tsx` | 493 | Medium | Category management |
+| `components/PromptPreviewPanel.tsx` | 486 | Medium | Prompt preview component |
+| `chat/page.tsx` | 470 | Low | Already uses Zustand stores |
+| `components/ConversationalRefinement.tsx` | 468 | Medium | Chat refinement component |
+| `usage/page.tsx` | 468 | Medium | Usage analytics page |
+| `components/FlagReviewModal.tsx` | 460 | Medium | Review modal component |
+| `lib/chatProjectTemplates.ts` | 433 | Low | Template definitions |
+| `components/PromptBlocksEditor.tsx` | 432 | Medium | Editor component |
+| `lib/apiRouteFactory.ts` | 408 | Low | Factory pattern - intentional |
+| `components/VisualPromptEditor.tsx` | 407 | Medium | Visual editor component |
+| `api/customers/build-from-docs/route.ts` | 406 | Low | API route - complex logic |
 
 **Risk:** Unmaintainable, hard to test, slow IDE
-**Fix:** Extract sub-components to separate files
-**Effort:** High (incremental)
+**Fix:** Extract sub-components to separate files (follow pattern from recent refactors)
+**Effort:** Medium per file (incremental)
 
-**Note:** Chat components are already well-structured:
-- `knowledge-sidebar.tsx` (487 lines) - has repeated pattern for Skills/Documents/URLs/Customers sections
-- `chat-history-panel.tsx` (157 lines)
-- `message-list.tsx` (161 lines)
-- `transparency-modal.tsx` (271 lines)
-- `chat-input.tsx` (71 lines)
+**Note:** Files marked "Low" priority are often intentionally large (prompt libraries, utilities, API routes with complex logic). Focus on page components and UI components first.
 
 ### 7. Inline Styles Everywhere
 **Files:** 20+ components use `style={{...}}`

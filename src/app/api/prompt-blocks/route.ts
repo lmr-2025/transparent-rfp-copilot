@@ -34,17 +34,17 @@ export async function GET() {
       return apiSuccess({ blocks: defaultBlocks, modifiers: defaultModifiers });
     }
 
-    // Merge with defaults (DB overrides defaults)
+    // Merge with defaults (DB overrides defaults, but code defaults are the base)
     const blocks = defaultBlocks.map(defaultBlock => {
       const dbBlock = dbBlocks.find(b => b.blockId === defaultBlock.id);
       if (dbBlock) {
         return {
-          id: defaultBlock.id,
+          ...defaultBlock,
           name: dbBlock.name || defaultBlock.name,
           description: dbBlock.description || defaultBlock.description,
           variants: {
-            default: "",
-            ...(dbBlock.variants as Record<string, string>),
+            ...defaultBlock.variants, // Start with code defaults
+            ...(dbBlock.variants as Record<string, string>), // DB overrides
           },
         };
       }

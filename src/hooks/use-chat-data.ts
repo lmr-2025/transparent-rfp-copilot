@@ -85,8 +85,10 @@ export function useInstructionPresets() {
     queryFn: async () => {
       const res = await fetch("/api/instruction-presets");
       if (!res.ok) throw new Error("Failed to fetch presets");
-      const data = await res.json();
-      return data.presets || [];
+      const json = await res.json();
+      // API returns { data: { presets: [...] } } format
+      const data = json.data?.presets ?? json.presets ?? [];
+      return Array.isArray(data) ? data : [];
     },
   });
 }
@@ -98,8 +100,10 @@ export function useChatSessions(limit = 20) {
     queryFn: async () => {
       const res = await fetch(`/api/chat-sessions?limit=${limit}`);
       if (!res.ok) throw new Error("Failed to fetch sessions");
-      const data = await res.json();
-      return data.sessions || [];
+      const json = await res.json();
+      // API returns { data: { sessions: [...] } } format
+      const data = json.data?.sessions ?? json.sessions ?? [];
+      return Array.isArray(data) ? data : [];
     },
   });
 }

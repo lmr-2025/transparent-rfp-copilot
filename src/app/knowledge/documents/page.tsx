@@ -116,12 +116,13 @@ export default function DocumentsPage() {
         body: formData,
       });
 
-      const data = await response.json();
+      const json = await response.json();
 
       if (!response.ok) {
-        throw new Error(getApiErrorMessage(data, "Failed to upload document"));
+        throw new Error(getApiErrorMessage(json, "Failed to upload document"));
       }
 
+      const data = json.data ?? json;
       setDocuments([data.document, ...documents]);
       resetForm();
 

@@ -73,6 +73,9 @@ const contextLabels: Record<PromptContext, string> = {
   chat: "Knowledge Chat",
   contracts: "Contract Analysis",
   skill_organize: "Skill Organization",
+  skill_analyze: "URL/Doc Analysis",
+  skill_refresh: "Skill Refresh",
+  skill_analyze_rfp: "RFP Import",
   customer_profile: "Customer Profiles",
   prompt_optimize: "Prompt Optimization",
 };
@@ -84,6 +87,9 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
   chat: { bg: "#faf5ff", border: "#e9d5ff", text: "#9333ea" },
   contracts: { bg: "#fff1f2", border: "#fecdd3", text: "#e11d48" },
   skill_organize: { bg: "#ecfdf5", border: "#a7f3d0", text: "#059669" },
+  skill_analyze: { bg: "#f0fdfa", border: "#99f6e4", text: "#0d9488" },
+  skill_refresh: { bg: "#fdf4ff", border: "#f5d0fe", text: "#a855f7" },
+  skill_analyze_rfp: { bg: "#fef9c3", border: "#fde047", text: "#a16207" },
   customer_profile: { bg: "#fef3c7", border: "#fcd34d", text: "#b45309" },
   prompt_optimize: { bg: "#f0f9ff", border: "#7dd3fc", text: "#0284c7" },
 };

@@ -51,7 +51,8 @@ export function KnowledgeSidebar({
       try {
         const res = await fetch("/api/instruction-presets");
         if (res.ok) {
-          const data = await res.json();
+          const json = await res.json();
+          const data = json.data ?? json;
           setPresets(data.presets || []);
           // Auto-select default preset if no instructions are set
           const defaultPreset = (data.presets || []).find((p: InstructionPreset) => p.isDefault);

@@ -5,76 +5,16 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Skill } from "@/types/skill";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
-import { getApiErrorMessage } from "@/lib/utils";
-import BuildTypeSelector, { BuildType } from "@/components/BuildTypeSelector";
 
-type RFPEntry = {
-  question: string;
-  answer: string;
-  source?: string;
-};
-
-type SkillSuggestion = {
-  type: "update" | "new";
-  skillId?: string; // For updates
-  skillTitle: string;
-  currentContent?: string; // For updates - show what exists
-  suggestedAdditions: string; // New content to add
-  relevantQA: RFPEntry[]; // The Q&A pairs that informed this suggestion
-  tags: string[];
-};
-
-type AnalysisResult = {
-  suggestions: SkillSuggestion[];
-  unmatchedEntries: RFPEntry[];
-};
-
-type SnippetDraft = {
-  name: string;
-  key: string;
-  content: string;
-  category: string | null;
-  description: string | null;
-};
-
-const styles = {
-  container: {
-    maxWidth: "1000px",
-    margin: "0 auto",
-    padding: "24px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-  },
-  card: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "10px",
-    padding: "20px",
-    marginBottom: "20px",
-    backgroundColor: "#fff",
-  },
-  button: {
-    padding: "10px 20px",
-    border: "none",
-    borderRadius: "6px",
-    fontWeight: 600,
-    cursor: "pointer",
-  },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-  success: {
-    backgroundColor: "#dcfce7",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-};
+import {
+  ColumnMappingStep,
+  PreviewAnalyzeStep,
+  SuggestionsReviewStep,
+  SkillLibraryInfo,
+  styles,
+  RFPEntry,
+  AnalysisResult,
+} from "./components";
 
 export default function ImportRFPPage() {
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
@@ -85,10 +25,6 @@ export default function ImportRFPPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
-
-  // Build type selector
-  const [buildType, setBuildType] = useState<BuildType>("skill");
-  const [snippetDraft, setSnippetDraft] = useState<SnippetDraft | null>(null);
 
   // Column mapping state
   const [columns, setColumns] = useState<string[]>([]);
@@ -124,12 +60,10 @@ export default function ImportRFPPage() {
         return;
       }
 
-      // First row is headers
       const firstRow = data[0];
       const headers = (Array.isArray(firstRow) ? firstRow : []).map((h) => String(h || "").trim());
       setColumns(headers.filter(Boolean));
 
-      // Store raw data for later processing
       const rawRows = data.slice(1).map((row) => {
         const rowData: Record<string, string> = {};
         const rowArray = Array.isArray(row) ? row : [];
@@ -141,7 +75,6 @@ export default function ImportRFPPage() {
         return rowData;
       });
 
-      // Store in state for column mapping
       (window as unknown as { _rfpRawRows: Record<string, string>[] })._rfpRawRows = rawRows;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to parse file");
@@ -181,30 +114,6 @@ export default function ImportRFPPage() {
     setErrorMessage(null);
 
     try {
-      // For snippets, build source text from Q&A and call snippet suggest API
-      if (buildType === "snippet") {
-        const sourceText = rfpEntries
-          .map((e) => `Q: ${e.question}\nA: ${e.answer}`)
-          .join("\n\n---\n\n");
-
-        const response = await fetch("/api/context-snippets/suggest", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sourceText }),
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || "Analysis failed");
-        }
-
-        const data = await response.json();
-        setSnippetDraft(data.draft);
-        setIsAnalyzing(false);
-        return;
-      }
-
-      // For skills, use the existing RFP analysis API
       const response = await fetch("/api/skills/analyze-rfp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -223,49 +132,15 @@ export default function ImportRFPPage() {
         throw new Error(data.error || "Analysis failed");
       }
 
-      const result: AnalysisResult = await response.json();
+      const json = await response.json();
+      const result: AnalysisResult = json.data ?? json;
       setAnalysisResult(result);
-      // Select all suggestions by default
       setSelectedSuggestions(new Set(result.suggestions.map((_, i) => i)));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Analysis failed");
     } finally {
       setIsAnalyzing(false);
     }
-  };
-
-  const handleSaveSnippet = async () => {
-    if (!snippetDraft) return;
-
-    try {
-      const response = await fetch("/api/context-snippets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: snippetDraft.name,
-          key: snippetDraft.key,
-          content: snippetDraft.content,
-          category: snippetDraft.category,
-          description: snippetDraft.description,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(getApiErrorMessage(errorData, "Failed to save snippet"));
-      }
-
-      setSuccessMessage(`Snippet "${snippetDraft.name}" saved successfully!`);
-      setSnippetDraft(null);
-      setRfpEntries([]);
-      setFileName("");
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Failed to save snippet");
-    }
-  };
-
-  const handleCancelSnippet = () => {
-    setSnippetDraft(null);
   };
 
   const toggleSuggestion = (index: number) => {
@@ -278,6 +153,15 @@ export default function ImportRFPPage() {
       }
       return newSet;
     });
+  };
+
+  const toggleAllSuggestions = () => {
+    if (!analysisResult) return;
+    if (selectedSuggestions.size === analysisResult.suggestions.length) {
+      setSelectedSuggestions(new Set());
+    } else {
+      setSelectedSuggestions(new Set(analysisResult.suggestions.map((_, i) => i)));
+    }
   };
 
   const handleApplySelected = async () => {
@@ -293,7 +177,6 @@ export default function ImportRFPPage() {
 
       try {
         if (suggestion.type === "update" && suggestion.skillId) {
-          // Find and update existing skill via API
           const existingSkill = skills.find((s) => s.id === suggestion.skillId);
           if (existingSkill) {
             const updates = {
@@ -305,7 +188,6 @@ export default function ImportRFPPage() {
             updatesApplied++;
           }
         } else if (suggestion.type === "new") {
-          // Create new skill via API
           const skillData = {
             title: suggestion.skillTitle,
             content: suggestion.suggestedAdditions,
@@ -323,7 +205,6 @@ export default function ImportRFPPage() {
       }
     }
 
-    // Update local state
     setSkills((prev) => {
       const updated = prev.map((s) => {
         const updatedVersion = updatedSkillsList.find((u) => u.id === s.id);
@@ -335,6 +216,12 @@ export default function ImportRFPPage() {
     setSuccessMessage(
       `Applied ${updatesApplied} skill update${updatesApplied !== 1 ? "s" : ""} and created ${newSkillsCreated} new skill${newSkillsCreated !== 1 ? "s" : ""}.`
     );
+    setAnalysisResult(null);
+    setRfpEntries([]);
+    setFileName("");
+  };
+
+  const handleCancelAnalysis = () => {
     setAnalysisResult(null);
     setRfpEntries([]);
     setFileName("");
@@ -358,22 +245,12 @@ export default function ImportRFPPage() {
     <div style={styles.container}>
       <h1>Knowledge Gremlin <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>(Import from Docs)</span></h1>
       <p style={{ color: "#475569", marginBottom: "24px" }}>
-        Upload completed RFP spreadsheets to extract knowledge and enrich your {buildType === "skill" ? "skills library" : "context snippets"}.
-        The system will analyze Q&A pairs and {buildType === "skill" ? "suggest updates to existing skills or new skills to create" : "extract reusable boilerplate content"}.
+        Upload completed RFP spreadsheets to extract knowledge and enrich your skills library.
+        The system will analyze Q&A pairs and suggest updates to existing skills or new skills to create.
       </p>
 
       {errorMessage && <div style={styles.error}>{errorMessage}</div>}
       {successMessage && <div style={styles.success}>{successMessage}</div>}
-
-      {/* Build Type Selection */}
-      <div style={styles.card}>
-        <h3 style={{ marginTop: 0 }}>What do you want to build?</h3>
-        <BuildTypeSelector
-          value={buildType}
-          onChange={setBuildType}
-          disabled={rfpEntries.length > 0 || analysisResult !== null || snippetDraft !== null}
-        />
-      </div>
 
       {/* Step 1: File Upload */}
       <div style={styles.card}>
@@ -396,497 +273,42 @@ export default function ImportRFPPage() {
 
       {/* Step 2: Column Mapping */}
       {columns.length > 0 && !rfpEntries.length && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Step 2: Map Columns</h3>
-          <p style={{ color: "#64748b", fontSize: "14px" }}>
-            Select which columns contain the questions and answers.
-          </p>
-          <div style={{ display: "grid", gap: "16px", marginTop: "16px" }}>
-            <div>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "6px" }}>
-                Question Column
-              </label>
-              <select
-                value={questionColumn}
-                onChange={(e) => setQuestionColumn(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  border: "1px solid #cbd5e1",
-                }}
-              >
-                <option value="">Select column...</option>
-                {columns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ display: "block", fontWeight: 600, marginBottom: "6px" }}>
-                Answer Column
-              </label>
-              <select
-                value={answerColumn}
-                onChange={(e) => setAnswerColumn(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "10px",
-                  borderRadius: "6px",
-                  border: "1px solid #cbd5e1",
-                }}
-              >
-                <option value="">Select column...</option>
-                {columns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button
-            onClick={handleColumnMapping}
-            disabled={!questionColumn || !answerColumn}
-            style={{
-              ...styles.button,
-              marginTop: "16px",
-              backgroundColor: !questionColumn || !answerColumn ? "#cbd5e1" : "#2563eb",
-              color: "#fff",
-            }}
-          >
-            Extract Q&A Pairs
-          </button>
-        </div>
+        <ColumnMappingStep
+          columns={columns}
+          questionColumn={questionColumn}
+          answerColumn={answerColumn}
+          onSetQuestionColumn={setQuestionColumn}
+          onSetAnswerColumn={setAnswerColumn}
+          onExtract={handleColumnMapping}
+        />
       )}
 
       {/* Step 3: Preview & Analyze */}
-      {rfpEntries.length > 0 && !analysisResult && !snippetDraft && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Step 3: Review & Analyze</h3>
-          <p style={{ color: "#166534", fontWeight: 500, marginBottom: "16px" }}>
-            Found {rfpEntries.length} Q&A pairs to {buildType === "skill" ? `analyze against ${skills.length} existing skills` : "extract content from"}.
-          </p>
-
-          <div
-            style={{
-              maxHeight: "300px",
-              overflowY: "auto",
-              border: "1px solid #e2e8f0",
-              borderRadius: "6px",
-              marginBottom: "16px",
-            }}
-          >
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
-              <thead>
-                <tr style={{ backgroundColor: "#f8fafc", position: "sticky", top: 0 }}>
-                  <th style={{ padding: "10px", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                    Question
-                  </th>
-                  <th style={{ padding: "10px", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                    Answer (Preview)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rfpEntries.slice(0, 20).map((entry, i) => (
-                  <tr key={i}>
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom: "1px solid #f1f5f9",
-                        verticalAlign: "top",
-                        maxWidth: "300px",
-                      }}
-                    >
-                      {entry.question.length > 100
-                        ? entry.question.substring(0, 100) + "..."
-                        : entry.question}
-                    </td>
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom: "1px solid #f1f5f9",
-                        verticalAlign: "top",
-                        color: "#64748b",
-                      }}
-                    >
-                      {entry.answer.length > 150
-                        ? entry.answer.substring(0, 150) + "..."
-                        : entry.answer}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {rfpEntries.length > 20 && (
-              <p style={{ padding: "10px", color: "#64748b", margin: 0, textAlign: "center" }}>
-                ...and {rfpEntries.length - 20} more entries
-              </p>
-            )}
-          </div>
-
-          <button
-            onClick={handleAnalyze}
-            disabled={isAnalyzing}
-            style={{
-              ...styles.button,
-              backgroundColor: isAnalyzing ? "#94a3b8" : "#2563eb",
-              color: "#fff",
-            }}
-          >
-            {isAnalyzing ? "Analyzing..." : buildType === "skill" ? "Analyze Against Skills" : "Build Snippet"}
-          </button>
-
-          {isAnalyzing && (
-            <div
-              style={{
-                marginTop: "16px",
-                padding: "16px",
-                backgroundColor: "#eff6ff",
-                border: "2px solid #60a5fa",
-                borderRadius: "8px",
-              }}
-            >
-              <p style={{ margin: 0, color: "#1e40af" }}>
-                {buildType === "skill" ? "Analyzing RFP content against your skill library..." : "Extracting reusable content..."}
-                <br />
-                <span style={{ fontSize: "13px", color: "#60a5fa" }}>
-                  This may take 30-60 seconds depending on the number of entries.
-                </span>
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Snippet Review */}
-      {snippetDraft && (
-        <div style={{
-          ...styles.card,
-          backgroundColor: "#f0fdf4",
-          border: "2px solid #10b981",
-        }}>
-          <h3 style={{ marginTop: 0, color: "#059669" }}>Generated Context Snippet - Review & Save</h3>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Name:</strong> {snippetDraft.name}
-          </div>
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Key:</strong>{" "}
-            <code style={{
-              backgroundColor: "#f0f9ff",
-              color: "#0ea5e9",
-              padding: "2px 8px",
-              borderRadius: "4px",
-              fontSize: "13px",
-            }}>
-              {`{{${snippetDraft.key}}}`}
-            </code>
-          </div>
-          {snippetDraft.category && (
-            <div style={{ marginBottom: "16px" }}>
-              <strong>Category:</strong>{" "}
-              <span style={{
-                display: "inline-block",
-                padding: "2px 8px",
-                backgroundColor: "#e0f2fe",
-                color: "#0369a1",
-                borderRadius: "4px",
-                fontSize: "13px",
-              }}>
-                {snippetDraft.category}
-              </span>
-            </div>
-          )}
-          {snippetDraft.description && (
-            <div style={{ marginBottom: "16px" }}>
-              <strong>Description:</strong>{" "}
-              <span style={{ color: "#64748b" }}>{snippetDraft.description}</span>
-            </div>
-          )}
-          <div style={{ marginBottom: "16px" }}>
-            <strong>Content:</strong>
-            <pre style={{
-              backgroundColor: "#fff",
-              padding: "12px",
-              borderRadius: "6px",
-              overflow: "auto",
-              maxHeight: "300px",
-              fontSize: "13px",
-              whiteSpace: "pre-wrap",
-              border: "1px solid #e2e8f0",
-            }}>
-              {snippetDraft.content}
-            </pre>
-          </div>
-          <div style={{ display: "flex", gap: "12px" }}>
-            <button
-              onClick={handleSaveSnippet}
-              style={{
-                ...styles.button,
-                backgroundColor: "#059669",
-                color: "#fff",
-              }}
-            >
-              Save to Snippets Library
-            </button>
-            <button
-              onClick={handleCancelSnippet}
-              style={{
-                ...styles.button,
-                backgroundColor: "#94a3b8",
-                color: "#fff",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+      {rfpEntries.length > 0 && !analysisResult && (
+        <PreviewAnalyzeStep
+          rfpEntries={rfpEntries}
+          skillsCount={skills.length}
+          isAnalyzing={isAnalyzing}
+          onAnalyze={handleAnalyze}
+        />
       )}
 
       {/* Step 4: Review Suggestions */}
       {analysisResult && (
-        <div style={styles.card}>
-          <h3 style={{ marginTop: 0 }}>Step 4: Review Suggestions</h3>
-          <p style={{ color: "#64748b", marginBottom: "16px" }}>
-            Select which suggestions to apply. Updates will append content to existing skills.
-          </p>
-
-          <div
-            style={{
-              display: "flex",
-              gap: "16px",
-              marginBottom: "20px",
-              padding: "12px",
-              backgroundColor: "#f8fafc",
-              borderRadius: "6px",
-            }}
-          >
-            <div>
-              <span style={{ color: "#0369a1", fontWeight: 600 }}>{updateCount}</span> skill updates
-            </div>
-            <div>
-              <span style={{ color: "#15803d", fontWeight: 600 }}>{newCount}</span> new skills
-            </div>
-            <div style={{ marginLeft: "auto" }}>
-              <button
-                onClick={() => {
-                  if (selectedSuggestions.size === analysisResult.suggestions.length) {
-                    setSelectedSuggestions(new Set());
-                  } else {
-                    setSelectedSuggestions(new Set(analysisResult.suggestions.map((_, i) => i)));
-                  }
-                }}
-                style={{
-                  ...styles.button,
-                  padding: "6px 12px",
-                  backgroundColor: "#f1f5f9",
-                  color: "#475569",
-                  fontSize: "13px",
-                }}
-              >
-                {selectedSuggestions.size === analysisResult.suggestions.length
-                  ? "Deselect All"
-                  : "Select All"}
-              </button>
-            </div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {analysisResult.suggestions.map((suggestion, index) => (
-              <div
-                key={index}
-                style={{
-                  border: `2px solid ${selectedSuggestions.has(index) ? (suggestion.type === "update" ? "#60a5fa" : "#86efac") : "#e2e8f0"}`,
-                  borderRadius: "8px",
-                  padding: "16px",
-                  backgroundColor: selectedSuggestions.has(index)
-                    ? suggestion.type === "update"
-                      ? "#eff6ff"
-                      : "#f0fdf4"
-                    : "#fff",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedSuggestions.has(index)}
-                    onChange={() => toggleSuggestion(index)}
-                    style={{ width: "18px", height: "18px", marginTop: "2px" }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span
-                        style={{
-                          padding: "2px 8px",
-                          borderRadius: "4px",
-                          fontSize: "12px",
-                          fontWeight: 600,
-                          backgroundColor: suggestion.type === "update" ? "#dbeafe" : "#dcfce7",
-                          color: suggestion.type === "update" ? "#1e40af" : "#166534",
-                        }}
-                      >
-                        {suggestion.type === "update" ? "UPDATE" : "NEW"}
-                      </span>
-                      <span style={{ fontWeight: 600, fontSize: "15px" }}>{suggestion.skillTitle}</span>
-                    </div>
-
-                    <div style={{ marginBottom: "12px" }}>
-                      <strong style={{ fontSize: "13px", color: "#475569" }}>
-                        Content to {suggestion.type === "update" ? "add" : "create"}:
-                      </strong>
-                      <pre
-                        style={{
-                          backgroundColor: "#fff",
-                          padding: "12px",
-                          borderRadius: "6px",
-                          border: "1px solid #e2e8f0",
-                          fontSize: "12px",
-                          whiteSpace: "pre-wrap",
-                          marginTop: "6px",
-                          maxHeight: "200px",
-                          overflowY: "auto",
-                        }}
-                      >
-                        {suggestion.suggestedAdditions}
-                      </pre>
-                    </div>
-
-                    <details style={{ fontSize: "13px", color: "#64748b" }}>
-                      <summary style={{ cursor: "pointer", fontWeight: 500 }}>
-                        Based on {suggestion.relevantQA.length} Q&A pair
-                        {suggestion.relevantQA.length !== 1 ? "s" : ""}
-                      </summary>
-                      <div style={{ marginTop: "8px", paddingLeft: "12px" }}>
-                        {suggestion.relevantQA.map((qa, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              marginBottom: "8px",
-                              paddingBottom: "8px",
-                              borderBottom: "1px solid #f1f5f9",
-                            }}
-                          >
-                            <div style={{ fontWeight: 500 }}>Q: {qa.question}</div>
-                            <div style={{ color: "#94a3b8" }}>
-                              A: {qa.answer.length > 200 ? qa.answer.substring(0, 200) + "..." : qa.answer}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {analysisResult.unmatchedEntries.length > 0 && (
-            <details style={{ marginTop: "20px" }}>
-              <summary style={{ cursor: "pointer", color: "#64748b", fontWeight: 500 }}>
-                {analysisResult.unmatchedEntries.length} entries could not be matched to any skill
-              </summary>
-              <div
-                style={{
-                  marginTop: "12px",
-                  padding: "12px",
-                  backgroundColor: "#fef3c7",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                }}
-              >
-                {analysisResult.unmatchedEntries.slice(0, 10).map((entry, i) => (
-                  <div key={i} style={{ marginBottom: "8px" }}>
-                    <strong>Q:</strong> {entry.question.substring(0, 100)}...
-                  </div>
-                ))}
-                {analysisResult.unmatchedEntries.length > 10 && (
-                  <p style={{ color: "#92400e" }}>
-                    ...and {analysisResult.unmatchedEntries.length - 10} more
-                  </p>
-                )}
-              </div>
-            </details>
-          )}
-
-          <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
-            <button
-              onClick={handleApplySelected}
-              disabled={selectedSuggestions.size === 0}
-              style={{
-                ...styles.button,
-                backgroundColor: selectedSuggestions.size === 0 ? "#cbd5e1" : "#15803d",
-                color: "#fff",
-              }}
-            >
-              Apply {selectedSuggestions.size} Selected
-            </button>
-            <button
-              onClick={() => {
-                setAnalysisResult(null);
-                setRfpEntries([]);
-                setFileName("");
-              }}
-              style={{
-                ...styles.button,
-                backgroundColor: "#f1f5f9",
-                color: "#475569",
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
+        <SuggestionsReviewStep
+          analysisResult={analysisResult}
+          selectedSuggestions={selectedSuggestions}
+          updateCount={updateCount}
+          newCount={newCount}
+          onToggleSuggestion={toggleSuggestion}
+          onToggleAll={toggleAllSuggestions}
+          onApply={handleApplySelected}
+          onCancel={handleCancelAnalysis}
+        />
       )}
 
       {/* Info about existing skills */}
-      <div
-        style={{
-          ...styles.card,
-          backgroundColor: "#f8fafc",
-          borderColor: "#e2e8f0",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Current Skill Library</h3>
-        <p style={{ color: "#64748b", marginBottom: "12px" }}>
-          You have <strong>{skills.length}</strong> skills in your library.
-          RFP content will be matched against these to suggest updates.
-        </p>
-        {skills.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            {skills.slice(0, 10).map((skill) => (
-              <span
-                key={skill.id}
-                style={{
-                  padding: "4px 10px",
-                  backgroundColor: skill.isActive ? "#dbeafe" : "#f1f5f9",
-                  color: skill.isActive ? "#1e40af" : "#94a3b8",
-                  borderRadius: "4px",
-                  fontSize: "13px",
-                }}
-              >
-                {skill.title}
-              </span>
-            ))}
-            {skills.length > 10 && (
-              <span style={{ color: "#94a3b8", fontSize: "13px", padding: "4px" }}>
-                +{skills.length - 10} more
-              </span>
-            )}
-          </div>
-        )}
-        {skills.length === 0 && (
-          <p style={{ color: "#94a3b8", margin: 0 }}>
-            No skills yet.{" "}
-            <a href="/knowledge" style={{ color: "#2563eb" }}>
-              Create some skills first
-            </a>{" "}
-            to get the most out of RFP import.
-          </p>
-        )}
-      </div>
+      <SkillLibraryInfo skills={skills} />
     </div>
   );
 }

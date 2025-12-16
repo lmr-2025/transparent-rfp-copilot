@@ -130,6 +130,12 @@ model BulkRow {
   flaggedBy            String?
   flagNote             String?  @db.Text
 
+  // Flag resolution (preserves audit trail when closing flags)
+  flagResolved         Boolean  @default(false)
+  flagResolvedAt       DateTime?
+  flagResolvedBy       String?
+  flagResolutionNote   String?  @db.Text
+
   // Queue for batch review (persisted across sessions for collaboration)
   queuedForReview      Boolean  @default(false)
   queuedAt             DateTime?
@@ -479,6 +485,12 @@ model QuestionHistory {
   flaggedBy            String?
   flagNote             String?  @db.Text
 
+  // Flag resolution (preserves audit trail when closing flags)
+  flagResolved         Boolean  @default(false)
+  flagResolvedAt       DateTime?
+  flagResolvedBy       String?
+  flagResolutionNote   String?  @db.Text
+
   // Review workflow fields (separate from flagging)
   reviewStatus         RowReviewStatus @default(NONE)
   reviewRequestedAt    DateTime?
@@ -599,6 +611,7 @@ enum AuditAction {
   CORRECTED
   APPROVED
   REVIEW_REQUESTED
+  FLAG_RESOLVED
 }
 
 // Answer Feedback - tracks user ratings on AI-generated responses

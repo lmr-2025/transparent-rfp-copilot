@@ -6,6 +6,7 @@ import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
 type RFPEntry = {
   question: string;
@@ -72,57 +73,15 @@ export async function POST(request: NextRequest) {
       `[${i + 1}] Q: ${e.question}\nA: ${e.answer}`
     ).join("\n\n---\n\n");
 
-    const systemPrompt = `You are a knowledge management expert helping to organize security questionnaire responses into a structured skill library.
+    // Load base prompt from block system
+    const basePrompt = await loadSystemPrompt("skill_analyze_rfp", "You are a knowledge management expert.");
 
-Your task is to analyze Q&A pairs from completed RFPs and suggest how to incorporate this knowledge into an existing skill library.
-
-GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.
-
-PRINCIPLES:
-1. Skills should cover BROAD CAPABILITY AREAS (like "Security & Compliance", "Data Platform", "Integrations & APIs", "Monitoring & Alerting")
-2. STRONGLY PREFER updating existing skills over creating new ones
-3. Only create a new skill if the content is genuinely unrelated to ALL existing skills
-4. Think of skills like chapters in a book, not individual pages
-5. When updating skills, add NEW information only - don't duplicate what's already there
-
-CONSOLIDATION BIAS:
-- When in doubt, UPDATE an existing skill
-- A skill about "Security" can absorb content about encryption, access control, compliance, etc.
-- A skill about "Integrations" can absorb content about APIs, webhooks, SSO, authentication, etc.
-- A skill about "Data Platform" can absorb content about pipelines, warehouses, queries, etc.
+    // Build system prompt with dynamic categories
+    const systemPrompt = `${basePrompt}
 
 CATEGORIES:
 Every skill must belong to exactly one category. Available categories:
-${categoriesList}
-
-OUTPUT FORMAT:
-You MUST respond with valid JSON in this exact structure:
-{
-  "suggestions": [
-    {
-      "type": "update" or "new",
-      "skillId": "existing skill ID if type=update, omit if type=new",
-      "skillTitle": "title of skill to update or create",
-      "category": "One of the categories above (required for new skills)",
-      "suggestedAdditions": "the actual content to add to the skill - should be well-formatted, factual statements extracted from the RFP answers",
-      "relevantQAIndices": [array of Q&A indices that informed this suggestion]
-    }
-  ],
-  "unmatchedIndices": [array of Q&A indices that couldn't be matched to any skill topic]
-}
-
-GUIDELINES FOR SUGGESTED ADDITIONS:
-- Extract factual statements, not questions
-- Format as clear, professional documentation
-- Use bullet points for lists
-- Include specific details (tools, timeframes, processes)
-- Remove any customer-specific context
-- Make it reusable for future questionnaires
-
-TITLE GUIDELINES FOR NEW SKILLS:
-- Use broad titles: "Security & Compliance", "Monitoring & Observability", "Data Integration"
-- Avoid narrow titles: "Password Policy", "Alert Thresholds", "Webhook Setup"
-- Think: "What chapter of the docs would this belong in?"`;
+${categoriesList}`;
 
     const userPrompt = `EXISTING SKILLS:
 ${skillsSummary}

@@ -24,7 +24,8 @@ export async function fetchUrlContent(url: string): Promise<string> {
       throw new Error(error.error || "Failed to fetch URL");
     }
 
-    const data = await response.json();
+    const json = await response.json();
+    const data = json.data ?? json;
     return data.content || "";
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch URL";

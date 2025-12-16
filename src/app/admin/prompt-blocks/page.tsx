@@ -44,7 +44,8 @@ export default function PromptBlocksPage() {
       try {
         const res = await fetch("/api/prompt-blocks");
         if (res.ok) {
-          const data = await res.json();
+          const json = await res.json();
+          const data = json.data ?? json;
           if (data.blocks?.length > 0) {
             setBlocks(data.blocks);
           }

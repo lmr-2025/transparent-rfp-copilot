@@ -30,6 +30,12 @@ const keyToContext: Record<string, PromptContext> = {
   library_analysis: "analysis",
   contract_analysis: "contracts",
   contracts: "contracts",
+  skill_organize: "skill_organize",
+  skill_analyze: "skill_analyze",
+  skill_refresh: "skill_refresh",
+  skill_analyze_rfp: "skill_analyze_rfp",
+  customer_profile: "customer_profile",
+  prompt_optimize: "prompt_optimize",
 };
 
 /**

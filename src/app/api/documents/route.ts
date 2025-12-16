@@ -176,6 +176,7 @@ export async function POST(request: NextRequest) {
         description: document.description,
         contentLength: content.length,
         isTemplate: document.isTemplate,
+        content, // Include content for bulk import use case
       },
     }, { status: 201 });
   } catch (error) {

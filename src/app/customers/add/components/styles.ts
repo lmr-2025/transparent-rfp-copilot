@@ -1,0 +1,78 @@
+export const styles = {
+  container: {
+    maxWidth: "820px",
+    margin: "0 auto",
+    padding: "24px",
+    fontFamily:
+      "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+  },
+  card: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    padding: "16px",
+    marginBottom: "16px",
+    backgroundColor: "#fff",
+  },
+  label: {
+    display: "block",
+    fontWeight: 600,
+    marginTop: "12px",
+    marginBottom: "4px",
+  },
+  input: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    fontSize: "14px",
+  },
+  textarea: {
+    width: "100%",
+    padding: "10px 12px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    fontSize: "14px",
+    fontFamily: "inherit",
+    resize: "vertical" as const,
+    minHeight: "100px",
+  },
+  button: {
+    padding: "10px 16px",
+    borderRadius: "6px",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: 600,
+    fontSize: "14px",
+  },
+  primaryButton: {
+    backgroundColor: "#6366f1",
+    color: "#fff",
+  },
+  secondaryButton: {
+    backgroundColor: "#f1f5f9",
+    color: "#475569",
+    border: "1px solid #cbd5e1",
+  },
+  error: {
+    backgroundColor: "#fee2e2",
+    color: "#b91c1c",
+    border: "1px solid #fecaca",
+    borderRadius: "6px",
+    padding: "10px 12px",
+    marginTop: "12px",
+  },
+  success: {
+    backgroundColor: "#dcfce7",
+    color: "#166534",
+    border: "1px solid #86efac",
+    borderRadius: "6px",
+    padding: "10px 12px",
+    marginTop: "12px",
+  },
+  keyFact: {
+    display: "flex",
+    gap: "8px",
+    alignItems: "center",
+    marginBottom: "8px",
+  },
+};

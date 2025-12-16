@@ -20,6 +20,11 @@ export type BulkRow = {
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
+  // Flag resolution (close flag while preserving audit trail)
+  flagResolved?: boolean;
+  flagResolvedAt?: string;
+  flagResolvedBy?: string;
+  flagResolutionNote?: string;
   // Queue for batch review (persisted across sessions for collaboration)
   queuedForReview?: boolean;
   queuedAt?: string;

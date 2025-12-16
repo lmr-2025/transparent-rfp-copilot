@@ -7,13 +7,17 @@ import { logger } from "@/lib/logger";
 /**
  * POST /api/reference-urls/link
  *
- * Creates or updates a ReferenceUrl record and links it to a skill.
- * Uses upsert to handle cases where the URL already exists.
+ * Creates or updates ReferenceUrl record(s) and links them to a skill.
+ * Supports both single URL and batch operations.
  *
- * Body:
+ * Single URL Body:
  * - url: string (required) - The URL to link
  * - skillId: string (required) - The skill ID to link to
  * - title: string (optional) - Title for the reference URL
+ *
+ * Batch Body:
+ * - urls: Array<{ url: string, title?: string }> (required) - URLs to link
+ * - skillId: string (required) - The skill ID to link to
  */
 export async function POST(request: NextRequest) {
   const auth = await requireAuth();
@@ -23,13 +27,42 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { url, skillId, title } = body;
+    const { url, urls, skillId, title } = body;
 
-    if (!url || !skillId) {
-      return errors.validation("url and skillId are required");
+    if (!skillId) {
+      return errors.validation("skillId is required");
     }
 
-    // Upsert the ReferenceUrl - create if doesn't exist, update skillId if it does
+    // Batch mode: multiple URLs
+    if (Array.isArray(urls) && urls.length > 0) {
+      const results = await Promise.all(
+        urls.map((item: { url: string; title?: string }) =>
+          prisma.referenceUrl.upsert({
+            where: { url: item.url },
+            create: {
+              url: item.url,
+              title: item.title || item.url,
+              skillId,
+              isReferenceOnly: false,
+              ownerId: auth.session.user.id,
+              createdBy: auth.session.user.email || undefined,
+            },
+            update: {
+              skillId,
+              isReferenceOnly: false,
+              title: item.title || undefined,
+            },
+          })
+        )
+      );
+      return apiSuccess({ linked: results.length, urls: results }, { status: 201 });
+    }
+
+    // Single URL mode (backwards compatible)
+    if (!url) {
+      return errors.validation("url or urls array is required");
+    }
+
     const referenceUrl = await prisma.referenceUrl.upsert({
       where: { url },
       create: {
@@ -43,7 +76,6 @@ export async function POST(request: NextRequest) {
       update: {
         skillId,
         isReferenceOnly: false,
-        // Only update title if not already set
         title: title || undefined,
       },
     });

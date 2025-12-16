@@ -70,9 +70,10 @@ export async function fetchUrlContent(
   options: {
     maxLength?: number;
     userAgent?: string;
+    timeoutMs?: number;
   } = {}
 ): Promise<string | null> {
-  const { maxLength = 15000, userAgent = "TransparentTrust/1.0" } = options;
+  const { maxLength = 15000, userAgent = "TransparentTrust/1.0", timeoutMs = 10000 } = options;
 
   // SSRF protection: validate URL before fetching
   const ssrfCheck = await validateUrlForSSRF(urlString);
@@ -84,6 +85,7 @@ export async function fetchUrlContent(
   try {
     const response = await fetch(urlString, {
       headers: { "User-Agent": userAgent },
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     if (!response.ok) {

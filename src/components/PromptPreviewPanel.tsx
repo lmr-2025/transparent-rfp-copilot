@@ -41,6 +41,9 @@ const contextLabels: Record<PromptContext, string> = {
   chat: "Chat",
   contracts: "Contracts",
   skill_organize: "Skill Org",
+  skill_analyze: "URL Analysis",
+  skill_refresh: "Refresh",
+  skill_analyze_rfp: "RFP Import",
   customer_profile: "Customers",
   prompt_optimize: "Optimize",
 };
@@ -52,6 +55,9 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
   chat: { bg: "#faf5ff", border: "#e9d5ff", text: "#9333ea" },
   contracts: { bg: "#fff1f2", border: "#fecdd3", text: "#e11d48" },
   skill_organize: { bg: "#ecfdf5", border: "#a7f3d0", text: "#059669" },
+  skill_analyze: { bg: "#f0fdfa", border: "#99f6e4", text: "#0d9488" },
+  skill_refresh: { bg: "#fdf4ff", border: "#f5d0fe", text: "#a855f7" },
+  skill_analyze_rfp: { bg: "#fef9c3", border: "#fde047", text: "#a16207" },
   customer_profile: { bg: "#fef3c7", border: "#fcd34d", text: "#b45309" },
   prompt_optimize: { bg: "#f0f9ff", border: "#7dd3fc", text: "#0284c7" },
 };
@@ -153,7 +159,8 @@ export default function PromptPreviewPanel({
         throw new Error(data.error || "Optimization failed");
       }
 
-      const result: OptimizeResponse = await response.json();
+      const json = await response.json();
+      const result: OptimizeResponse = json.data ?? json;
       setOptimizeResult(result);
       setSelectedSuggestions(new Set(result.suggestions.map((_, i) => i)));
     } catch (error) {

@@ -15,7 +15,9 @@ export async function fetchAllSkills(options?: {
   if (!response.ok) {
     throw new Error("Failed to fetch skills");
   }
-  return response.json();
+  const result = await response.json();
+  // Handle both { data: { skills: [...] } } and direct array formats
+  return result.data?.skills ?? result.skills ?? result;
 }
 
 export async function fetchSkill(id: string): Promise<Skill> {
@@ -23,7 +25,9 @@ export async function fetchSkill(id: string): Promise<Skill> {
   if (!response.ok) {
     throw new Error("Failed to fetch skill");
   }
-  return response.json();
+  const result = await response.json();
+  // Handle both { data: { skill: {...} } } and direct object formats
+  return result.data?.skill ?? result.skill ?? result;
 }
 
 export async function createSkill(
@@ -37,7 +41,9 @@ export async function createSkill(
   if (!response.ok) {
     throw new Error("Failed to create skill");
   }
-  return response.json();
+  const result = await response.json();
+  // Handle both { data: { skill: {...} } } and direct object formats
+  return result.data?.skill ?? result.skill ?? result;
 }
 
 export async function updateSkill(
@@ -52,7 +58,9 @@ export async function updateSkill(
   if (!response.ok) {
     throw new Error("Failed to update skill");
   }
-  return response.json();
+  const result = await response.json();
+  // Handle both { data: { skill: {...} } } and direct object formats
+  return result.data?.skill ?? result.skill ?? result;
 }
 
 export async function deleteSkill(id: string): Promise<void> {

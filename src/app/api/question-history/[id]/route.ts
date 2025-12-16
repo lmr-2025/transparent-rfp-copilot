@@ -49,6 +49,10 @@ export async function GET(
         flaggedAt: entry.flaggedAt?.toISOString(),
         flaggedBy: entry.flaggedBy,
         flagNote: entry.flagNote,
+        flagResolved: entry.flagResolved,
+        flagResolvedAt: entry.flagResolvedAt?.toISOString(),
+        flagResolvedBy: entry.flagResolvedBy,
+        flagResolutionNote: entry.flagResolutionNote,
         userEditedAnswer: entry.userEditedAnswer,
       },
     });
@@ -111,6 +115,11 @@ export async function PATCH(
       if (body.flaggedForReview) {
         updateData.flaggedAt = new Date();
         updateData.flaggedBy = session.user.email || session.user.name || 'Unknown';
+        // Clear any previous resolution when re-flagging
+        updateData.flagResolved = false;
+        updateData.flagResolvedAt = null;
+        updateData.flagResolvedBy = null;
+        updateData.flagResolutionNote = null;
       } else {
         updateData.flaggedAt = null;
         updateData.flaggedBy = null;
@@ -119,6 +128,24 @@ export async function PATCH(
     }
     if (body.flagNote !== undefined) {
       updateData.flagNote = body.flagNote;
+    }
+
+    // Flag resolution fields (close flag while preserving audit trail)
+    if (body.flagResolved !== undefined) {
+      updateData.flagResolved = body.flagResolved;
+      if (body.flagResolved) {
+        updateData.flagResolvedAt = new Date();
+        updateData.flagResolvedBy = session.user.name || session.user.email || "Unknown";
+        // Keep flaggedForReview true to preserve the audit trail
+      } else {
+        // Re-opening a resolved flag
+        updateData.flagResolvedAt = null;
+        updateData.flagResolvedBy = null;
+        updateData.flagResolutionNote = null;
+      }
+    }
+    if (body.flagResolutionNote !== undefined) {
+      updateData.flagResolutionNote = body.flagResolutionNote;
     }
     if (body.reviewRequestedBy !== undefined) {
       updateData.reviewRequestedBy = body.reviewRequestedBy;
@@ -198,6 +225,23 @@ export async function PATCH(
           flagNote: body.flagNote,
           reviewNote: body.reviewNote,
           reviewRequestedBy: body.reviewRequestedBy,
+        },
+        requestContext
+      );
+    } else if (body.flagResolved === true) {
+      // Flag was resolved/closed
+      await logAnswerChange(
+        "FLAG_RESOLVED",
+        id,
+        entry.question?.substring(0, 100) || "Question",
+        user,
+        undefined,
+        {
+          feature: "questions",
+          flagNote: entry.flagNote,
+          flaggedBy: entry.flaggedBy,
+          flaggedAt: entry.flaggedAt,
+          resolutionNote: body.flagResolutionNote,
         },
         requestContext
       );

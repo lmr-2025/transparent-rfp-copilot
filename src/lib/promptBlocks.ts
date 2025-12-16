@@ -15,14 +15,17 @@
 
 // The contexts where prompts are used
 export type PromptContext =
-  | "questions"        // Answering questionnaire/assessment questions
-  | "skills"           // Building knowledge skills
-  | "analysis"         // Analyzing documents/libraries
-  | "chat"             // Knowledge chat
-  | "contracts"        // Contract analysis
-  | "skill_organize"   // Organizing/merging skills from sources
-  | "customer_profile" // Extracting customer profiles
-  | "prompt_optimize"; // Optimizing prompt sections
+  | "questions"         // Answering questionnaire/assessment questions
+  | "skills"            // Building knowledge skills
+  | "analysis"          // Analyzing documents/libraries
+  | "chat"              // Knowledge chat
+  | "contracts"         // Contract analysis
+  | "skill_organize"    // Organizing/merging skills from sources
+  | "skill_analyze"     // Analyzing URLs/docs to decide skill actions (create/update)
+  | "skill_refresh"     // Refreshing a skill from its source URLs
+  | "skill_analyze_rfp" // Analyzing RFP Q&A to extract skill knowledge
+  | "customer_profile"  // Extracting customer profiles
+  | "prompt_optimize";  // Optimizing prompt sections
 
 // Editability tiers for blocks and modifiers
 export type PromptTier = 1 | 2 | 3;
@@ -173,6 +176,76 @@ export const defaultBlocks: PromptBlock[] = [
         "Suggest specific improvements while preserving the original intent.",
         "Focus on making prompts more concise without losing important context.",
       ].join("\n"),
+      skill_analyze: [
+        "You are a knowledge management expert helping organize documentation into broad, comprehensive skills.",
+        "",
+        "Your task is to analyze new source material and decide how it should be organized.",
+        "",
+        "GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.",
+        "",
+        "PRINCIPLES:",
+        "1. Skills should cover BROAD CAPABILITY AREAS (like 'Security & Compliance', 'Data Platform', 'Integrations & APIs', 'Monitoring & Alerting')",
+        "2. STRONGLY PREFER updating existing skills over creating new ones",
+        "3. Only create a new skill if the content is genuinely unrelated to ALL existing skills",
+        "4. Think of skills like chapters in a book, not individual pages",
+        "",
+        "DECISION TREE:",
+        "1. First, look for ANY existing skill that could reasonably contain this content → UPDATE_EXISTING",
+        "2. Only if no existing skill is even remotely related → CREATE_NEW",
+        "3. RARELY use split_topics - only if content covers 2+ completely unrelated domains",
+        "",
+        "CONSOLIDATION BIAS:",
+        "- When in doubt, UPDATE an existing skill",
+        "- A skill about 'Security' can absorb content about encryption, access control, compliance, etc.",
+        "- A skill about 'Integrations' can absorb content about APIs, webhooks, SSO, authentication, etc.",
+        "- A skill about 'Data Platform' can absorb content about pipelines, warehouses, queries, etc.",
+      ].join("\n"),
+      skill_refresh: [
+        "You are a knowledge extraction specialist reviewing an existing skill against refreshed source material.",
+        "",
+        "YOUR GOAL: Ensure the skill comprehensively covers ALL the information from the source URLs.",
+        "",
+        "RETURN hasChanges: true IF ANY of these are true:",
+        "- Source contains information about platforms/integrations NOT in existing skill",
+        "- Source has specific technical details (numbers, versions, capabilities) not captured",
+        "- Source describes features, limitations, or requirements not mentioned",
+        "- Source covers topics/sections that the existing skill doesn't address",
+        "- Multiple source URLs exist but existing skill only covers content from one",
+        "",
+        "RETURN hasChanges: false ONLY IF:",
+        "- The existing skill already covers ALL topics from ALL source URLs",
+        "- New content is purely marketing fluff with no concrete facts",
+        "- Changes would only be cosmetic rewording of existing information",
+        "",
+        "IMPORTANT: If there are multiple source URLs about different topics but the existing skill only covers ONE topic, you MUST add the missing topics.",
+        "",
+        "DIFF-FRIENDLY EDITING:",
+        "- Make SURGICAL edits - only change what needs to change",
+        "- PRESERVE the original structure and formatting",
+        "- ADD new sections for new topics at the end",
+        "- ADD new bullet points within existing sections where appropriate",
+        "- DO NOT rewrite content that doesn't need to change",
+      ].join("\n"),
+      skill_analyze_rfp: [
+        "You are a knowledge management expert helping to organize security questionnaire responses into a structured skill library.",
+        "",
+        "Your task is to analyze Q&A pairs from completed RFPs and suggest how to incorporate this knowledge into an existing skill library.",
+        "",
+        "GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.",
+        "",
+        "PRINCIPLES:",
+        "1. Skills should cover BROAD CAPABILITY AREAS (like 'Security & Compliance', 'Data Platform', 'Integrations & APIs', 'Monitoring & Alerting')",
+        "2. STRONGLY PREFER updating existing skills over creating new ones",
+        "3. Only create a new skill if the content is genuinely unrelated to ALL existing skills",
+        "4. Think of skills like chapters in a book, not individual pages",
+        "5. When updating skills, add NEW information only - don't duplicate what's already there",
+        "",
+        "CONSOLIDATION BIAS:",
+        "- When in doubt, UPDATE an existing skill",
+        "- A skill about 'Security' can absorb content about encryption, access control, compliance, etc.",
+        "- A skill about 'Integrations' can absorb content about APIs, webhooks, SSO, authentication, etc.",
+        "- A skill about 'Data Platform' can absorb content about pipelines, warehouses, queries, etc.",
+      ].join("\n"),
     },
   },
   {
@@ -277,6 +350,65 @@ export const defaultBlocks: PromptBlock[] = [
         '  "optimizedPrompt": string,',
         '  "tokenEstimate": { "before": number, "after": number, "saved": number }',
         '}',
+      ].join("\n"),
+      skill_analyze: [
+        "Return a JSON object:",
+        "{",
+        '  "suggestion": {',
+        '    "action": "create_new" | "update_existing" | "split_topics",',
+        '    "existingSkillId": "id of skill to update (if update_existing)",',
+        '    "existingSkillTitle": "title of skill (if update_existing)",',
+        '    "suggestedTitle": "Broad capability area title (if create_new)",',
+        '    "suggestedCategory": "One of the available categories",',
+        '    "splitSuggestions": [{ "title": string, "category": string, "description": string, "relevantUrls": string[] }] (if split_topics)',
+        '    "reason": "Brief explanation of why this action was chosen"',
+        "  },",
+        '  "sourcePreview": "2-3 sentence summary of what the source material contains"',
+        "}",
+        "",
+        "TITLE GUIDELINES:",
+        "- Use broad titles: 'Security & Compliance', 'Monitoring & Observability', 'Data Integration'",
+        "- Avoid narrow titles: 'Password Policy', 'Alert Thresholds', 'Webhook Setup'",
+        "- Think: 'What chapter of the docs would this belong in?'",
+      ].join("\n"),
+      skill_refresh: [
+        "Return JSON only:",
+        "{",
+        '  "hasChanges": true/false,',
+        '  "summary": "What new facts/sections were added" OR "Skill already covers all source content",',
+        '  "title": "Keep same unless topic scope genuinely changed",',
+        '  "content": "COMPLETE skill content including both original AND new information",',
+        '  "changeHighlights": ["Added X details", "Added Y info", ...] // Empty if no changes',
+        "}",
+      ].join("\n"),
+      skill_analyze_rfp: [
+        "You MUST respond with valid JSON in this exact structure:",
+        "{",
+        '  "suggestions": [',
+        "    {",
+        '      "type": "update" or "new",',
+        '      "skillId": "existing skill ID if type=update, omit if type=new",',
+        '      "skillTitle": "title of skill to update or create",',
+        '      "category": "One of the categories above (required for new skills)",',
+        '      "suggestedAdditions": "the actual content to add - well-formatted, factual statements",',
+        '      "relevantQAIndices": [array of Q&A indices that informed this suggestion]',
+        "    }",
+        "  ],",
+        '  "unmatchedIndices": [array of Q&A indices that couldn\'t be matched]',
+        "}",
+        "",
+        "GUIDELINES FOR SUGGESTED ADDITIONS:",
+        "- Extract factual statements, not questions",
+        "- Format as clear, professional documentation",
+        "- Use bullet points for lists",
+        "- Include specific details (tools, timeframes, processes)",
+        "- Remove any customer-specific context",
+        "- Make it reusable for future questionnaires",
+        "",
+        "TITLE GUIDELINES FOR NEW SKILLS:",
+        "- Use broad titles: 'Security & Compliance', 'Monitoring & Observability', 'Data Integration'",
+        "- Avoid narrow titles: 'Password Policy', 'Alert Thresholds', 'Webhook Setup'",
+        "- Think: 'What chapter of the docs would this belong in?'",
       ].join("\n"),
     },
   },
@@ -527,6 +659,24 @@ export const defaultCompositions: PromptComposition[] = [
   {
     context: "prompt_optimize",
     blockIds: ["role_mission", "processing_guidelines", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "skill_analyze",
+    blockIds: ["role_mission", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "skill_refresh",
+    blockIds: ["role_mission", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "skill_analyze_rfp",
+    blockIds: ["role_mission", "output_format"],
     supportsModes: false,
     supportsDomains: false,
   },

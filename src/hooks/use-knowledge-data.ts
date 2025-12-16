@@ -125,8 +125,10 @@ export function useAllUsers() {
     queryFn: async (): Promise<AppUser[]> => {
       const res = await fetch("/api/users");
       if (!res.ok) throw new Error("Failed to fetch users");
-      const data = await res.json();
-      return (data.users || []) as AppUser[];
+      const json = await res.json();
+      // API returns { data: { users: [...] } } format
+      const data = json.data?.users ?? json.users ?? [];
+      return Array.isArray(data) ? data : [];
     },
   });
 }

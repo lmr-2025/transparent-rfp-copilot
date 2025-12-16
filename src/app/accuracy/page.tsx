@@ -83,7 +83,8 @@ export default function AccuracyPage() {
       const res = await fetch(`/api/accuracy/stats?days=${days}`);
       if (!res.ok) throw new Error("Failed to fetch accuracy data");
       const result = await res.json();
-      setData(result);
+      // Handle both old format (direct data) and new format ({ data: ... })
+      setData(result.data || result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
@@ -95,7 +96,7 @@ export default function AccuracyPage() {
     fetchData();
   }, [fetchData]);
 
-  const maxDaily = data?.daily.reduce((max, d) => Math.max(max, d.total), 0) || 1;
+  const maxDaily = data?.daily?.reduce((max, d) => Math.max(max, d.total), 0) || 1;
 
   return (
     <div style={{ padding: "40px", maxWidth: "1200px", margin: "0 auto" }}>

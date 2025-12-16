@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
@@ -13,87 +13,27 @@ import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { Skill } from "@/types/skill";
 import SkillUpdateBanner from "@/components/SkillUpdateBanner";
 import SkillRecommendation from "@/components/SkillRecommendation";
-import TransparencyDetails from "@/components/TransparencyDetails";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import DomainSelector, { Domain } from "@/components/DomainSelector";
 import { useFlagReview } from "@/components/FlagReviewModal";
-import ReviewStatusBanner, { getEffectiveReviewStatus, getReviewerName } from "@/components/ReviewStatusBanner";
 
-type QuestionHistoryItem = {
-  id: string;
-  question: string;
-  response: string;
-  confidence?: string;
-  sources?: string;
-  reasoning?: string;
-  inference?: string;
-  remarks?: string;
-  skillsUsed?: { id: string; title: string }[];
-  createdAt: string;
-  reviewStatus?: string;
-  reviewNote?: string;
-  reviewRequestedBy?: string;
-  reviewedBy?: string;
-  flaggedForReview?: boolean;
-  flagNote?: string;
-};
-
-const formatHistoryDate = (dateString: string) => {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString();
-};
-
-const styles = {
-  container: {
-    maxWidth: "900px",
-    margin: "0 auto",
-    padding: "24px",
-    fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
-  },
-  card: {
-    border: "1px solid #e2e8f0",
-    borderRadius: "12px",
-    padding: "20px",
-    marginBottom: "20px",
-    backgroundColor: "#fff",
-  },
-  input: {
-    width: "100%",
-    padding: "12px",
-    borderRadius: "8px",
-    border: "1px solid #e2e8f0",
-    marginTop: "4px",
-    fontSize: "0.95rem",
-  },
-  button: {
-    padding: "12px 20px",
-    borderRadius: "8px",
-    border: "none",
-    cursor: "pointer",
-    fontWeight: 600,
-  },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "8px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-};
+import {
+  QuestionHistoryPanel,
+  ResponseSection,
+  styles,
+  QuestionHistoryItem,
+} from "./components";
 
 export default function QuestionsPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner title="Loading..." />}>
+      <QuestionsPageContent />
+    </Suspense>
+  );
+}
+
+function QuestionsPageContent() {
   const searchParams = useSearchParams();
   const [questionText, setQuestionText] = useState("");
   const [questionResponse, setQuestionResponse] = useState("");
@@ -136,7 +76,8 @@ export default function QuestionsPage() {
     try {
       const response = await fetch("/api/question-history?limit=20");
       if (response.ok) {
-        const data = await response.json();
+        const json = await response.json();
+        const data = json.data ?? json;
         setQuestionHistory(data.history || []);
       }
     } catch {
@@ -173,10 +114,11 @@ export default function QuestionsPage() {
           skillsUsed,
         }),
       });
-      const data = await res.json();
+      const json = await res.json();
+      const data = json.data ?? json;
       // Refresh history after saving
       fetchHistory();
-      return data.id || null;
+      return data.entry?.id || data.id || null;
     } catch {
       // Silent failure - saving history is not critical
       return null;
@@ -234,7 +176,8 @@ export default function QuestionsPage() {
     try {
       const response = await fetch(`/api/question-history/${id}`);
       if (response.ok) {
-        const data = await response.json();
+        const json = await response.json();
+        const data = json.data ?? json;
         if (data.question) {
           const item = data.question;
           setQuestionText(item.question);
@@ -343,9 +286,10 @@ export default function QuestionsPage() {
           domains: selectedDomains.length > 0 ? selectedDomains : undefined,
         }),
       });
-      const data = await response.json().catch(() => null);
+      const json = await response.json().catch(() => null);
+      const data = json?.data ?? json;
       if (!response.ok || !data?.answer) {
-        throw new Error(data?.error || "Failed to generate response.");
+        throw new Error(json?.error || data?.error || "Failed to generate response.");
       }
       const parsed = parseAnswerSections(data.answer);
       setQuestionResponse(parsed.response);
@@ -571,131 +515,15 @@ export default function QuestionsPage() {
       <SkillUpdateBanner skills={availableSkills} />
 
       {/* Question History Panel */}
-      <div style={{ marginBottom: "20px" }}>
-        <button
-          type="button"
-          onClick={() => setShowHistory(!showHistory)}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            padding: "10px 16px",
-            backgroundColor: showHistory ? "#dbeafe" : "#f8fafc",
-            border: "1px solid #e2e8f0",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "0.9rem",
-            color: "#475569",
-            fontWeight: 500,
-            width: "100%",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>📜 Question History {session?.user ? `(${questionHistory.length})` : ""}</span>
-          <span style={{ fontSize: "0.8rem" }}>{showHistory ? "▲" : "▼"}</span>
-        </button>
-
-        {showHistory && (
-          <div
-            style={{
-              marginTop: "8px",
-              border: "1px solid #e2e8f0",
-              borderRadius: "8px",
-              backgroundColor: "#fff",
-              maxHeight: "400px",
-              overflowY: "auto",
-            }}
-          >
-            {!session?.user ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
-                <Link href="/auth/signin" style={{ color: "#0ea5e9", fontWeight: 500 }}>Sign in</Link> to save and view your question history.
-              </div>
-            ) : loadingHistory ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
-                Loading history...
-              </div>
-            ) : questionHistory.length === 0 ? (
-              <div style={{ padding: "20px", textAlign: "center", color: "#64748b" }}>
-                No question history yet. Ask a question to get started!
-              </div>
-            ) : (
-                questionHistory.map((item) => (
-                  <div
-                    key={item.id}
-                    style={{
-                      padding: "12px 16px",
-                      borderBottom: "1px solid #f1f5f9",
-                      cursor: "pointer",
-                      transition: "background-color 0.15s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#f8fafc")}
-                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                      <div
-                        style={{ flex: 1, cursor: "pointer" }}
-                        onClick={() => loadHistoryItem(item)}
-                      >
-                        <div
-                          style={{
-                            fontWeight: 500,
-                            color: "#1e293b",
-                            marginBottom: "4px",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            maxWidth: "calc(100% - 100px)",
-                          }}
-                        >
-                          {item.question}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: "0.8rem",
-                            color: "#64748b",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            whiteSpace: "nowrap",
-                            maxWidth: "calc(100% - 100px)",
-                          }}
-                        >
-                          {item.response.slice(0, 100)}...
-                        </div>
-                        <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: "4px" }}>
-                          {formatHistoryDate(item.createdAt)}
-                          {item.confidence && (
-                            <span style={{ marginLeft: "8px" }}>• {item.confidence}</span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteHistoryItem(item.id);
-                        }}
-                        style={{
-                          padding: "4px 8px",
-                          backgroundColor: "transparent",
-                          border: "none",
-                          color: "#94a3b8",
-                          cursor: "pointer",
-                          fontSize: "0.8rem",
-                          borderRadius: "4px",
-                        }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = "#ef4444")}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
-                        title="Delete from history"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-        </div>
+      <QuestionHistoryPanel
+        showHistory={showHistory}
+        setShowHistory={setShowHistory}
+        questionHistory={questionHistory}
+        isLoggedIn={!!session?.user}
+        loadingHistory={loadingHistory}
+        onLoadHistoryItem={loadHistoryItem}
+        onDeleteHistoryItem={deleteHistoryItem}
+      />
 
       {errorMessage && <div style={styles.error}>{errorMessage}</div>}
 
@@ -758,264 +586,34 @@ export default function QuestionsPage() {
 
         {/* Response Section */}
         {questionResponse && (
-          <div style={{
-            marginTop: "20px",
-            padding: "16px",
-            backgroundColor: isEditing ? "#fefce8" : "#f8fafc",
-            borderRadius: "8px",
-            border: isEditing ? "2px solid #fbbf24" : "1px solid #e2e8f0",
-          }}>
-            {/* Review Status Banner */}
-            {!isEditing && (
-              <ReviewStatusBanner
-                status={getEffectiveReviewStatus(currentReviewStatus, null)}
-                reviewedBy={getReviewerName(currentReviewStatus, currentReviewedBy, null)}
-              />
-            )}
-            {currentFlagged && currentReviewStatus !== "REQUESTED" && !isEditing && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "8px 12px",
-                marginBottom: "12px",
-                borderRadius: "6px",
-                fontSize: "0.85rem",
-                backgroundColor: "#fee2e2",
-                color: "#b91c1c",
-                border: "1px solid #fecaca",
-              }}>
-                <span>🚩</span>
-                <span><strong>Flagged</strong> - This answer has been flagged for investigation</span>
-                {currentFlagNote && <span style={{ fontStyle: "italic" }}>: &quot;{currentFlagNote}&quot;</span>}
-              </div>
-            )}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-              <h3 style={{ margin: 0, fontSize: "1rem", color: "#0f172a" }}>
-                {isEditing ? "Edit Response" : "Response"}
-              </h3>
-              {!isEditing && currentHistoryId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditedResponse(questionResponse);
-                    setIsEditing(true);
-                  }}
-                  style={{
-                    padding: "4px 10px",
-                    fontSize: "0.8rem",
-                    backgroundColor: "#f1f5f9",
-                    color: "#64748b",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Edit
-                </button>
-              )}
-            </div>
-            {isEditing ? (
-              <div>
-                <textarea
-                  value={editedResponse}
-                  onChange={(e) => setEditedResponse(e.target.value)}
-                  style={{
-                    width: "100%",
-                    minHeight: "200px",
-                    padding: "12px",
-                    borderRadius: "8px",
-                    border: "1px solid #e2e8f0",
-                    fontSize: "0.95rem",
-                    lineHeight: 1.6,
-                    resize: "vertical",
-                    fontFamily: "inherit",
-                  }}
-                />
-                <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={handleSaveCorrection}
-                    disabled={isSaving || !editedResponse.trim()}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "0.9rem",
-                      backgroundColor: isSaving ? "#94a3b8" : "#3b82f6",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: isSaving ? "not-allowed" : "pointer",
-                      fontWeight: 500,
-                    }}
-                  >
-                    {isSaving ? "Saving..." : "Save Correction"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleApprove}
-                    disabled={isSaving}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "0.9rem",
-                      backgroundColor: isSaving ? "#94a3b8" : "#22c55e",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: isSaving ? "not-allowed" : "pointer",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Approve (No Change Needed)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setEditedResponse("");
-                    }}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: "0.9rem",
-                      backgroundColor: "#f1f5f9",
-                      color: "#64748b",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.6,
-                color: "#1e293b",
-                fontSize: "0.95rem",
-              }}>
-                {questionResponse}
-              </div>
-            )}
-
-            {/* Transparency Details using component */}
-            <TransparencyDetails
-              data={{
-                confidence: questionConfidence,
-                reasoning: questionReasoning,
-                inference: questionInference,
-                remarks: questionRemarks,
-                sources: questionSources,
-              }}
-              defaultExpanded={detailsExpanded}
-              onToggle={setDetailsExpanded}
-              knowledgeReferences={currentUsedSkills.map(skill => ({
-                id: skill.id,
-                title: skill.title,
-                type: "skill" as const,
-              }))}
-              renderClarifyButton={!conversationOpen ? () => (
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => setConversationOpen(true)}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "6px 12px",
-                      fontSize: "0.8rem",
-                      backgroundColor: "#0ea5e9",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      fontWeight: 500,
-                    }}
-                  >
-                    Clarify
-                  </button>
-                  {session?.user && currentHistoryId && !currentFlagged && currentReviewStatus !== "REQUESTED" && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleFlagOrReview("flag")}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "6px 12px",
-                          fontSize: "0.8rem",
-                          backgroundColor: "#f1f5f9",
-                          color: "#64748b",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: 500,
-                        }}
-                      >
-                        🚩 Flag
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleFlagOrReview("need-help")}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          padding: "6px 12px",
-                          fontSize: "0.8rem",
-                          backgroundColor: "#f1f5f9",
-                          color: "#64748b",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: "6px",
-                          cursor: "pointer",
-                          fontWeight: 500,
-                        }}
-                      >
-                        🤚 Need Help?
-                      </button>
-                    </>
-                  )}
-                  {session?.user && currentHistoryId && currentFlagged && currentReviewStatus !== "REQUESTED" && (
-                    <button
-                      type="button"
-                      onClick={handleUnflag}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 12px",
-                        fontSize: "0.8rem",
-                        backgroundColor: "#fee2e2",
-                        color: "#b91c1c",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "6px",
-                        cursor: "pointer",
-                        fontWeight: 500,
-                      }}
-                    >
-                      ✕ Unflag
-                    </button>
-                  )}
-                  {session?.user && currentHistoryId && currentReviewStatus === "REQUESTED" && (
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        padding: "6px 12px",
-                        fontSize: "0.8rem",
-                        backgroundColor: "#dbeafe",
-                        color: "#1d4ed8",
-                        border: "1px solid #bfdbfe",
-                        borderRadius: "6px",
-                        fontWeight: 500,
-                      }}
-                    >
-                      📨 Review Requested
-                    </span>
-                  )}
-                </div>
-              ) : undefined}
-            />
-          </div>
+          <ResponseSection
+            questionResponse={questionResponse}
+            questionConfidence={questionConfidence}
+            questionSources={questionSources}
+            questionRemarks={questionRemarks}
+            questionReasoning={questionReasoning}
+            questionInference={questionInference}
+            currentUsedSkills={currentUsedSkills}
+            currentHistoryId={currentHistoryId}
+            currentFlagged={currentFlagged}
+            currentFlagNote={currentFlagNote}
+            currentReviewStatus={currentReviewStatus}
+            currentReviewedBy={currentReviewedBy}
+            isEditing={isEditing}
+            editedResponse={editedResponse}
+            isSaving={isSaving}
+            isLoggedIn={!!session?.user}
+            detailsExpanded={detailsExpanded}
+            conversationOpen={conversationOpen}
+            onSetEditedResponse={setEditedResponse}
+            onSetIsEditing={setIsEditing}
+            onSetDetailsExpanded={setDetailsExpanded}
+            onSetConversationOpen={setConversationOpen}
+            onSaveCorrection={handleSaveCorrection}
+            onApprove={handleApprove}
+            onFlagOrReview={handleFlagOrReview}
+            onUnflag={handleUnflag}
+          />
         )}
 
         {/* Skill Recommendations */}

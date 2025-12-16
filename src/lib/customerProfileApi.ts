@@ -37,8 +37,10 @@ export async function fetchAllProfiles(): Promise<CustomerProfile[]> {
   if (!response.ok) {
     throw new Error("Failed to fetch customer profiles");
   }
-  const data = await response.json();
-  return data.profiles.map(transformProfileFromDb);
+  const result = await response.json();
+  // Handle both { data: { profiles: [...] } } and { profiles: [...] } formats
+  const data = result.data || result;
+  return (data.profiles || []).map(transformProfileFromDb);
 }
 
 export async function fetchActiveProfiles(): Promise<CustomerProfile[]> {
@@ -46,8 +48,10 @@ export async function fetchActiveProfiles(): Promise<CustomerProfile[]> {
   if (!response.ok) {
     throw new Error("Failed to fetch active customer profiles");
   }
-  const data = await response.json();
-  return data.profiles.map(transformProfileFromDb);
+  const result = await response.json();
+  // Handle both { data: { profiles: [...] } } and { profiles: [...] } formats
+  const data = result.data || result;
+  return (data.profiles || []).map(transformProfileFromDb);
 }
 
 export async function fetchProfile(id: string): Promise<CustomerProfile | null> {
@@ -58,8 +62,10 @@ export async function fetchProfile(id: string): Promise<CustomerProfile | null> 
   if (!response.ok) {
     throw new Error("Failed to fetch customer profile");
   }
-  const data = await response.json();
-  return transformProfileFromDb(data.profile);
+  const result = await response.json();
+  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
+  const data = result.data || result;
+  return data.profile ? transformProfileFromDb(data.profile) : null;
 }
 
 export async function createProfile(
@@ -72,9 +78,11 @@ export async function createProfile(
   });
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || "Failed to create customer profile");
+    throw new Error(error.error?.message || error.error || "Failed to create customer profile");
   }
-  const data = await response.json();
+  const result = await response.json();
+  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
+  const data = result.data || result;
   return transformProfileFromDb(data.profile);
 }
 
@@ -89,9 +97,11 @@ export async function updateProfile(
   });
   if (!response.ok) {
     const error = await response.json();
-    throw new Error(error.error || "Failed to update customer profile");
+    throw new Error(error.error?.message || error.error || "Failed to update customer profile");
   }
-  const data = await response.json();
+  const result = await response.json();
+  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
+  const data = result.data || result;
   return transformProfileFromDb(data.profile);
 }
 

@@ -64,8 +64,11 @@ export async function loadCategoriesFromApi(): Promise<SkillCategoryItem[]> {
   try {
     const response = await fetch("/api/skill-categories");
     if (!response.ok) throw new Error("API fetch failed");
-    const data = await response.json();
-    cachedCategories = data.map((cat: { id: string; name: string; description?: string; color?: string; createdAt: string }) => ({
+    const result = await response.json();
+    // Handle both { data: { categories: [...] } } and direct array formats
+    const data = result.data?.categories ?? result.categories ?? result;
+    const categories = Array.isArray(data) ? data : [];
+    cachedCategories = categories.map((cat: { id: string; name: string; description?: string; color?: string; createdAt: string }) => ({
       id: cat.id,
       name: cat.name,
       description: cat.description,
@@ -101,7 +104,9 @@ export async function addCategory(name: string, description?: string): Promise<S
     throw new Error(error.error || "Failed to create category");
   }
 
-  const created = await response.json();
+  const result = await response.json();
+  // Handle both { data: { category: {...} } } and direct object formats
+  const created = result.data?.category ?? result.category ?? result;
   const newCategory: SkillCategoryItem = {
     id: created.id,
     name: created.name,

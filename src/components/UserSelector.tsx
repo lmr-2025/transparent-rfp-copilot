@@ -40,7 +40,9 @@ export default function UserSelector({
         if (!response.ok) {
           throw new Error("Failed to fetch users");
         }
-        const data = await response.json();
+        const result = await response.json();
+        // Handle both { data: { users: [...] } } and { users: [...] } formats
+        const data = result.data || result;
         setUsers(data.users || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load users");

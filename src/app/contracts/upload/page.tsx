@@ -247,8 +247,9 @@ export default function ContractUploadPage() {
         throw new Error(data.error || "Upload failed");
       }
 
-      const data = await response.json();
-      setUploadedId(data.id);
+      const json = await response.json();
+      const data = json.data ?? json;
+      setUploadedId(data.contract?.id || data.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {

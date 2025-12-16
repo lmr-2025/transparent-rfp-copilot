@@ -26,8 +26,10 @@ export async function fetchAllCategories(): Promise<SkillCategoryItem[]> {
   if (!response.ok) {
     throw new Error("Failed to fetch skill categories");
   }
-  const data = await response.json() as DbSkillCategory[];
-  return data.map(mapToFrontend);
+  const result = await response.json();
+  // Handle both { data: { categories: [...] } } and direct array formats
+  const data = result.data?.categories ?? result.categories ?? result;
+  return (Array.isArray(data) ? data : []).map(mapToFrontend);
 }
 
 export async function createCategory(
@@ -43,7 +45,9 @@ export async function createCategory(
   if (!response.ok) {
     throw new Error("Failed to create skill category");
   }
-  const data = await response.json() as DbSkillCategory;
+  const result = await response.json();
+  // Handle both { data: { category: {...} } } and direct object formats
+  const data = (result.data?.category ?? result.category ?? result) as DbSkillCategory;
   return mapToFrontend(data);
 }
 
@@ -59,7 +63,9 @@ export async function updateCategory(
   if (!response.ok) {
     throw new Error("Failed to update skill category");
   }
-  const data = await response.json() as DbSkillCategory;
+  const result = await response.json();
+  // Handle both { data: { category: {...} } } and direct object formats
+  const data = (result.data?.category ?? result.category ?? result) as DbSkillCategory;
   return mapToFrontend(data);
 }
 
@@ -83,8 +89,10 @@ export async function reorderCategories(
   if (!response.ok) {
     throw new Error("Failed to reorder skill categories");
   }
-  const data = await response.json() as DbSkillCategory[];
-  return data.map(mapToFrontend);
+  const result = await response.json();
+  // Handle both { data: { categories: [...] } } and direct array formats
+  const data = result.data?.categories ?? result.categories ?? result;
+  return (Array.isArray(data) ? data : []).map(mapToFrontend);
 }
 
 // Helper to get just the category names (for prompts)

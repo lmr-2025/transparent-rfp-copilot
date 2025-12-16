@@ -9,6 +9,7 @@ import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -223,39 +224,8 @@ async function generateDraftUpdate(
 ): Promise<DraftUpdateResponse> {
   const anthropic = getAnthropicClient();
 
-  const systemPrompt = `You are a knowledge extraction specialist reviewing an existing skill against refreshed source material.
-
-YOUR GOAL: Ensure the skill comprehensively covers ALL the information from the source URLs.
-
-RETURN hasChanges: true IF ANY of these are true:
-- Source contains information about platforms/integrations NOT in existing skill
-- Source has specific technical details (numbers, versions, capabilities) not captured
-- Source describes features, limitations, or requirements not mentioned
-- Source covers topics/sections that the existing skill doesn't address
-- Multiple source URLs exist but existing skill only covers content from one
-
-RETURN hasChanges: false ONLY IF:
-- The existing skill already covers ALL topics from ALL source URLs
-- New content is purely marketing fluff with no concrete facts
-- Changes would only be cosmetic rewording of existing information
-
-IMPORTANT: If there are multiple source URLs about different topics (e.g., Snowflake, Teradata, Salesforce) but the existing skill only covers ONE topic, you MUST add the missing topics.
-
-DIFF-FRIENDLY EDITING:
-- Make SURGICAL edits - only change what needs to change
-- PRESERVE the original structure and formatting
-- ADD new sections for new topics at the end
-- ADD new bullet points within existing sections where appropriate
-- DO NOT rewrite content that doesn't need to change
-
-OUTPUT (JSON only):
-{
-  "hasChanges": true/false,
-  "summary": "What new facts/sections were added" OR "Skill already covers all source content",
-  "title": "Keep same unless topic scope genuinely changed",
-  "content": "COMPLETE skill content including both original AND new information",
-  "changeHighlights": ["Added Snowflake integration details", "Added Teradata support info", ...] // Empty if no changes
-}`;
+  // Load system prompt from block system
+  const systemPrompt = await loadSystemPrompt("skill_refresh", "You are a knowledge extraction specialist.");
 
   const userPrompt = `EXISTING SKILL:
 Title: ${existingSkill.title}

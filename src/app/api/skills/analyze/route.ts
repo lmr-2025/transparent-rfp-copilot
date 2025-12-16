@@ -7,6 +7,7 @@ import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
 type ExistingSkillInfo = {
   id: string;
@@ -201,6 +202,7 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
 
       const response = await fetch(parsed.toString(), {
         headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
+        signal: AbortSignal.timeout(10000), // 10 second timeout per URL
       });
       if (!response.ok) return null;
 
@@ -235,67 +237,15 @@ async function analyzeContent(
 
   const categoriesList = (await getCategoryNamesFromDb()).join(", ");
 
-  const systemPrompt = `You are a knowledge management expert helping organize documentation into broad, comprehensive skills.
+  // Load base prompt from block system
+  const basePrompt = await loadSystemPrompt("skill_analyze", "You are a knowledge management expert.");
 
-Your task is to analyze new source material and decide how it should be organized.
-
-GOAL: Build a compact knowledge base of 15-30 comprehensive skills, NOT 100+ narrow ones.
-
-PRINCIPLES:
-1. Skills should cover BROAD CAPABILITY AREAS (like "Security & Compliance", "Data Platform", "Integrations & APIs", "Monitoring & Alerting")
-2. STRONGLY PREFER updating existing skills over creating new ones
-3. Only create a new skill if the content is genuinely unrelated to ALL existing skills
-4. Think of skills like chapters in a book, not individual pages
-
-DECISION TREE:
-1. First, look for ANY existing skill that could reasonably contain this content → UPDATE_EXISTING
-2. Only if no existing skill is even remotely related → CREATE_NEW
-3. RARELY use split_topics - only if content covers 2+ completely unrelated domains
-
-CONSOLIDATION BIAS:
-- When in doubt, UPDATE an existing skill
-- A skill about "Security" can absorb content about encryption, access control, compliance, etc.
-- A skill about "Integrations" can absorb content about APIs, webhooks, SSO, authentication, etc.
-- A skill about "Data Platform" can absorb content about pipelines, warehouses, queries, etc.
+  // Build system prompt with dynamic categories
+  const systemPrompt = `${basePrompt}
 
 CATEGORIES:
 Every skill must belong to exactly one category. Available categories:
-${categoriesList}
-
-OUTPUT FORMAT:
-Return a JSON object:
-{
-  "suggestion": {
-    "action": "create_new" | "update_existing" | "split_topics",
-
-    // For update_existing:
-    "existingSkillId": "id of the skill to update",
-    "existingSkillTitle": "title of the skill",
-
-    // For create_new:
-    "suggestedTitle": "Broad capability area title",
-    "suggestedCategory": "One of the categories above",
-    "suggestedTags": ["relevant", "tags"],
-
-    // For split_topics (use rarely):
-    "splitSuggestions": [
-      {
-        "title": "First Capability Area",
-        "category": "One of the categories above",
-        "description": "What this skill would cover",
-        "relevantUrls": ["urls that relate to this topic"]
-      }
-    ],
-
-    "reason": "Brief explanation of why this action was chosen"
-  },
-  "sourcePreview": "2-3 sentence summary of what the source material contains"
-}
-
-TITLE GUIDELINES:
-- Use broad titles: "Security & Compliance", "Monitoring & Observability", "Data Integration"
-- Avoid narrow titles: "Password Policy", "Alert Thresholds", "Webhook Setup"
-- Think: "What chapter of the docs would this belong in?"`;
+${categoriesList}`;
 
   const userPrompt = `EXISTING SKILLS IN KNOWLEDGE BASE:
 ${skillsSummary}
@@ -353,6 +303,7 @@ async function analyzeAndGroupSources(
 
         const response = await fetch(parsed.toString(), {
           headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
+          signal: AbortSignal.timeout(10000), // 10 second timeout per URL
         });
         if (!response.ok) return { type: "url", url, content: "[Could not fetch content]" };
 
@@ -400,19 +351,20 @@ async function analyzeAndGroupSources(
   const hasUrls = sourceUrls.length > 0;
   const hasDocs = sourceDocuments.length > 0;
 
-  const systemPrompt = `You are a knowledge management expert helping organize documentation into skills.
+  // Load base role/mission prompt from block system
+  const basePrompt = await loadSystemPrompt("skill_analyze", "You are a knowledge management expert.");
+
+  // Build system prompt with grouped-specific output format
+  const systemPrompt = `${basePrompt}
 
 Your task is to analyze ${hasUrls && hasDocs ? "URLs and documents" : hasUrls ? "URLs" : "documents"} and GROUP them into skill recommendations. Each group becomes one skill.
-
-GOAL: Group related sources together so each skill is comprehensive. A skill should cover a BROAD CAPABILITY AREA.
 
 RULES:
 1. Group sources by TOPIC SIMILARITY - sources about the same feature/capability go together
 2. PREFER updating existing skills over creating new ones
 3. Each source (URL or document) must appear in exactly one group
 4. A group can have 1 or many sources
-5. Skills should be broad (like book chapters, not individual pages)
-6. Sources can be mixed (URLs and documents in the same group if they cover the same topic)
+5. Sources can be mixed (URLs and documents in the same group if they cover the same topic)
 
 OUTPUT FORMAT:
 Return a JSON object:

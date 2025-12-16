@@ -23,6 +23,11 @@ interface ReviewItem {
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
+  // Flag resolution fields
+  flagResolved?: boolean;
+  flagResolvedAt?: string;
+  flagResolvedBy?: string;
+  flagResolutionNote?: string;
   // Source info
   source: "project" | "questions";
   project: {
@@ -242,6 +247,8 @@ export default function ReviewsPage() {
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0, flagged: 0 });
   const [loading, setLoading] = useState(true);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [resolutionNote, setResolutionNote] = useState("");
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
@@ -297,8 +304,39 @@ export default function ReviewsPage() {
       } else {
         toast.error("Failed to approve");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to approve");
+    }
+  };
+
+  const handleResolveFlag = async (review: ReviewItem) => {
+    try {
+      let url: string;
+      if (review.source === "project" && review.project) {
+        url = `/api/projects/${review.project.id}/rows/${review.id}`;
+      } else {
+        url = `/api/question-history/${review.id}`;
+      }
+
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flagResolved: true,
+          flagResolutionNote: resolutionNote || null,
+        }),
+      });
+
+      if (response.ok) {
+        toast.success("Flag resolved!");
+        setResolvingId(null);
+        setResolutionNote("");
+        fetchReviews();
+      } else {
+        toast.error("Failed to resolve flag");
+      }
+    } catch {
+      toast.error("Failed to resolve flag");
     }
   };
 
@@ -494,6 +532,61 @@ export default function ReviewsPage() {
                       </Link>
                     )}
                   </>
+                )}
+
+                {/* Resolve Flag button for flagged items */}
+                {review.flaggedForReview && !review.flagResolved && review.reviewStatus !== "REQUESTED" && (
+                  resolvingId === review.id ? (
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flex: 1 }}>
+                      <input
+                        type="text"
+                        placeholder="Resolution note (optional)"
+                        value={resolutionNote}
+                        onChange={(e) => setResolutionNote(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "6px",
+                        }}
+                      />
+                      <button
+                        onClick={() => handleResolveFlag(review)}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#22c55e",
+                          color: "#fff",
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => {
+                          setResolvingId(null);
+                          setResolutionNote("");
+                        }}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#f1f5f9",
+                          color: "#64748b",
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setResolvingId(review.id)}
+                      style={{
+                        ...styles.button,
+                        backgroundColor: "#22c55e",
+                        color: "#fff",
+                      }}
+                    >
+                      Resolve Flag
+                    </button>
+                  )
                 )}
               </div>
             </div>

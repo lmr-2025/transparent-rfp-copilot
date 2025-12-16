@@ -119,7 +119,8 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         }
         throw new Error("Failed to fetch contract");
       }
-      const data = await response.json();
+      const json = await response.json();
+      const data = json.data ?? json;
       setContract(data);
       setNotes(data.notes || "");
     } catch (err) {

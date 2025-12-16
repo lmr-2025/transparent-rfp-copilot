@@ -41,10 +41,33 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (body.flaggedForReview) {
         updateData.flaggedAt = new Date();
         updateData.flaggedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
+        // Clear any previous resolution when re-flagging
+        updateData.flagResolved = false;
+        updateData.flagResolvedAt = null;
+        updateData.flagResolvedBy = null;
+        updateData.flagResolutionNote = null;
       }
     }
     if (body.flagNote !== undefined) {
       updateData.flagNote = body.flagNote;
+    }
+
+    // Flag resolution fields (close flag while preserving audit trail)
+    if (body.flagResolved !== undefined) {
+      updateData.flagResolved = body.flagResolved;
+      if (body.flagResolved) {
+        updateData.flagResolvedAt = new Date();
+        updateData.flagResolvedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
+        // Keep flaggedForReview true to preserve the audit trail - flag is resolved, not removed
+      } else {
+        // Re-opening a resolved flag
+        updateData.flagResolvedAt = null;
+        updateData.flagResolvedBy = null;
+        updateData.flagResolutionNote = null;
+      }
+    }
+    if (body.flagResolutionNote !== undefined) {
+      updateData.flagResolutionNote = body.flagResolutionNote;
     }
 
     // Queue fields (for batch review workflow - persisted across sessions)
@@ -143,6 +166,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           projectName: row.project.name,
           response: row.response,
           confidence: row.confidence,
+        },
+        requestContext
+      );
+    } else if (body.flagResolved === true) {
+      // Flag was resolved/closed
+      await logAnswerChange(
+        "FLAG_RESOLVED",
+        rowId,
+        row.question?.substring(0, 100) || "Answer",
+        user,
+        undefined,
+        {
+          projectId,
+          projectName: row.project.name,
+          flagNote: row.flagNote,
+          flaggedBy: row.flaggedBy,
+          flaggedAt: row.flaggedAt,
+          resolutionNote: body.flagResolutionNote,
         },
         requestContext
       );

@@ -106,8 +106,9 @@ export default function ContractLibraryPage() {
     try {
       const response = await fetch("/api/contracts");
       if (!response.ok) throw new Error("Failed to fetch contracts");
-      const data = await response.json();
-      setContracts(data);
+      const json = await response.json();
+      const data = json.data ?? json;
+      setContracts(data.contracts || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load contracts");
     } finally {
