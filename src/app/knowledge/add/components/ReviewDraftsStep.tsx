@@ -1,9 +1,15 @@
 "use client";
 
-import { ArrowLeft, Eye, Edit3 } from "lucide-react";
+import { useState, useRef } from "react";
+import { ArrowLeft, Eye, Edit3, MessageSquare, Send, Loader2, X } from "lucide-react";
 import { diffLines, Change } from "diff";
 import { type SkillGroup } from "@/stores/bulk-import-store";
 import { styles, getGroupStatusStyle } from "./styles";
+
+interface ClarifyMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
 type ReviewDraftsStepProps = {
   skillGroups: SkillGroup[];
@@ -38,6 +44,84 @@ export default function ReviewDraftsStep({
   onBack,
   promptForContent,
 }: ReviewDraftsStepProps) {
+  // Clarify state - keyed by group ID
+  const [clarifyOpenFor, setClarifyOpenFor] = useState<string | null>(null);
+  const [clarifyMessages, setClarifyMessages] = useState<Record<string, ClarifyMessage[]>>({});
+  const [clarifyInput, setClarifyInput] = useState("");
+  const [isClarifying, setIsClarifying] = useState(false);
+  const clarifyEndRef = useRef<HTMLDivElement>(null);
+
+  const handleClarifySubmit = async (group: SkillGroup) => {
+    if (!clarifyInput.trim() || isClarifying) return;
+
+    const userMessage: ClarifyMessage = { role: 'user', content: clarifyInput.trim() };
+    setClarifyMessages(prev => ({
+      ...prev,
+      [group.id]: [...(prev[group.id] || []), userMessage],
+    }));
+    const inputText = clarifyInput.trim();
+    setClarifyInput("");
+    setIsClarifying(true);
+
+    try {
+      const systemPrompt = `You are explaining why you generated specific content for a knowledge skill.
+
+Skill being reviewed:
+- Title: "${group.draft?.title || group.skillTitle}"
+- Content: "${group.draft?.content || ''}"
+- Source URLs: ${group.urls.join(', ') || 'None'}
+${group.documents && group.documents.length > 0 ? `- Source Documents: ${group.documents.map(d => d.filename).join(', ')}` : ''}
+${group.type === 'update' ? `- This is an UPDATE to an existing skill` : '- This is a NEW skill'}
+${group.draft?.changeHighlights ? `- Changes made: ${group.draft.changeHighlights.join('; ')}` : ''}
+
+The user is reviewing this generated content and asking questions. Your role is to:
+1. Explain WHY you wrote specific content the way you did
+2. Cite which source URL or document contains the information
+3. If you're unsure or made an inference, be honest about it
+4. If the user points out an error, acknowledge it and suggest a correction
+
+Be direct and helpful. If something was inferred rather than directly stated in the sources, say so clearly.`;
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemPrompt,
+          messages: [
+            ...(clarifyMessages[group.id] || []).map(m => ({ role: m.role, content: m.content })),
+            { role: 'user', content: inputText },
+          ],
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to get response');
+
+      const json = await response.json();
+      const content = json.data?.content ?? json.content;
+      const assistantContent = (content as { type: string; text?: string }[])
+        .filter(block => block.type === 'text')
+        .map(block => block.text ?? '')
+        .join('\n');
+
+      setClarifyMessages(prev => ({
+        ...prev,
+        [group.id]: [...(prev[group.id] || []), { role: 'assistant', content: assistantContent }],
+      }));
+
+      setTimeout(() => clarifyEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+    } catch (error) {
+      setClarifyMessages(prev => ({
+        ...prev,
+        [group.id]: [...(prev[group.id] || []), {
+          role: 'assistant',
+          content: `Error: ${error instanceof Error ? error.message : 'Failed to get response'}`
+        }],
+      }));
+    } finally {
+      setIsClarifying(false);
+    }
+  };
+
   // Simple diff visualization
   const renderDiff = (original: string | undefined, updated: string) => {
     if (!original) {
@@ -246,8 +330,8 @@ export default function ReviewDraftsStep({
                   )}
                 </div>
 
-                {/* Edit Content Button */}
-                <div style={{ marginTop: "12px" }}>
+                {/* Action Buttons */}
+                <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button
                     onClick={async () => {
                       const newContent = await promptForContent({ defaultValue: group.draft?.content || "" });
@@ -255,11 +339,160 @@ export default function ReviewDraftsStep({
                         updateDraftField(group.id, "content", newContent);
                       }
                     }}
-                    style={{ padding: "8px 12px", backgroundColor: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px", cursor: "pointer" }}
+                    style={{ padding: "8px 12px", backgroundColor: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center" }}
                   >
                     <Edit3 size={14} style={{ marginRight: "4px" }} /> Edit Content
                   </button>
+                  <button
+                    onClick={() => setClarifyOpenFor(clarifyOpenFor === group.id ? null : group.id)}
+                    style={{
+                      padding: "8px 12px",
+                      backgroundColor: clarifyOpenFor === group.id ? "#dbeafe" : "#fff",
+                      color: clarifyOpenFor === group.id ? "#1e40af" : "#475569",
+                      border: `1px solid ${clarifyOpenFor === group.id ? "#93c5fd" : "#cbd5e1"}`,
+                      borderRadius: "6px",
+                      fontSize: "13px",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <MessageSquare size={14} style={{ marginRight: "4px" }} />
+                    {clarifyOpenFor === group.id ? "Hide Chat" : "Ask Why"}
+                  </button>
                 </div>
+
+                {/* Clarify Chat Panel */}
+                {clarifyOpenFor === group.id && (
+                  <div style={{
+                    marginTop: "12px",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                    backgroundColor: "#fff",
+                    overflow: "hidden",
+                  }}>
+                    <div style={{
+                      padding: "10px 12px",
+                      backgroundColor: "#0ea5e9",
+                      color: "#fff",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}>
+                      <span>Ask about this content</span>
+                      <button
+                        onClick={() => setClarifyOpenFor(null)}
+                        style={{ background: "none", border: "none", color: "#fff", cursor: "pointer", padding: "2px" }}
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+
+                    {/* Messages */}
+                    <div style={{
+                      padding: "12px",
+                      maxHeight: "250px",
+                      overflowY: "auto",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                      backgroundColor: "#f8fafc",
+                    }}>
+                      {(!clarifyMessages[group.id] || clarifyMessages[group.id].length === 0) && (
+                        <div style={{ color: "#64748b", fontSize: "13px", fontStyle: "italic" }}>
+                          Ask about the generated content. For example:
+                          <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
+                            <li>&quot;Why did you write it this way?&quot;</li>
+                            <li>&quot;Where did this information come from?&quot;</li>
+                            <li>&quot;Is this accurate?&quot;</li>
+                          </ul>
+                        </div>
+                      )}
+                      {(clarifyMessages[group.id] || []).map((msg, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: "8px",
+                            maxWidth: "100%",
+                            backgroundColor: msg.role === 'user' ? "#0ea5e9" : "#fff",
+                            color: msg.role === 'user' ? "#fff" : "#0f172a",
+                            border: msg.role === 'assistant' ? "1px solid #e2e8f0" : "none",
+                            alignSelf: msg.role === 'user' ? "flex-end" : "flex-start",
+                          }}
+                        >
+                          <div style={{ whiteSpace: "pre-wrap", fontSize: "13px", lineHeight: "1.5" }}>
+                            {msg.content}
+                          </div>
+                        </div>
+                      ))}
+                      {isClarifying && clarifyOpenFor === group.id && (
+                        <div style={{
+                          padding: "10px 12px",
+                          borderRadius: "8px",
+                          backgroundColor: "#fff",
+                          border: "1px solid #e2e8f0",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}>
+                          <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} />
+                          <span style={{ color: "#64748b", fontSize: "13px" }}>Thinking...</span>
+                        </div>
+                      )}
+                      <div ref={clarifyEndRef} />
+                    </div>
+
+                    {/* Input */}
+                    <div style={{
+                      padding: "10px 12px",
+                      borderTop: "1px solid #e2e8f0",
+                      backgroundColor: "#fff",
+                      display: "flex",
+                      gap: "8px",
+                    }}>
+                      <input
+                        type="text"
+                        value={clarifyInput}
+                        onChange={(e) => setClarifyInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleClarifySubmit(group);
+                          }
+                        }}
+                        placeholder="Ask about this content..."
+                        disabled={isClarifying}
+                        style={{
+                          flex: 1,
+                          padding: "8px 12px",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "6px",
+                          fontSize: "13px",
+                        }}
+                      />
+                      <button
+                        onClick={() => handleClarifySubmit(group)}
+                        disabled={!clarifyInput.trim() || isClarifying}
+                        style={{
+                          padding: "8px 12px",
+                          backgroundColor: clarifyInput.trim() && !isClarifying ? "#0ea5e9" : "#cbd5e1",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "6px",
+                          cursor: clarifyInput.trim() && !isClarifying ? "pointer" : "not-allowed",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        <Send size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
