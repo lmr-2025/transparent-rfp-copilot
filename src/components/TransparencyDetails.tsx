@@ -149,56 +149,91 @@ export default function TransparencyDetails({
   const hasExpandableContent = reasoning || inference || remarks || sources || renderClarifyButton;
   const confidenceStyle = getConfidenceStyle(confidence || "");
 
-  return (
-    <div style={{ marginTop: "8px", display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
-      {/* Confidence Badge */}
-      <span
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          padding: "6px 10px",
-          backgroundColor: confidenceStyle.bg,
-          border: `1px solid ${confidenceStyle.border}`,
-          borderRadius: "6px",
-          fontSize: "0.8rem",
-          color: confidenceStyle.text,
-          fontWeight: 500,
-        }}
-      >
-        <strong style={{ marginRight: "4px" }}>Confidence:</strong> {confidence || "N/A"}
-      </span>
+  // Check if there are non-trivial values for inline display
+  const hasInference = inference && inference.toLowerCase() !== "none";
+  const hasRemarks = remarks && remarks.toLowerCase() !== "none";
+  const hasDetailContent = reasoning || hasInference || hasRemarks || sources;
 
-      {/* Details Button */}
-      {hasExpandableContent && (
-        <button
-          type="button"
-          onClick={handleToggle}
+  return (
+    <div style={{ marginTop: "8px" }}>
+      {/* Top row: Confidence, Details button, Clarify button */}
+      <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
+        {/* Confidence Badge */}
+        <span
           style={{
             display: "inline-flex",
             alignItems: "center",
-            padding: "6px 12px",
-            backgroundColor: "#dbeafe",
-            border: "1px solid #93c5fd",
+            padding: "6px 10px",
+            backgroundColor: confidenceStyle.bg,
+            border: `1px solid ${confidenceStyle.border}`,
             borderRadius: "6px",
-            cursor: "pointer",
             fontSize: "0.8rem",
-            color: "#1e40af",
+            color: confidenceStyle.text,
             fontWeight: 500,
           }}
         >
-          {expanded ? "Hide Details" : "Details"}
-        </button>
+          <strong style={{ marginRight: "4px" }}>Confidence:</strong> {confidence || "N/A"}
+        </span>
+
+        {/* Details Button */}
+        {hasDetailContent && (
+          <button
+            type="button"
+            onClick={handleToggle}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 12px",
+              backgroundColor: "#dbeafe",
+              border: "1px solid #93c5fd",
+              borderRadius: "6px",
+              cursor: "pointer",
+              fontSize: "0.8rem",
+              color: "#1e40af",
+              fontWeight: 500,
+            }}
+          >
+            {expanded ? "Hide Details" : "Details"}
+          </button>
+        )}
+
+        {/* Clarify Button - visible at top level */}
+        {renderClarifyButton && renderClarifyButton()}
+      </div>
+
+      {/* Inline summary: Inference and Remarks always visible if present */}
+      {(hasInference || hasRemarks) && (
+        <div style={{
+          marginTop: "8px",
+          padding: "8px 12px",
+          backgroundColor: "#fefce8",
+          border: "1px solid #fde68a",
+          borderRadius: "6px",
+          fontSize: "0.82rem",
+          lineHeight: "1.5",
+          color: "#713f12",
+        }}>
+          {hasInference && (
+            <div style={{ marginBottom: hasRemarks ? "4px" : "0" }}>
+              <strong>Inference:</strong>{" "}
+              <span style={{ whiteSpace: "pre-wrap" }}>{inference}</span>
+            </div>
+          )}
+          {hasRemarks && (
+            <div>
+              <strong>Remarks:</strong>{" "}
+              <span style={{ whiteSpace: "pre-wrap" }}>{remarks}</span>
+            </div>
+          )}
+        </div>
       )}
 
-      {/* Clarify Button - visible at top level */}
-      {renderClarifyButton && renderClarifyButton()}
-
       {/* Expanded Details Section - full width below */}
-      {expanded && hasExpandableContent && (
+      {expanded && hasDetailContent && (
         <div
           style={{
             width: "100%",
-            marginTop: "4px",
+            marginTop: "8px",
             padding: "10px 12px",
             backgroundColor: "#eff6ff",
             border: "1px solid #93c5fd",
@@ -212,18 +247,6 @@ export default function TransparencyDetails({
             <div style={{ marginBottom: "4px" }}>
               <strong style={{ color: "#1e40af" }}>Reasoning:</strong>{" "}
               <span style={{ whiteSpace: "pre-wrap" }}>{reasoning}</span>
-            </div>
-          )}
-          {inference && inference.toLowerCase() !== "none" && (
-            <div style={{ marginBottom: "4px" }}>
-              <strong style={{ color: "#1e40af" }}>Inference:</strong>{" "}
-              <span style={{ whiteSpace: "pre-wrap" }}>{inference}</span>
-            </div>
-          )}
-          {remarks && remarks.toLowerCase() !== "none" && (
-            <div style={{ marginBottom: "4px" }}>
-              <strong style={{ color: "#1e40af" }}>Remarks:</strong>{" "}
-              <span style={{ whiteSpace: "pre-wrap" }}>{remarks}</span>
             </div>
           )}
           {sources && (
