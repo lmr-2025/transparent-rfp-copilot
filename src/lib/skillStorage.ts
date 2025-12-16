@@ -191,7 +191,9 @@ export async function loadSkillsFromApi(): Promise<Skill[]> {
   try {
     const response = await fetch("/api/skills");
     if (!response.ok) throw new Error("API fetch failed");
-    const data = await response.json();
+    const json = await response.json();
+    // Handle both old format (array) and new format ({ data: { skills: [...] } })
+    const data = json.data?.skills ?? json;
     cachedSkills = (data as Partial<Skill>[]).map(normalizeSkill);
     apiLoaded = true;
     // Update localStorage cache
@@ -222,7 +224,9 @@ export async function createSkillViaApi(
     body: JSON.stringify(skill),
   });
   if (!response.ok) throw new Error("Failed to create skill");
-  const created = await response.json();
+  const json = await response.json();
+  // Handle both old format (skill object) and new format ({ data: { skill: {...} } })
+  const created = json.data?.skill ?? json;
   const normalized = normalizeSkill(created);
   cachedSkills = [normalized, ...cachedSkills];
   saveToLocalStorage(cachedSkills);
@@ -243,7 +247,9 @@ export async function updateSkillViaApi(
     const errorData = await response.json().catch(() => ({}));
     throw new Error(getApiErrorMessage(errorData, "Failed to update skill"));
   }
-  const updated = await response.json();
+  const json = await response.json();
+  // Handle both old format (skill object) and new format ({ data: { skill: {...} } })
+  const updated = json.data?.skill ?? json;
   const normalized = normalizeSkill(updated);
   cachedSkills = cachedSkills.map((s) => (s.id === id ? normalized : s));
   saveToLocalStorage(cachedSkills);

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { answerQuestionWithPrompt } from "@/lib/llm";
@@ -7,6 +7,8 @@ import { logUsage } from "@/lib/usageTracking";
 import { questionAnswerSchema, validateBody } from "@/lib/validations";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   // Rate limit - LLM routes are expensive
@@ -20,12 +22,12 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const validation = validateBody(questionAnswerSchema, body);
   if (!validation.success) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
+    return errors.validation(validation.error);
   }
 
   const data = validation.data;
@@ -62,17 +64,17 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       answer: result.answer,
       conversationHistory: result.conversationHistory,
       usedFallback: result.usedFallback,
     });
   } catch (error) {
-    console.error("Failed to answer question:", error);
+    logger.error("Failed to answer question", error, { route: "/api/questions/answer" });
     const message =
       error instanceof Error
         ? error.message
         : "Unable to generate response. Please try again later.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errors.internal(message);
   }
 }

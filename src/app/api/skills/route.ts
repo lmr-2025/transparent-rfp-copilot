@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { createSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 
 /**
@@ -91,13 +92,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(transformedSkills);
+    return apiSuccess({ skills: transformedSkills });
   } catch (error) {
     logger.error("Failed to fetch skills", error, { route: "/api/skills" });
-    return NextResponse.json(
-      { error: "Failed to fetch skills" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to fetch skills");
   }
 }
 
@@ -138,7 +136,7 @@ export async function POST(request: NextRequest) {
 
     const validation = validateBody(createSkillSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -176,12 +174,9 @@ export async function POST(request: NextRequest) {
       getRequestContext(request)
     );
 
-    return NextResponse.json(skill, { status: 201 });
+    return apiSuccess({ skill }, { status: 201 });
   } catch (error) {
     logger.error("Failed to create skill", error, { route: "/api/skills" });
-    return NextResponse.json(
-      { error: "Failed to create skill" },
-      { status: 500 }
-    );
+    return errors.internal("Failed to create skill");
   }
 }

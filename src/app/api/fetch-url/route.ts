@@ -1,5 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 30;
 
@@ -17,21 +19,18 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return errors.badRequest("Invalid JSON body");
   }
 
   const url = body.url?.trim();
   if (!url) {
-    return NextResponse.json({ error: "URL is required" }, { status: 400 });
+    return errors.badRequest("URL is required");
   }
 
   // Validate URL for SSRF vulnerabilities
   const ssrfCheck = await validateUrlForSSRF(url);
   if (!ssrfCheck.valid) {
-    return NextResponse.json(
-      { error: ssrfCheck.error || "URL validation failed" },
-      { status: 400 }
-    );
+    return errors.badRequest(ssrfCheck.error || "URL validation failed");
   }
 
   try {
@@ -44,10 +43,7 @@ export async function POST(request: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json(
-        { error: `Failed to fetch URL: ${response.status} ${response.statusText}` },
-        { status: 502 }
-      );
+      return errors.badGateway(`Failed to fetch URL: ${response.status} ${response.statusText}`);
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -65,11 +61,11 @@ export async function POST(request: NextRequest) {
       content = content.slice(0, maxLength) + "\n\n[Content truncated...]";
     }
 
-    return NextResponse.json({ content, url });
+    return apiSuccess({ content, url });
   } catch (error) {
-    console.error("Error fetching URL:", error);
+    logger.error("Error fetching URL", error, { route: "/api/fetch-url" });
     const message = error instanceof Error ? error.message : "Failed to fetch URL";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return errors.badGateway(message);
   }
 }
 

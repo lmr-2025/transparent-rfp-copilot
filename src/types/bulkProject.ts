@@ -15,13 +15,25 @@ export type BulkRow = {
   usedSkills?: (string | { id: string; title: string })[]; // Can be Skill objects or string IDs
   usedFallback?: boolean; // True if answer was generated from reference URLs instead of skills
   showRecommendation?: boolean;
-  // Review flagging
+  // Flagging (for self-notes, attention markers - independent of review workflow)
   flaggedForReview?: boolean;
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
-  // Review workflow
+  // Queue for batch review (persisted across sessions for collaboration)
+  queuedForReview?: boolean;
+  queuedAt?: string;
+  queuedBy?: string;
+  queuedNote?: string;
+  queuedReviewerId?: string;
+  queuedReviewerName?: string;
+  // Review workflow (formal approval process - separate from flagging)
   reviewStatus?: "NONE" | "REQUESTED" | "APPROVED" | "CORRECTED";
+  reviewRequestedAt?: string;
+  reviewRequestedBy?: string;
+  reviewNote?: string; // Note from requester to reviewer
+  assignedReviewerId?: string;
+  assignedReviewerName?: string;
   reviewedAt?: string;
   reviewedBy?: string;
   userEditedAnswer?: string;
@@ -50,6 +62,7 @@ export type BulkProject = {
   rows: BulkRow[];
   createdAt: string;
   lastModifiedAt: string;
+  ownerId?: string;
   ownerName?: string;
   customerName?: string;
   status: "draft" | "in_progress" | "needs_review" | "approved";

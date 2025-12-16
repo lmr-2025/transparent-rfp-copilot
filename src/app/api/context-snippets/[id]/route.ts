@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { updateContextSnippetSchema, validateBody } from "@/lib/validations";
 import { logContextSnippetChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -23,16 +25,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!snippet) {
-      return NextResponse.json({ error: "Context snippet not found" }, { status: 404 });
+      return errors.notFound("Context snippet");
     }
 
-    return NextResponse.json(snippet);
+    return apiSuccess({ snippet });
   } catch (error) {
-    console.error("Failed to fetch context snippet:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch context snippet" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch context snippet", error, { route: "/api/context-snippets/[id]" });
+    return errors.internal("Failed to fetch context snippet");
   }
 }
 
@@ -49,7 +48,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const validation = validateBody(updateContextSnippetSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -57,7 +56,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     // Get existing snippet for audit log
     const existing = await prisma.contextSnippet.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Context snippet not found" }, { status: 404 });
+      return errors.notFound("Context snippet");
     }
 
     // Check for duplicate key if key is being changed
@@ -66,10 +65,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         where: { key: data.key },
       });
       if (duplicateKey) {
-        return NextResponse.json(
-          { error: `A snippet with key "${data.key}" already exists` },
-          { status: 409 }
-        );
+        return errors.conflict(`A snippet with key "${data.key}" already exists`);
       }
     }
 
@@ -101,13 +97,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json(snippet);
+    return apiSuccess({ snippet });
   } catch (error) {
-    console.error("Failed to update context snippet:", error);
-    return NextResponse.json(
-      { error: "Failed to update context snippet" },
-      { status: 500 }
-    );
+    logger.error("Failed to update context snippet", error, { route: "/api/context-snippets/[id]" });
+    return errors.internal("Failed to update context snippet");
   }
 }
 
@@ -124,7 +117,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get snippet before deleting for audit log
     const snippet = await prisma.contextSnippet.findUnique({ where: { id } });
     if (!snippet) {
-      return NextResponse.json({ error: "Context snippet not found" }, { status: 404 });
+      return errors.notFound("Context snippet");
     }
 
     await prisma.contextSnippet.delete({
@@ -141,12 +134,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       { deletedSnippet: { key: snippet.key, category: snippet.category } }
     );
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete context snippet:", error);
-    return NextResponse.json(
-      { error: "Failed to delete context snippet" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete context snippet", error, { route: "/api/context-snippets/[id]" });
+    return errors.internal("Failed to delete context snippet");
   }
 }

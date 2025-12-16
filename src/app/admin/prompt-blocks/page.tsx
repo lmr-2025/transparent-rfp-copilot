@@ -52,8 +52,8 @@ export default function PromptBlocksPage() {
             setModifiers(data.modifiers);
           }
         }
-      } catch (e) {
-        console.error("Failed to load prompt blocks:", e);
+      } catch {
+        // Silent failure - will use defaults
       } finally {
         setLoaded(true);
       }
@@ -80,7 +80,6 @@ export default function PromptBlocksPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       setError(`Failed to save: ${msg}`);
-      console.error("Save error:", e);
     } finally {
       setSaving(false);
     }

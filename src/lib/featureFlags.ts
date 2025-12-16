@@ -24,17 +24,20 @@ function envBool(key: string, defaultValue = false): boolean {
  *   FEATURE_CONTRACTS_ENABLED=false
  */
 export const features = {
-  // Chat interface - needs streaming/WebSocket work for production
+  // Chat interface - POC, works but needs streaming/WebSocket for production
   chat: envBool("NEXT_PUBLIC_FEATURE_CHAT_ENABLED", true),
 
-  // Contracts module - still in development
+  // Contracts module - paused, will resume post-v1
   contracts: envBool("NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED", false),
 
-  // Usage dashboard - ready but optional
+  // Usage dashboard - production ready
   usage: envBool("NEXT_PUBLIC_FEATURE_USAGE_ENABLED", true),
 
-  // Audit log - ready
+  // Audit log - production ready
   auditLog: envBool("NEXT_PUBLIC_FEATURE_AUDIT_LOG_ENABLED", true),
+
+  // Customer profiles - POC, links customer data to projects
+  customerProfiles: envBool("NEXT_PUBLIC_FEATURE_CUSTOMER_PROFILES_ENABLED", false),
 } as const;
 
 /**

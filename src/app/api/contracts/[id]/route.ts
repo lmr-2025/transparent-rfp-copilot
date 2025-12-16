@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { logContractChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/contracts/[id] - Get a single contract review
 export async function GET(
@@ -16,25 +18,21 @@ export async function GET(
     });
 
     if (!review) {
-      return NextResponse.json(
-        { error: "Contract review not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Contract review");
     }
 
-    return NextResponse.json({
-      ...review,
-      createdAt: review.createdAt.toISOString(),
-      updatedAt: review.updatedAt.toISOString(),
-      analyzedAt: review.analyzedAt?.toISOString(),
-      reviewedAt: review.reviewedAt?.toISOString(),
+    return apiSuccess({
+      contract: {
+        ...review,
+        createdAt: review.createdAt.toISOString(),
+        updatedAt: review.updatedAt.toISOString(),
+        analyzedAt: review.analyzedAt?.toISOString(),
+        reviewedAt: review.reviewedAt?.toISOString(),
+      },
     });
   } catch (error) {
-    console.error("Failed to fetch contract review:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch contract review" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch contract review", error, { route: "/api/contracts/[id]" });
+    return errors.internal("Failed to fetch contract review");
   }
 }
 
@@ -55,7 +53,7 @@ export async function PUT(
     // Get existing contract for audit log
     const existing = await prisma.contractReview.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Contract review not found" }, { status: 404 });
+      return errors.notFound("Contract review");
     }
 
     const {
@@ -114,19 +112,18 @@ export async function PUT(
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json({
-      ...review,
-      createdAt: review.createdAt.toISOString(),
-      updatedAt: review.updatedAt.toISOString(),
-      analyzedAt: review.analyzedAt?.toISOString(),
-      reviewedAt: review.reviewedAt?.toISOString(),
+    return apiSuccess({
+      contract: {
+        ...review,
+        createdAt: review.createdAt.toISOString(),
+        updatedAt: review.updatedAt.toISOString(),
+        analyzedAt: review.analyzedAt?.toISOString(),
+        reviewedAt: review.reviewedAt?.toISOString(),
+      },
     });
   } catch (error) {
-    console.error("Failed to update contract review:", error);
-    return NextResponse.json(
-      { error: "Failed to update contract review" },
-      { status: 500 }
-    );
+    logger.error("Failed to update contract review", error, { route: "/api/contracts/[id]" });
+    return errors.internal("Failed to update contract review");
   }
 }
 
@@ -146,7 +143,7 @@ export async function DELETE(
     // Get contract before deleting for audit log
     const contract = await prisma.contractReview.findUnique({ where: { id } });
     if (!contract) {
-      return NextResponse.json({ error: "Contract review not found" }, { status: 404 });
+      return errors.notFound("Contract review");
     }
 
     await prisma.contractReview.delete({
@@ -163,12 +160,9 @@ export async function DELETE(
       { deletedContract: { name: contract.name, customerName: contract.customerName } }
     );
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete contract review:", error);
-    return NextResponse.json(
-      { error: "Failed to delete contract review" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete contract review", error, { route: "/api/contracts/[id]" });
+    return errors.internal("Failed to delete contract review");
   }
 }

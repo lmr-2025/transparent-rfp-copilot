@@ -52,10 +52,12 @@ export async function fetchAllProjects(): Promise<BulkProject[]> {
   if (!response.ok) {
     throw new Error("Failed to fetch projects");
   }
-  const data = await response.json();
+  const json = await response.json();
+  // Handle both old format ({ projects: [...] }) and new format ({ data: { projects: [...] } })
+  const projects = json.data?.projects ?? json.projects ?? [];
 
   // Transform database format to frontend format
-  return data.projects.map(transformProjectFromDb);
+  return projects.map(transformProjectFromDb);
 }
 
 export async function fetchProject(id: string): Promise<BulkProject | null> {
@@ -66,8 +68,10 @@ export async function fetchProject(id: string): Promise<BulkProject | null> {
   if (!response.ok) {
     throw new Error("Failed to fetch project");
   }
-  const data = await response.json();
-  return transformProjectFromDb(data.project);
+  const json = await response.json();
+  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
+  const project = json.data?.project ?? json.project;
+  return transformProjectFromDb(project);
 }
 
 export async function createProject(project: BulkProject): Promise<BulkProject> {
@@ -80,8 +84,10 @@ export async function createProject(project: BulkProject): Promise<BulkProject> 
   if (!response.ok) {
     throw new Error("Failed to create project");
   }
-  const data = await response.json();
-  return transformProjectFromDb(data.project);
+  const json = await response.json();
+  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
+  const created = json.data?.project ?? json.project;
+  return transformProjectFromDb(created);
 }
 
 export async function updateProject(project: BulkProject): Promise<BulkProject> {
@@ -94,8 +100,10 @@ export async function updateProject(project: BulkProject): Promise<BulkProject> 
   if (!response.ok) {
     throw new Error("Failed to update project");
   }
-  const data = await response.json();
-  return transformProjectFromDb(data.project);
+  const json = await response.json();
+  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
+  const updated = json.data?.project ?? json.project;
+  return transformProjectFromDb(updated);
 }
 
 export async function deleteProject(id: string): Promise<void> {
@@ -158,6 +166,7 @@ function transformProjectToDb(project: BulkProject) {
     name: project.name,
     sheetName: project.sheetName,
     columns: project.columns,
+    ownerId: project.ownerId,
     ownerName: project.ownerName,
     customerName: project.customerName,
     notes: project.notes,

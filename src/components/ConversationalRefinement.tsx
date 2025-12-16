@@ -213,8 +213,10 @@ If the user asks you to generate a new/updated response, format it the same way 
         throw new Error('Failed to get response');
       }
 
-      const data = await response.json();
-      const assistantContent = (data.content as ContentBlock[])
+      const json = await response.json();
+      // Handle both old format ({ content: [...] }) and new format ({ data: { content: [...] } })
+      const content = json.data?.content ?? json.content;
+      const assistantContent = (content as ContentBlock[])
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
         .join('\n');
@@ -323,8 +325,10 @@ Focus on concrete, actionable suggestions for what the user could provide to imp
         throw new Error('Failed to get response');
       }
 
-      const data = await response.json();
-      const assistantContent = (data.content as ContentBlock[])
+      const json = await response.json();
+      // Handle both old format ({ content: [...] }) and new format ({ data: { content: [...] } })
+      const content = json.data?.content ?? json.content;
+      const assistantContent = (content as ContentBlock[])
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
         .join('\n');

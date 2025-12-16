@@ -13,37 +13,6 @@ const DEFAULT_OPTIONS: ExportOptions = {
   includeMetadata: true,
 };
 
-// Style definitions for xlsx-js-style compatibility (future enhancement)
-// Note: These require xlsx-js-style package instead of xlsx for cell styling
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const STYLE_DEFINITIONS = {
-  header: {
-    font: { bold: true, color: { rgb: "FFFFFF" } },
-    fill: { fgColor: { rgb: "1E3A8A" } },
-    alignment: { horizontal: "center", vertical: "center", wrapText: true },
-    border: {
-      top: { style: "thin", color: { rgb: "000000" } },
-      bottom: { style: "thin", color: { rgb: "000000" } },
-      left: { style: "thin", color: { rgb: "000000" } },
-      right: { style: "thin", color: { rgb: "000000" } },
-    },
-  },
-  cell: {
-    alignment: { vertical: "top", wrapText: true },
-    border: {
-      top: { style: "thin", color: { rgb: "E2E8F0" } },
-      bottom: { style: "thin", color: { rgb: "E2E8F0" } },
-      left: { style: "thin", color: { rgb: "E2E8F0" } },
-      right: { style: "thin", color: { rgb: "E2E8F0" } },
-    },
-  },
-  confidenceColors: {
-    high: "DCFCE7", // Green
-    medium: "FEF3C7", // Yellow
-    low: "FEE2E2", // Red
-  },
-};
-
 function getConfidenceLevel(confidence?: string): "high" | "medium" | "low" | null {
   if (!confidence) return null;
   const lower = confidence.toLowerCase();

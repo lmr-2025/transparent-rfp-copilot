@@ -10,6 +10,40 @@ Last updated: 2025-12-15
 
 ---
 
+## Feature Flags Status
+
+| Feature | Default | Status | Notes |
+|---------|---------|--------|-------|
+| `chat` | ON | POC | Works, needs streaming/WebSocket for production |
+| `contracts` | OFF | Paused | Resume post-v1 |
+| `customerProfiles` | OFF | POC | Links customers to projects |
+| `usage` | ON | Ready | Production ready |
+| `auditLog` | ON | Ready | Production ready |
+
+### Hidden/Undocumented Endpoints (for future use)
+- ~~`/api/skills/merge`~~ - Deleted 2025-12-15 (dead code, never called from UI)
+
+---
+
+## Legacy Code Deprecation Timeline
+
+### Skill Normalization (`src/lib/skillStorage.ts`)
+**Deprecation Date:** 2025-03-01
+
+The `normalizeSkill()` function (148 lines) handles 5+ legacy data formats:
+- `responseTemplate` field
+- `sourceMapping[]` array
+- `information.sources` nested field
+- `lastSourceLink` single URL
+- `category` (singular) → `categories` (array)
+
+**Plan:**
+1. After 2025-03-01, remove legacy field handling
+2. Run migration script to update any remaining old-format skills
+3. Simplify `normalizeSkill()` to ~20 lines
+
+---
+
 ## ✅ COMPLETED: UI Layer Rebuild
 
 **Decision Date:** 2025-12-14
@@ -165,16 +199,31 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 ### ~~10. Hardcoded Magic Numbers~~ ✅ FIXED
 **Status:** Already fixed - Created `src/lib/constants.ts` with named values (see "Recently Fixed" section).
 
-### 11. Inconsistent API Response Formats
-**Status:** Pattern established, incremental migration needed
+### ~~11. Inconsistent API Response Formats~~ ✅ IN PROGRESS
+**Status:** Core routes migrated (2025-12-15)
 **Files:** Various API routes
-**Evidence:**
-- `/api/documents` returns `{ documents: [...] }`
-- `/api/reference-urls` returns array directly
-- `/api/customers` returns `{ profiles: [...] }`
-**Fix:** Use `apiSuccess()` from `/lib/apiResponse.ts` for `{ data: T, pagination?, transparency? }` pattern
-**Note:** `/api/context-snippets` already uses new pattern as reference. Migrate other routes incrementally when touching them.
-**Effort:** Medium (but can be done incrementally)
+**Migrated to `apiSuccess()` pattern:**
+- `/api/documents` - `{ data: { documents: [...] } }`
+- `/api/reference-urls` - `{ data: [...] }`
+- `/api/customers` - `{ data: { profiles: [...] } }`
+- `/api/customers/[id]` - `{ data: { profile: {...} } }` (GET, PUT, DELETE)
+- `/api/skills` - `{ data: { skills: [...] } }`
+- `/api/skills/[id]` - `{ data: { skill: {...} } }` (GET, PUT, DELETE)
+- `/api/projects` - `{ data: { projects: [...] } }`
+- `/api/projects/[id]` - `{ data: { project: {...} } }` (GET, PUT, DELETE)
+- `/api/chat` - `{ data: { content: [...], usage: {...}, id: string } }`
+- `/api/questions/answer` - `{ data: { answer, conversationHistory, usedFallback } }`
+- `/api/reviews` - already migrated
+- `/api/documents/[id]` - already migrated
+- `/api/reference-urls/link` - already migrated
+
+**Frontend hooks updated** to handle both old and new formats for backwards compatibility:
+- `src/lib/skillStorage.ts` - `loadSkillsFromApi()`, `createSkillViaApi()`, `updateSkillViaApi()`
+- `src/lib/projectApi.ts` - `fetchAllProjects()`, `fetchProject()`, `createProject()`, `updateProject()`
+- `src/hooks/use-knowledge-data.ts` - already handled
+- `src/components/ConversationalRefinement.tsx` - chat response handling
+
+**Remaining routes** can be migrated incrementally (~40 routes still use direct `NextResponse.json`)
 
 ### 12. Missing Type Safety
 **Status:** Input validation complete, response parsing still needed
@@ -418,15 +467,26 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Fix:** Normalize to separate ChatMessage table with pagination
 **Effort:** High
 
-#### ~~31. Console.log Used for Production Errors~~ ✅ PARTIAL FIX
+#### ~~31. Console.log Used for Production Errors~~ ✅ FIXED
 **Fixed:** 2025-12-15
 - Created `src/lib/logger.ts` - lightweight structured logger
   - JSON output in production for log aggregation (Datadog, CloudWatch, etc.)
   - Human-readable output in development
   - Supports error serialization with stack traces
   - Child loggers for request-scoped context
-- Updated key API routes: `/api/chat`, `/api/skills`
-- Pattern established for other routes to adopt incrementally
+- **All API routes migrated** - 0 `console.error` calls remaining in `/src/app/api`
+- **Frontend cleanup (2025-12-15):** Replaced all user-facing console.error with toast notifications or silent failures
+- **Lib utilities cleanup (2025-12-15):** Migrated remaining utilities to structured logger
+  - `apiRouteFactory.ts` - 5 calls migrated with operation context
+  - `auditLog.ts` - 1 call migrated with entity context
+  - `apiResponse.ts` - 1 call migrated
+  - `categoryStorageServer.ts` - 1 call migrated
+  - `encryption.ts` - 1 call migrated
+  - `usageTracking.ts` - 1 call migrated with feature/model context
+  - `branding.tsx` - 1 call converted to silent failure (defaults work fine)
+- **Remaining (intentional):** Only 3 `console.error` calls remain:
+  - `logger.ts` (2 calls) - This IS the logger, wraps console.error by design
+  - `error.tsx` (1 call) - Next.js error boundary, appropriate use
 
 #### 32. Inconsistent Naming: BulkProject vs Project
 **File:** `prisma/schema.prisma` (lines 78-105)
@@ -434,6 +494,23 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 **Risk:** Confusing for new developers
 **Fix:** Rename to `Project` (requires migration + code updates)
 **Effort:** High
+
+#### 33. eslint-disable Comments in API Route Factory
+**File:** `src/lib/apiRouteFactory.ts` (5 instances)
+**Issue:** Uses `@typescript-eslint/no-explicit-any` to work around Prisma's dynamic model access
+**Pattern:** `(prisma as any)[model]` for generic CRUD operations
+**Risk:** Type safety loss, potential runtime errors
+**Fix Options:**
+- Accept as necessary for generic route factory pattern
+- Rewrite with proper generics and Prisma type inference
+**Effort:** High (if rewriting)
+
+#### 34. Unused Variable eslint-disable in Skills Route
+**File:** `src/app/api/skills/route.ts` (line 87)
+**Issue:** `// eslint-disable-next-line @typescript-eslint/no-unused-vars` for destructured `owner`
+**Risk:** Minor - indicates potential cleanup opportunity
+**Fix:** Remove unused destructuring or use the variable
+**Effort:** Low
 
 ---
 

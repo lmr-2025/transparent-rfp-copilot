@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
 import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/system-prompts - List all system prompts
 export async function GET() {
@@ -10,13 +12,10 @@ export async function GET() {
       orderBy: { key: "asc" },
     });
 
-    return NextResponse.json(prompts);
+    return apiSuccess({ prompts });
   } catch (error) {
-    console.error("Failed to fetch system prompts:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch system prompts" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch system prompts", error, { route: "/api/system-prompts" });
+    return errors.internal("Failed to fetch system prompts");
   }
 }
 
@@ -50,12 +49,9 @@ export async function POST(request: NextRequest) {
       metadata: { sectionCount: Array.isArray(body.sections) ? body.sections.length : 0 },
     });
 
-    return NextResponse.json(prompt, { status: 201 });
+    return apiSuccess({ prompt }, { status: 201 });
   } catch (error) {
-    console.error("Failed to create system prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to create system prompt" },
-      { status: 500 }
-    );
+    logger.error("Failed to create system prompt", error, { route: "/api/system-prompts" });
+    return errors.internal("Failed to create system prompt");
   }
 }

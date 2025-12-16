@@ -201,8 +201,80 @@ export function useDeleteSnippet() {
   });
 }
 
+// Refresh skill from source URLs
+export type RefreshResult = {
+  hasChanges: boolean;
+  message?: string;
+  draft?: {
+    title: string;
+    content: string;
+    changeHighlights: string[];
+    summary: string;
+  };
+  originalTitle?: string;
+  originalContent?: string;
+};
+
+export function useRefreshSkill() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string): Promise<RefreshResult> => {
+      const res = await fetch(`/api/skills/${id}/refresh`, { method: "POST" });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to refresh skill");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.skills });
+    },
+  });
+}
+
+// Apply refresh changes after user review
+export function useApplyRefreshChanges() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      title,
+      content,
+      changeHighlights,
+    }: {
+      id: string;
+      title: string;
+      content: string;
+      changeHighlights?: string[];
+    }) => {
+      const res = await fetch(`/api/skills/${id}/refresh`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, changeHighlights }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || "Failed to apply changes");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.skills });
+    },
+  });
+}
+
 // Helper types for unified library items
 export type LibraryItemType = "skill" | "document" | "url" | "customer" | "snippet";
+
+// Source document info (for skills built from uploaded documents)
+export interface SourceDocument {
+  id: string;
+  filename: string;
+  uploadedAt: string;
+}
 
 export interface UnifiedLibraryItem {
   id: string;
@@ -217,6 +289,7 @@ export interface UnifiedLibraryItem {
   owners?: SkillOwner[];
   // Expanded details for skills
   sourceUrls?: SourceUrl[];
+  sourceDocuments?: SourceDocument[];
   history?: HistoryEntry[];
   lastRefreshedAt?: string;
   // Document-specific
@@ -225,6 +298,8 @@ export interface UnifiedLibraryItem {
   fileType?: string;
   // Snippet-specific
   snippetKey?: string;
+  // Linked skill info (for sources)
+  linkedSkillId?: string;
 }
 
 // Transform skills to unified items
@@ -241,6 +316,7 @@ export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
     updatedAt: skill.lastRefreshedAt || skill.createdAt,
     owners: skill.owners,
     sourceUrls: skill.sourceUrls,
+    sourceDocuments: skill.sourceDocuments as SourceDocument[] | undefined,
     history: skill.history,
     lastRefreshedAt: skill.lastRefreshedAt,
   };
@@ -260,6 +336,7 @@ export function documentToUnifiedItem(doc: KnowledgeDocument): UnifiedLibraryIte
     filename: doc.filename,
     fileSize: doc.fileSize,
     fileType: doc.fileType,
+    linkedSkillId: doc.skillId,
   };
 }
 
@@ -274,6 +351,7 @@ export function urlToUnifiedItem(url: ReferenceUrl): UnifiedLibraryItem {
     categories: url.categories,
     createdAt: url.addedAt,
     updatedAt: url.lastUsedAt || url.addedAt,
+    linkedSkillId: url.skillId,
   };
 }
 

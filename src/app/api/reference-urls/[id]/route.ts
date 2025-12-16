@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { logReferenceUrlChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -17,19 +19,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!url) {
-      return NextResponse.json(
-        { error: "Reference URL not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Reference URL");
     }
 
-    return NextResponse.json(url);
+    return apiSuccess({ url });
   } catch (error) {
-    console.error("Failed to fetch reference URL:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch reference URL" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch reference URL", error, { route: "/api/reference-urls/[id]" });
+    return errors.internal("Failed to fetch reference URL");
   }
 }
 
@@ -47,7 +43,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     // Get existing URL for audit log
     const existing = await prisma.referenceUrl.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Reference URL not found" }, { status: 404 });
+      return errors.notFound("Reference URL");
     }
 
     const url = await prisma.referenceUrl.update({
@@ -59,6 +55,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         categories: body.categories,
         lastUsedAt: body.lastUsedAt,
         usageCount: body.usageCount,
+        ...(body.skillId !== undefined && { skillId: body.skillId }),
+        ...(body.isReferenceOnly !== undefined && { isReferenceOnly: body.isReferenceOnly }),
       },
     });
 
@@ -66,7 +64,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       url as unknown as Record<string, unknown>,
-      ["url", "title", "description", "categories"]
+      ["url", "title", "description", "categories", "skillId", "isReferenceOnly"]
     );
 
     // Audit log
@@ -78,13 +76,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json(url);
+    return apiSuccess({ url });
   } catch (error) {
-    console.error("Failed to update reference URL:", error);
-    return NextResponse.json(
-      { error: "Failed to update reference URL" },
-      { status: 500 }
-    );
+    logger.error("Failed to update reference URL", error, { route: "/api/reference-urls/[id]" });
+    return errors.internal("Failed to update reference URL");
   }
 }
 
@@ -101,7 +96,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get URL before deleting for audit log
     const url = await prisma.referenceUrl.findUnique({ where: { id } });
     if (!url) {
-      return NextResponse.json({ error: "Reference URL not found" }, { status: 404 });
+      return errors.notFound("Reference URL");
     }
 
     await prisma.referenceUrl.delete({
@@ -118,12 +113,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       { deletedUrl: { title: url.title, url: url.url } }
     );
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete reference URL:", error);
-    return NextResponse.json(
-      { error: "Failed to delete reference URL" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete reference URL", error, { route: "/api/reference-urls/[id]" });
+    return errors.internal("Failed to delete reference URL");
   }
 }

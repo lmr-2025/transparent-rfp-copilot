@@ -11,6 +11,7 @@
  */
 
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "crypto";
+import { logger } from "@/lib/logger";
 
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 16; // 128 bits
@@ -112,7 +113,7 @@ export function decrypt(encryptedBase64: string): string {
     return decrypted.toString("utf8");
   } catch (error) {
     // Log error but don't expose details (could be tampering attempt)
-    console.error("Decryption failed:", error instanceof Error ? error.message : "Unknown error");
+    logger.error("Decryption failed", error);
     throw new Error("Failed to decrypt value. The data may be corrupted or the encryption key may have changed.");
   }
 }

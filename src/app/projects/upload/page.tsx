@@ -1,12 +1,20 @@
 "use client";
 
-import { ChangeEvent, useMemo, useState } from "react";
+import { ChangeEvent, useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { BulkProject } from "@/types/bulkProject";
 import { createProject } from "@/lib/projectApi";
+
+interface User {
+  id: string;
+  name: string | null;
+  email: string | null;
+}
 
 type SheetData = {
   name: string;
@@ -59,10 +67,31 @@ const styles = {
 
 export default function BulkUploadPage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [projectName, setProjectName] = useState("");
   const [customerName, setCustomerName] = useState("");
-  const [ownerName, setOwnerName] = useState("");
+  const [users, setUsers] = useState<User[]>([]);
+  const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
   const [sheets, setSheets] = useState<SheetData[]>([]);
+
+  // Fetch users for owner dropdown
+  useEffect(() => {
+    fetch("/api/users")
+      .then((res) => res.json())
+      .then((data) => {
+        setUsers(data.users || []);
+      })
+      .catch(() => {
+        // Silent failure - users list is optional
+      });
+  }, []);
+
+  // Set default owner to current user when session loads
+  useEffect(() => {
+    if (session?.user?.id && !selectedOwnerId) {
+      setSelectedOwnerId(session.user.id);
+    }
+  }, [session?.user?.id, selectedOwnerId]);
   const [selectedSheet, setSelectedSheet] = useState("");
   const [mergeAllTabs, setMergeAllTabs] = useState(true); // Default to merging all tabs
   const [questionColumn, setQuestionColumn] = useState("");
@@ -403,11 +432,15 @@ export default function BulkUploadPage() {
       ? [...new Set(sheets.flatMap((s) => s.columns))]
       : (columns.length > 0 ? columns : activeSheet?.columns || []);
 
+    // Get selected owner's name for display
+    const selectedOwner = users.find((u) => u.id === selectedOwnerId);
+
     const project: BulkProject = {
       id: projectId,
       name: projectName.trim() || "Untitled Project",
       customerName: customerName.trim() || undefined,
-      ownerName: ownerName.trim() || undefined,
+      ownerId: selectedOwnerId || undefined,
+      ownerName: selectedOwner ? (selectedOwner.name || selectedOwner.email || undefined) : undefined,
       sheetName: sheetNameForProject,
       columns: projectColumns,
       createdAt: now,
@@ -437,8 +470,8 @@ export default function BulkUploadPage() {
         "Project saved! Redirecting to response workspace...",
       );
       router.push(`/projects/${createdProject.id}`);
-    } catch (error) {
-      console.error("Failed to create project:", error);
+    } catch {
+      toast.error("Failed to save project. Please try again.");
       setErrorMessage("Failed to save project. Please try again.");
     }
   };
@@ -457,6 +490,26 @@ export default function BulkUploadPage() {
       )}
 
       <div style={styles.card}>
+        <label style={styles.label} htmlFor="ownerId">
+          Project Owner
+        </label>
+        <select
+          id="ownerId"
+          value={selectedOwnerId}
+          onChange={(event) => setSelectedOwnerId(event.target.value)}
+          style={styles.input}
+        >
+          {users.map((user) => (
+            <option key={user.id} value={user.id}>
+              {user.name || user.email || "Unknown user"}
+              {user.id === session?.user?.id ? " (you)" : ""}
+            </option>
+          ))}
+        </select>
+        <p style={{ color: "#64748b", fontSize: "13px", marginTop: "-8px" }}>
+          The owner can edit this project and will receive review notifications.
+        </p>
+
         <label style={styles.label} htmlFor="customerName">
           Customer Name (optional)
         </label>
@@ -467,18 +520,6 @@ export default function BulkUploadPage() {
           onChange={(event) => setCustomerName(event.target.value)}
           style={styles.input}
           placeholder="e.g. Acme Corp"
-        />
-
-        <label style={styles.label} htmlFor="ownerName">
-          Your Name (optional)
-        </label>
-        <input
-          id="ownerName"
-          type="text"
-          value={ownerName}
-          onChange={(event) => setOwnerName(event.target.value)}
-          style={styles.input}
-          placeholder="e.g. John Smith"
         />
 
         <label style={styles.label} htmlFor="projectName">

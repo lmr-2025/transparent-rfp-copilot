@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { AuditEntityType, AuditAction } from "@prisma/client";
+import { logger } from "@/lib/logger";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 // GET /api/audit-log - Get audit log entries with filtering
 export async function GET(request: NextRequest) {
@@ -70,7 +72,7 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    return NextResponse.json({
+    return apiSuccess({
       entries,
       pagination: {
         page,
@@ -80,10 +82,7 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error("Failed to fetch audit log:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch audit log" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch audit log", error, { route: "/api/audit-log" });
+    return errors.internal("Failed to fetch audit log");
   }
 }

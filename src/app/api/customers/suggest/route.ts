@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { CLAUDE_MODEL } from "@/lib/config";
@@ -7,6 +7,8 @@ import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type SuggestRequestBody = {
   sourceUrls: string[];
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as SuggestRequestBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const sourceUrls = Array.isArray(body?.sourceUrls)
@@ -45,10 +47,7 @@ export async function POST(request: NextRequest) {
   const documentNames = body?.documentNames || [];
 
   if (sourceUrls.length === 0 && !documentContent) {
-    return NextResponse.json(
-      { error: "Provide at least one source URL or upload a document." },
-      { status: 400 }
-    );
+    return errors.badRequest("Provide at least one source URL or upload a document.");
   }
 
   try {
@@ -67,7 +66,7 @@ export async function POST(request: NextRequest) {
         promptText,
         authSession
       );
-      return NextResponse.json({
+      return apiSuccess({
         updateMode: true,
         ...result,
         sourceUrls,
@@ -76,14 +75,14 @@ export async function POST(request: NextRequest) {
 
     // Create mode
     const result = await generateProfileDraft(sourceContent, sourceUrls, promptText, documentNames, authSession);
-    return NextResponse.json({ draft: result.draft, sourceUrls, transparency: result.transparency });
+    return apiSuccess({ draft: result.draft, sourceUrls, transparency: result.transparency });
   } catch (error) {
-    console.error("Failed to generate customer profile:", error);
+    logger.error("Failed to generate customer profile", error, { route: "/api/customers/suggest" });
     const message =
       error instanceof Error
         ? error.message
         : "Unable to generate customer profile. Please try again later.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errors.internal(message);
   }
 }
 

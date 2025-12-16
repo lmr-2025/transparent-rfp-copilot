@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { validateBody, ValidationSchema } from "@/lib/validations";
 import { getUserFromSession, AuditUser } from "@/lib/auditLog";
+import { logger } from "@/lib/logger";
 
 // Generic types for factory
 type PrismaModel = keyof typeof prisma & string;
@@ -64,7 +65,7 @@ export function createListHandler<T>(config: ListConfig<T>) {
       }
       return successResponse(result);
     } catch (error) {
-      console.error(`Failed to fetch ${config.model}:`, error);
+      logger.error(`Failed to fetch ${config.model}`, error, { model: config.model, operation: "list" });
       return errorResponse(`Failed to fetch ${config.model}`);
     }
   };
@@ -123,7 +124,7 @@ export function createCreateHandler<TInput, TOutput>(config: CreateConfig<TInput
       }
       return successResponse(item, 201);
     } catch (error) {
-      console.error(`Failed to create ${config.model}:`, error);
+      logger.error(`Failed to create ${config.model}`, error, { model: config.model, operation: "create" });
       return errorResponse(`Failed to create ${config.model}`);
     }
   };
@@ -171,7 +172,7 @@ export function createGetByIdHandler<T>(config: GetByIdConfig<T>) {
       }
       return successResponse(result);
     } catch (error) {
-      console.error(`Failed to fetch ${config.model}:`, error);
+      logger.error(`Failed to fetch ${config.model}`, error, { model: config.model, operation: "getById" });
       return errorResponse(`Failed to fetch ${config.model}`);
     }
   };
@@ -250,7 +251,7 @@ export function createUpdateHandler<TInput, TOutput>(config: UpdateConfig<TInput
       }
       return successResponse(item);
     } catch (error) {
-      console.error(`Failed to update ${config.model}:`, error);
+      logger.error(`Failed to update ${config.model}`, error, { model: config.model, operation: "update" });
       return errorResponse(`Failed to update ${config.model}`);
     }
   };
@@ -305,7 +306,7 @@ export function createDeleteHandler<TOutput>(config: DeleteConfig<TOutput>) {
         message: config.successMessage ?? "Deleted successfully",
       });
     } catch (error) {
-      console.error(`Failed to delete ${config.model}:`, error);
+      logger.error(`Failed to delete ${config.model}`, error, { model: config.model, operation: "delete" });
       return errorResponse(`Failed to delete ${config.model}`);
     }
   };

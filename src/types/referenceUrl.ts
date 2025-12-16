@@ -7,4 +7,7 @@ export interface ReferenceUrl {
   addedAt: string;
   lastUsedAt?: string;
   usageCount: number;
+  // Unified Knowledge Pipeline fields
+  skillId?: string; // Link to skill if converted to skill
+  isReferenceOnly?: boolean; // True if saved as reference without skill conversion
 }

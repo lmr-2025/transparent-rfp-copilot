@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { apiSuccess } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // Public endpoint - no auth required
 // Returns branding settings for the app
@@ -12,17 +13,17 @@ export async function GET() {
     if (setting?.value) {
       try {
         const branding = JSON.parse(setting.value);
-        return NextResponse.json({ branding });
+        return apiSuccess({ branding });
       } catch {
         // Invalid JSON, return defaults
-        return NextResponse.json({ branding: null });
+        return apiSuccess({ branding: null });
       }
     }
 
-    return NextResponse.json({ branding: null });
+    return apiSuccess({ branding: null });
   } catch (error) {
-    console.error("Failed to fetch branding:", error);
+    logger.error("Failed to fetch branding", error, { route: "/api/branding" });
     // Return null branding on error - frontend will use defaults
-    return NextResponse.json({ branding: null });
+    return apiSuccess({ branding: null });
   }
 }

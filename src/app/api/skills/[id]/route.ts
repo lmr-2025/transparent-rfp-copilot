@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { updateSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -23,16 +25,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!skill) {
-      return NextResponse.json({ error: "Skill not found" }, { status: 404 });
+      return errors.notFound("Skill");
     }
 
-    return NextResponse.json(skill);
+    return apiSuccess({ skill });
   } catch (error) {
-    console.error("Failed to fetch skill:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch skill" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch skill", error, { route: "/api/skills/[id]" });
+    return errors.internal("Failed to fetch skill");
   }
 }
 
@@ -49,7 +48,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const validation = validateBody(updateSkillSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -57,7 +56,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     // Get existing skill
     const existing = await prisma.skill.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "Skill not found" }, { status: 404 });
+      return errors.notFound("Skill");
     }
 
     // Use client-provided history if present, otherwise add a generic update entry
@@ -133,14 +132,11 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json(skill);
+    return apiSuccess({ skill });
   } catch (error) {
-    console.error("Failed to update skill:", error);
+    logger.error("Failed to update skill", error, { route: "/api/skills/[id]" });
     const message = error instanceof Error ? error.message : "Failed to update skill";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return errors.internal(message);
   }
 }
 
@@ -157,7 +153,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get skill before deleting for audit log
     const skill = await prisma.skill.findUnique({ where: { id } });
     if (!skill) {
-      return NextResponse.json({ error: "Skill not found" }, { status: 404 });
+      return errors.notFound("Skill");
     }
 
     await prisma.skill.delete({
@@ -174,12 +170,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       { deletedSkill: { title: skill.title, categories: skill.categories } }
     );
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete skill:", error);
-    return NextResponse.json(
-      { error: "Failed to delete skill" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete skill", error, { route: "/api/skills/[id]" });
+    return errors.internal("Failed to delete skill");
   }
 }

@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ProjectStatus, RowStatus, Prisma } from "@prisma/client";
 import { requireAuth } from "@/lib/apiAuth";
 import { logProjectChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -56,10 +58,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!project) {
-      return NextResponse.json(
-        { error: "Project not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Project");
     }
 
     // Transform customerProfiles to a simpler format
@@ -68,13 +67,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
       customerProfiles: project.customerProfiles.map((cp) => cp.profile),
     };
 
-    return NextResponse.json({ project: transformedProject }, { status: 200 });
+    return apiSuccess({ project: transformedProject });
   } catch (error) {
-    console.error("Error fetching project:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch project" },
-      { status: 500 }
-    );
+    logger.error("Error fetching project", error, { route: "/api/projects/[id]" });
+    return errors.internal("Failed to fetch project");
   }
 }
 
@@ -263,16 +259,13 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json({ project: transformedProject }, { status: 200 });
+    return apiSuccess({ project: transformedProject });
   } catch (error) {
     if (error instanceof Error && error.message === "NOT_FOUND") {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return errors.notFound("Project");
     }
-    console.error("Error updating project:", error);
-    return NextResponse.json(
-      { error: "Failed to update project" },
-      { status: 500 }
-    );
+    logger.error("Error updating project", error, { route: "/api/projects/[id]" });
+    return errors.internal("Failed to update project");
   }
 }
 
@@ -290,7 +283,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     // Get project before deleting for audit log
     const project = await prisma.bulkProject.findUnique({ where: { id } });
     if (!project) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+      return errors.notFound("Project");
     }
 
     await prisma.bulkProject.delete({
@@ -307,15 +300,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       { deletedProject: { name: project.name, customerName: project.customerName } }
     );
 
-    return NextResponse.json(
-      { message: "Project deleted successfully" },
-      { status: 200 }
-    );
+    return apiSuccess({ message: "Project deleted successfully" });
   } catch (error) {
-    console.error("Error deleting project:", error);
-    return NextResponse.json(
-      { error: "Failed to delete project" },
-      { status: 500 }
-    );
+    logger.error("Error deleting project", error, { route: "/api/projects/[id]" });
+    return errors.internal("Failed to delete project");
   }
 }

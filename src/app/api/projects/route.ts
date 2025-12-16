@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { ProjectStatus, RowStatus } from "@prisma/client";
 import { requireAuth } from "@/lib/apiAuth";
 import { createProjectSchema, validateBody } from "@/lib/validations";
 import { logProjectChange, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/projects - Get all projects
 export async function GET(request: NextRequest) {
@@ -48,13 +50,10 @@ export async function GET(request: NextRequest) {
       customerProfiles: project.customerProfiles.map((cp) => cp.profile),
     }));
 
-    return NextResponse.json({ projects: transformedProjects }, { status: 200 });
+    return apiSuccess({ projects: transformedProjects });
   } catch (error) {
-    console.error("Error fetching projects:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch projects" },
-      { status: 500 }
-    );
+    logger.error("Error fetching projects", error, { route: "/api/projects" });
+    return errors.internal("Failed to fetch projects");
   }
 }
 
@@ -70,7 +69,7 @@ export async function POST(request: NextRequest) {
 
     const validation = validateBody(createProjectSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -84,7 +83,7 @@ export async function POST(request: NextRequest) {
         sheetName: data.sheetName,
         columns: data.columns,
         ownerName: data.ownerName || auth.session.user.name,
-        ownerId: auth.session.user.id,
+        ownerId: data.ownerId || auth.session.user.id, // Use provided owner or fall back to current user
         customerName: data.customerName,
         notes: data.notes,
         status: projectStatus,
@@ -121,12 +120,9 @@ export async function POST(request: NextRequest) {
       { rowCount: data.rows.length, customerName: data.customerName }
     );
 
-    return NextResponse.json({ project }, { status: 201 });
+    return apiSuccess({ project }, { status: 201 });
   } catch (error) {
-    console.error("Error creating project:", error);
-    return NextResponse.json(
-      { error: "Failed to create project" },
-      { status: 500 }
-    );
+    logger.error("Error creating project", error, { route: "/api/projects" });
+    return errors.internal("Failed to create project");
   }
 }

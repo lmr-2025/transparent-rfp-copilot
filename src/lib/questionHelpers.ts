@@ -173,7 +173,7 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
  * Selects relevant skills based on question keywords.
  * Scores skills by:
  * - Title matches: 10 points
- * - Tag matches: 5 points
+ * - Category matches: 5 points
  * - Content keyword matches: 1 point each
  * Returns top 5 skills with score > 0
  */
@@ -215,5 +215,80 @@ export const selectRelevantSkills = (question: string, allSkills: Skill[]): Skil
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 5)
+    .map((item) => item.skill);
+};
+
+/**
+ * Selects relevant skills for a batch of questions.
+ * Combines keywords from all questions and returns the top skills
+ * that are relevant to the batch as a whole.
+ *
+ * @param questions Array of question strings
+ * @param allSkills All available skills
+ * @param maxSkills Maximum number of skills to return (default 10)
+ * @returns Skills relevant to the batch, deduplicated and sorted by relevance
+ */
+export const selectRelevantSkillsForBatch = (
+  questions: string[],
+  allSkills: Skill[],
+  maxSkills: number = 10
+): Skill[] => {
+  const activeSkills = allSkills.filter((skill) => skill.isActive);
+
+  // Combine all question keywords
+  const allKeywords = new Set<string>();
+  const combinedText = questions.join(" ").toLowerCase();
+
+  questions.forEach((question) => {
+    const questionLower = question.toLowerCase();
+    const words = questionLower.split(/\s+/).filter((word) => word.length > 3);
+    words.forEach((word) => allKeywords.add(word));
+  });
+
+  const keywordArray = Array.from(allKeywords);
+
+  // Score each skill based on combined keywords from all questions
+  const scoredSkills = activeSkills.map((skill) => {
+    let score = 0;
+    const skillTitle = skill.title.toLowerCase();
+    const skillText = `${skill.title} ${skill.content}`.toLowerCase();
+    const titleWords = skillTitle.split(/\s+/);
+
+    // Title word matches are worth more
+    titleWords.forEach((titleWord) => {
+      if (keywordArray.some((kw) => kw.includes(titleWord) || titleWord.includes(kw))) {
+        score += 10;
+      }
+    });
+
+    // Category matches - check if any question mentions the category
+    skill.categories?.forEach((cat) => {
+      const catLower = cat.toLowerCase();
+      if (combinedText.includes(catLower)) {
+        score += 8;
+      }
+      // Also check individual category words
+      catLower.split(/\s+/).forEach((catWord) => {
+        if (catWord.length > 3 && keywordArray.includes(catWord)) {
+          score += 3;
+        }
+      });
+    });
+
+    // Content keyword matches
+    keywordArray.forEach((word) => {
+      if (skillText.includes(word)) {
+        score += 1;
+      }
+    });
+
+    return { skill, score };
+  });
+
+  // Return top N skills with score > 0
+  return scoredSkills
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, maxSkills)
     .map((item) => item.skill);
 };

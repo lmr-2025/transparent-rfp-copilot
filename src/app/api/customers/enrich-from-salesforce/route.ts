@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/apiAuth";
 import {
   isSalesforceConfigured,
@@ -7,6 +7,8 @@ import {
   mapAccountToProfile,
   SalesforceAccount,
 } from "@/lib/salesforce";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/customers/enrich-from-salesforce?accountId=xxx or ?search=xxx
 // Returns Salesforce data that can be used to enrich a customer profile
@@ -17,9 +19,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (!isSalesforceConfigured()) {
-    return NextResponse.json(
+    // Special 501 response for non-configured integrations - custom format for frontend handling
+    return Response.json(
       {
-        error: "Salesforce not configured",
+        error: {
+          code: "NOT_IMPLEMENTED",
+          message: "Salesforce not configured",
+        },
         configured: false,
         hint: "Set SALESFORCE_CLIENT_ID, SALESFORCE_CLIENT_SECRET, SALESFORCE_REFRESH_TOKEN, and SALESFORCE_INSTANCE_URL",
       },
@@ -37,15 +43,12 @@ export async function GET(request: NextRequest) {
       const account = await fetchAccountById(accountId);
 
       if (!account) {
-        return NextResponse.json(
-          { error: "Salesforce account not found" },
-          { status: 404 }
-        );
+        return errors.notFound("Salesforce account");
       }
 
       const enrichmentData = mapAccountToProfile(account);
 
-      return NextResponse.json({
+      return apiSuccess({
         account: formatAccountForResponse(account),
         enrichment: enrichmentData,
       });
@@ -54,15 +57,12 @@ export async function GET(request: NextRequest) {
     // Search by name
     if (searchTerm) {
       if (searchTerm.length < 2) {
-        return NextResponse.json(
-          { error: "Search term must be at least 2 characters" },
-          { status: 400 }
-        );
+        return errors.badRequest("Search term must be at least 2 characters");
       }
 
       const accounts = await searchAccounts(searchTerm);
 
-      return NextResponse.json({
+      return apiSuccess({
         results: accounts.map((a) => ({
           id: a.Id,
           name: a.Name,
@@ -73,16 +73,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(
-      { error: "Provide accountId or search parameter" },
-      { status: 400 }
-    );
+    return errors.badRequest("Provide accountId or search parameter");
   } catch (error) {
-    console.error("Salesforce API error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Salesforce API error" },
-      { status: 500 }
-    );
+    logger.error("Salesforce API error", error, { route: "/api/customers/enrich-from-salesforce" });
+    return errors.internal(error instanceof Error ? error.message : "Salesforce API error");
   }
 }
 

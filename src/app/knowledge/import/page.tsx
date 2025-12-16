@@ -318,8 +318,8 @@ export default function ImportRFPPage() {
           newSkillsList.push(newSkill);
           newSkillsCreated++;
         }
-      } catch (error) {
-        console.error("Failed to apply suggestion:", error);
+      } catch {
+        toast.error("Failed to apply suggestion");
       }
     }
 

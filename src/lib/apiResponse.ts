@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ZodSchema, ZodError } from "zod";
 import { requireAuth, requireAdmin } from "@/lib/apiAuth";
 import { checkRateLimit, getRateLimitIdentifier, rateLimitConfigs } from "@/lib/rateLimit";
+import { logger } from "@/lib/logger";
 
 // ============================================
 // ERROR TYPES AND RESPONSES
@@ -25,7 +26,8 @@ export type ApiErrorCode =
   | "CONFLICT"
   | "RATE_LIMITED"
   | "BAD_REQUEST"
-  | "INTERNAL_ERROR";
+  | "INTERNAL_ERROR"
+  | "BAD_GATEWAY";
 
 export interface ApiError {
   code: ApiErrorCode;
@@ -46,6 +48,7 @@ const ERROR_STATUS_CODES: Record<ApiErrorCode, number> = {
   CONFLICT: 409,
   RATE_LIMITED: 429,
   INTERNAL_ERROR: 500,
+  BAD_GATEWAY: 502,
 };
 
 /**
@@ -91,6 +94,9 @@ export const errors = {
 
   internal: (message = "An internal error occurred") =>
     apiError("INTERNAL_ERROR", message),
+
+  badGateway: (message = "Bad gateway") =>
+    apiError("BAD_GATEWAY", message),
 };
 
 // ============================================
@@ -299,7 +305,7 @@ export function createRoute<TParams = unknown>(
     try {
       return await handler(request, routeContext, params as TParams);
     } catch (error) {
-      console.error("Route handler error:", error);
+      logger.error("Route handler error", error, { auth: config.auth, rateLimit: config.rateLimit });
       const message = error instanceof Error ? error.message : "An unexpected error occurred";
       return errors.internal(message);
     }

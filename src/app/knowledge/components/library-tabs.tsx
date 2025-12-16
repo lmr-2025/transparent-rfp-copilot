@@ -1,32 +1,28 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { BookOpen, FileText, Globe, Code } from "lucide-react";
+import { BookOpen, FolderOpen } from "lucide-react";
 
-export type TabType = "skills" | "documents" | "urls" | "snippets";
+export type TabType = "skills" | "sources";
 
 interface LibraryTabsProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   counts: {
     skills: number;
-    documents: number;
-    urls: number;
-    snippets: number;
+    sources: number;
   };
 }
 
 export function LibraryTabs({ activeTab, onTabChange, counts }: LibraryTabsProps) {
-  const tabs: { key: TabType; label: string; icon: React.ReactNode; count: number }[] = [
-    { key: "skills", label: "Skills", icon: <BookOpen className="h-4 w-4" />, count: counts.skills },
-    { key: "documents", label: "Documents", icon: <FileText className="h-4 w-4" />, count: counts.documents },
-    { key: "urls", label: "URLs", icon: <Globe className="h-4 w-4" />, count: counts.urls },
-    { key: "snippets", label: "Snippets", icon: <Code className="h-4 w-4" />, count: counts.snippets },
+  const tabs: { key: TabType; label: string; icon: React.ReactNode; count: number; description: string }[] = [
+    { key: "skills", label: "Skills", icon: <BookOpen className="h-4 w-4" />, count: counts.skills, description: "Structured knowledge for Q&A" },
+    { key: "sources", label: "Sources", icon: <FolderOpen className="h-4 w-4" />, count: counts.sources, description: "Documents & URLs" },
   ];
 
   return (
     <div className="flex border-b border-border">
-      {tabs.map(({ key, label, icon, count }) => (
+      {tabs.map(({ key, label, icon, count, description }) => (
         <button
           key={key}
           onClick={() => onTabChange(key)}
@@ -36,6 +32,7 @@ export function LibraryTabs({ activeTab, onTabChange, counts }: LibraryTabsProps
               ? "border-primary text-primary"
               : "border-transparent text-muted-foreground hover:text-foreground hover:border-muted"
           )}
+          title={description}
         >
           {icon}
           {label}

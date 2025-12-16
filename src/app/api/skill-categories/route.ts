@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SKILL_CATEGORIES } from "@/types/skill";
 import { requireAuth } from "@/lib/apiAuth";
 import { createCategorySchema, validateBody } from "@/lib/validations";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/skill-categories - List all categories
 export async function GET() {
@@ -27,13 +29,10 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json(categories);
+    return apiSuccess({ categories });
   } catch (error) {
-    console.error("Failed to fetch skill categories:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch skill categories" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch skill categories", error, { route: "/api/skill-categories" });
+    return errors.internal("Failed to fetch skill categories");
   }
 }
 
@@ -49,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     const validation = validateBody(createCategorySchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const data = validation.data;
@@ -68,13 +67,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(category, { status: 201 });
+    return apiSuccess({ category }, { status: 201 });
   } catch (error) {
-    console.error("Failed to create skill category:", error);
-    return NextResponse.json(
-      { error: "Failed to create skill category" },
-      { status: 500 }
-    );
+    logger.error("Failed to create skill category", error, { route: "/api/skill-categories" });
+    return errors.internal("Failed to create skill category");
   }
 }
 
@@ -96,10 +92,7 @@ export async function PUT(request: NextRequest) {
     }>;
 
     if (!Array.isArray(categories)) {
-      return NextResponse.json(
-        { error: "categories array required" },
-        { status: 400 }
-      );
+      return errors.badRequest("categories array required");
     }
 
     // Update each category
@@ -121,12 +114,9 @@ export async function PUT(request: NextRequest) {
       orderBy: { sortOrder: "asc" },
     });
 
-    return NextResponse.json(updated);
+    return apiSuccess({ categories: updated });
   } catch (error) {
-    console.error("Failed to update skill categories:", error);
-    return NextResponse.json(
-      { error: "Failed to update skill categories" },
-      { status: 500 }
-    );
+    logger.error("Failed to update skill categories", error, { route: "/api/skill-categories" });
+    return errors.internal("Failed to update skill categories");
   }
 }

@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { encrypt, isEncryptionConfigured } from "@/lib/encryption";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // Keys that contain sensitive data and should be encrypted
 const SENSITIVE_KEY_PATTERNS = ["SECRET", "TOKEN", "KEY", "PASSWORD", "CREDENTIAL"];
@@ -26,7 +28,7 @@ export async function GET() {
     process.env.OKTA_ISSUER
   );
 
-  return NextResponse.json({
+  return apiSuccess({
     setupNeeded: userCount === 0 && !googleConfigured && !oktaConfigured,
     hasUsers: userCount > 0,
     googleConfigured,
@@ -40,10 +42,7 @@ export async function POST(request: NextRequest) {
   // Security: Only allow setup if no users exist yet
   const userCount = await prisma.user.count();
   if (userCount > 0) {
-    return NextResponse.json(
-      { error: "Setup already complete. Use admin settings to modify." },
-      { status: 403 }
-    );
+    return errors.forbidden("Setup already complete. Use admin settings to modify.");
   }
 
   try {
@@ -51,7 +50,7 @@ export async function POST(request: NextRequest) {
     const { key, value } = body;
 
     if (!key || typeof key !== "string") {
-      return NextResponse.json({ error: "key is required" }, { status: 400 });
+      return errors.badRequest("key is required");
     }
 
     // Only allow OAuth-related keys during setup
@@ -64,20 +63,14 @@ export async function POST(request: NextRequest) {
     ];
 
     if (!allowedKeys.includes(key)) {
-      return NextResponse.json(
-        { error: `Setting '${key}' cannot be set during setup` },
-        { status: 400 }
-      );
+      return errors.badRequest(`Setting '${key}' cannot be set during setup`);
     }
 
     const isSensitive = isSensitiveKey(key);
 
     // Require encryption to be configured for sensitive values
     if (isSensitive && !isEncryptionConfigured()) {
-      return NextResponse.json(
-        { error: "ENCRYPTION_KEY environment variable must be configured to store sensitive settings" },
-        { status: 500 }
-      );
+      return errors.internal("ENCRYPTION_KEY environment variable must be configured to store sensitive settings");
     }
 
     // Encrypt sensitive values before storing
@@ -90,12 +83,9 @@ export async function POST(request: NextRequest) {
       update: { value: valueToStore, updatedBy: "setup-wizard" },
     });
 
-    return NextResponse.json({ success: true, key });
+    return apiSuccess({ success: true, key });
   } catch (error) {
-    console.error("Setup error:", error);
-    return NextResponse.json(
-      { error: "Failed to save setting" },
-      { status: 500 }
-    );
+    logger.error("Setup error", error, { route: "/api/setup" });
+    return errors.internal("Failed to save setting");
   }
 }

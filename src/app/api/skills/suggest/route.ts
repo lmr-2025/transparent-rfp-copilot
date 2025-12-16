@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { generateSkillDraftFromMessages } from "@/lib/llm";
@@ -9,6 +9,8 @@ import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type SuggestRequestBody = {
   sourceText?: string;
@@ -43,7 +45,7 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as SuggestRequestBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const sourceText = body?.sourceText?.trim() ?? "";
@@ -57,10 +59,7 @@ export async function POST(request: NextRequest) {
   const existingSkill = body?.existingSkill;
 
   if (!sourceText && sourceUrls.length === 0 && conversationMessages.length === 0) {
-    return NextResponse.json(
-      { error: "Provide conversationMessages or at least one valid source entry." },
-      { status: 400 },
-    );
+    return errors.badRequest("Provide conversationMessages or at least one valid source entry.");
   }
 
   try {
@@ -74,7 +73,7 @@ export async function POST(request: NextRequest) {
       const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
       // Use the new simpler draft-based approach
       const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession);
-      return NextResponse.json({
+      return apiSuccess({
         updateMode: true,
         draftMode: true,
         existingSkill,
@@ -98,7 +97,7 @@ export async function POST(request: NextRequest) {
           metadata: { mode: "create-conversation" },
         });
       }
-      return NextResponse.json({ draft });
+      return apiSuccess({ draft });
     }
 
     const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
@@ -119,17 +118,14 @@ export async function POST(request: NextRequest) {
         metadata: { mode: "create-source", urlCount: sourceUrls.length },
       });
     }
-    return NextResponse.json({ draft, initialMessage });
+    return apiSuccess({ draft, initialMessage });
   } catch (error) {
-    console.error("Failed to generate skill draft:", error);
+    logger.error("Failed to generate skill draft", error, { route: "/api/skills/suggest" });
     const message =
       error instanceof Error
         ? error.message
         : "Unable to generate skill draft. Please try again later.";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 },
-    );
+    return errors.internal(message);
   }
 }
 
@@ -144,52 +140,36 @@ async function generateDraftUpdate(
 
   const systemPrompt = `You are a knowledge extraction specialist reviewing an existing skill against new source material.
 
-IMPORTANT: BE CONSERVATIVE ABOUT CHANGES. Only suggest updates if the new source contains genuinely valuable new information.
+YOUR GOAL: Ensure the skill comprehensively covers ALL the information from the source material.
 
-RETURN hasChanges: false IF:
-- The source material is marketing fluff without concrete facts
-- The information is already captured in the existing skill (even if worded differently)
-- The "new" information is just rephrasing what's already there
-- The source doesn't add facts that would help answer questions about the organization
-- Changes would only be cosmetic (reformatting, rewording)
+RETURN hasChanges: true IF ANY of these are true:
+- Source contains information about platforms/integrations NOT in existing skill
+- Source has specific technical details (numbers, versions, capabilities) not captured
+- Source describes features, limitations, or requirements not mentioned
+- Source covers topics/sections that the existing skill doesn't address
+- Multiple sources exist but existing skill only covers content from one
 
-RETURN hasChanges: true ONLY IF:
-- NEW concrete facts: specific numbers, dates, versions, limits, certifications
-- NEW capabilities not mentioned in existing skill
-- CORRECTIONS to outdated information (version numbers, deprecated features)
-- MISSING integrations, platforms, or compliance standards
-- Significant new details that would help answer customer questions
+RETURN hasChanges: false ONLY IF:
+- The existing skill already covers ALL topics from ALL sources
+- New content is purely marketing fluff with no concrete facts
+- Changes would only be cosmetic rewording of existing information
 
-WHAT MAKES CHANGES "MEANINGFUL":
-Think: "Would this help build the organization's knowledge base for AI to leverage when answering questions?"
-- YES: Add the new fact
-- NO: Keep the original, return hasChanges: false
+IMPORTANT: If there are multiple source URLs about different topics (e.g., Snowflake, Teradata, Salesforce) but the existing skill only covers ONE topic, you MUST add the missing topics.
 
-DIFF-FRIENDLY EDITING (CRITICAL):
-The user will review your changes in a GitHub-style diff viewer showing line-by-line additions/deletions.
-To make changes easy to review:
+DIFF-FRIENDLY EDITING:
 - Make SURGICAL edits - only change what needs to change
-- PRESERVE the original structure, formatting, and line breaks exactly
-- ADD new bullet points in logical places within existing sections
-- UPDATE specific values (numbers, versions, dates) in place
-- DO NOT rewrite or rephrase unchanged content
-- DO NOT reorganize sections unless absolutely necessary
-- DO NOT change formatting, indentation, or whitespace of unchanged lines
-- Each change should be clearly visible as a small, focused diff
-
-BAD (rewrites everything):
-"## Features\n- Feature A with new details\n- Feature B completely rewritten\n- Feature C"
-
-GOOD (surgical edit):
-Keep original exactly, just add "- Feature D: new capability" where appropriate
+- PRESERVE the original structure and formatting
+- ADD new sections for new topics at the end
+- ADD new bullet points within existing sections where appropriate
+- DO NOT rewrite content that doesn't need to change
 
 OUTPUT (JSON only):
 {
   "hasChanges": true/false,
-  "summary": "What new facts were added" OR "No meaningful updates - source material doesn't add new information",
+  "summary": "What new facts/sections were added" OR "Skill already covers all source content",
   "title": "Keep same unless topic scope genuinely changed",
-  "content": "COMPLETE skill with surgical edits preserving original formatting",
-  "changeHighlights": ["Specific new fact added", ...] // Empty if no changes
+  "content": "COMPLETE skill content including both original AND new information",
+  "changeHighlights": ["Added Snowflake integration details", "Added Teradata support info", ...] // Empty if no changes
 }`;
 
   const userPrompt = `EXISTING SKILL:
@@ -230,6 +210,19 @@ Return ONLY the JSON object.`;
   }
 
   const parsed = parseJsonResponse<DraftUpdateResponse>(content.text);
+
+  // Ensure content is never empty - if hasChanges is false, use original content
+  if (!parsed.content || parsed.content.trim() === "") {
+    parsed.content = existingSkill.content;
+    parsed.hasChanges = false;
+  }
+
+  // If hasChanges is false but content differs from original (LLM error), use original
+  if (!parsed.hasChanges) {
+    parsed.content = existingSkill.content;
+    parsed.title = existingSkill.title;
+    parsed.changeHighlights = [];
+  }
 
   // Log usage
   logUsage({

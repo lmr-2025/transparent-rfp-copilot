@@ -106,8 +106,12 @@ export const logger = {
    * Warn level - potentially problematic situations
    * Use for recoverable issues that should be monitored
    */
-  warn: (message: string, context?: LogContext) => {
-    log('warn', message, context);
+  warn: (message: string, errorOrContext?: Error | unknown | LogContext, context?: LogContext) => {
+    if (errorOrContext instanceof Error || (errorOrContext && typeof errorOrContext === 'object' && 'message' in errorOrContext)) {
+      log('warn', message, errorOrContext as Error, context);
+    } else {
+      log('warn', message, errorOrContext as LogContext);
+    }
   },
 
   /**
@@ -131,8 +135,8 @@ export const logger = {
       logger.debug(message, { ...baseContext, ...context }),
     info: (message: string, context?: LogContext) =>
       logger.info(message, { ...baseContext, ...context }),
-    warn: (message: string, context?: LogContext) =>
-      logger.warn(message, { ...baseContext, ...context }),
+    warn: (message: string, errorOrContext?: Error | unknown | LogContext, context?: LogContext) =>
+      logger.warn(message, errorOrContext, { ...baseContext, ...context }),
     error: (message: string, error?: Error | unknown, context?: LogContext) =>
       logger.error(message, error, { ...baseContext, ...context }),
   }),

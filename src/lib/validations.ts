@@ -143,6 +143,7 @@ export const createProjectSchema = z.object({
   sheetName: z.string().min(1, "Sheet name is required").max(200),
   columns: z.array(z.string()),
   rows: z.array(projectRowSchema),
+  ownerId: z.string().optional(), // User ID to assign ownership
   ownerName: z.string().max(200).optional(),
   customerName: z.string().max(200).optional(),
   notes: z.string().max(10000).optional(),

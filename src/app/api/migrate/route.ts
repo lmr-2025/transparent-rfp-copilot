@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // POST /api/migrate - Migrate localStorage data to database
 // Admin-only: This endpoint can bulk-insert data
@@ -51,7 +53,7 @@ export async function POST(request: NextRequest) {
           });
           results.skills.imported++;
         } catch (e) {
-          console.error("Failed to migrate skill:", skill.title, e);
+          logger.error("Failed to migrate skill", e, { route: "/api/migrate", skillTitle: skill.title });
           results.skills.skipped++;
         }
       }
@@ -79,7 +81,7 @@ export async function POST(request: NextRequest) {
           });
           results.categories.imported++;
         } catch (e) {
-          console.error("Failed to migrate category:", cat.name, e);
+          logger.error("Failed to migrate category", e, { route: "/api/migrate", categoryName: cat.name });
           results.categories.skipped++;
         }
       }
@@ -102,22 +104,19 @@ export async function POST(request: NextRequest) {
           });
           results.referenceUrls.imported++;
         } catch (e) {
-          console.error("Failed to migrate reference URL:", urlData, e);
+          logger.error("Failed to migrate reference URL", e, { route: "/api/migrate" });
           results.referenceUrls.skipped++;
         }
       }
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       success: true,
       message: "Migration completed",
       results,
     });
   } catch (error) {
-    console.error("Migration failed:", error);
-    return NextResponse.json(
-      { error: "Migration failed", details: String(error) },
-      { status: 500 }
-    );
+    logger.error("Migration failed", error, { route: "/api/migrate" });
+    return errors.internal(`Migration failed: ${String(error)}`);
   }
 }

@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET - Fetch a specific chat session
 export async function GET(
@@ -19,19 +21,13 @@ export async function GET(
     });
 
     if (!chatSession) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Session");
     }
 
-    return NextResponse.json(chatSession);
+    return apiSuccess({ session: chatSession });
   } catch (error) {
-    console.error("Error fetching chat session:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch chat session" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch chat session", error, { route: "/api/chat-sessions/[id]" });
+    return errors.internal("Failed to fetch chat session");
   }
 }
 
@@ -54,10 +50,7 @@ export async function PUT(
     });
 
     if (!existingSession) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Session");
     }
 
     const updateData: Record<string, unknown> = {};
@@ -73,13 +66,10 @@ export async function PUT(
       data: updateData,
     });
 
-    return NextResponse.json(updated);
+    return apiSuccess({ session: updated });
   } catch (error) {
-    console.error("Error updating chat session:", error);
-    return NextResponse.json(
-      { error: "Failed to update chat session" },
-      { status: 500 }
-    );
+    logger.error("Failed to update chat session", error, { route: "/api/chat-sessions/[id]" });
+    return errors.internal("Failed to update chat session");
   }
 }
 
@@ -93,10 +83,7 @@ export async function DELETE(
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+      return errors.unauthorized();
     }
 
     const { id } = await params;
@@ -107,22 +94,16 @@ export async function DELETE(
     });
 
     if (!chatSession) {
-      return NextResponse.json(
-        { error: "Session not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Session");
     }
 
     await prisma.chatSession.delete({
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error deleting chat session:", error);
-    return NextResponse.json(
-      { error: "Failed to delete session" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete chat session", error, { route: "/api/chat-sessions/[id]" });
+    return errors.internal("Failed to delete session");
   }
 }

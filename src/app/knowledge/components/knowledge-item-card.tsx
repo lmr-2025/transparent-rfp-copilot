@@ -1,21 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Globe, Code, Loader2, User, ExternalLink, History, UserCog, CheckSquare, Square } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Globe, Code, Loader2, User, ExternalLink, History, UserCog, CheckSquare, Square, RefreshCw, Tag, FolderOpen, Wand2, Link2, Pencil, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { UnifiedLibraryItem, LibraryItemType, SkillOwner } from "@/hooks/use-knowledge-data";
+import { UnifiedLibraryItem, LibraryItemType, SkillOwner, RefreshResult } from "@/hooks/use-knowledge-data";
 import { OwnerManagementDialog } from "./owner-management-dialog";
+import { SkillRefreshDialog } from "./skill-refresh-dialog";
+import { CategoryManagementDialog } from "./category-management-dialog";
+import { SkillSourcesDialog } from "./skill-sources-dialog";
+import { SkillHistoryDialog } from "./skill-history-dialog";
 
 interface KnowledgeItemCardProps {
   item: UnifiedLibraryItem;
   onDelete?: () => void;
   isDeleting?: boolean;
   onUpdateOwners?: (id: string, owners: SkillOwner[]) => Promise<void>;
+  onRefresh?: (id: string) => Promise<RefreshResult>;
+  onApplyRefresh?: (id: string, title: string, content: string, changeHighlights?: string[]) => Promise<void>;
+  onUpdateCategories?: (id: string, categories: string[]) => Promise<void>;
+  onUpdateTitle?: (id: string, newTitle: string) => Promise<void>;
+  isRefreshing?: boolean;
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelection?: () => void;
+  linkedSkillName?: string; // Name of linked skill (for sources)
 }
 
 export function KnowledgeItemCard({
@@ -23,21 +34,107 @@ export function KnowledgeItemCard({
   onDelete,
   isDeleting,
   onUpdateOwners,
+  onRefresh,
+  onApplyRefresh,
+  onUpdateCategories,
+  onUpdateTitle,
+  isRefreshing,
   selectionMode,
   isSelected,
   onToggleSelection,
+  linkedSkillName,
 }: KnowledgeItemCardProps) {
+  const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
+  const [showRefreshDialog, setShowRefreshDialog] = useState(false);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [showSourcesDialog, setShowSourcesDialog] = useState(false);
+  const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editedTitle, setEditedTitle] = useState(item.title);
+  const [isSavingTitle, setIsSavingTitle] = useState(false);
 
   const typeConfig = getTypeConfig(item.type);
+
+  // URLs with onUpdateTitle can have editable titles
+  const canEditTitle = item.type === "url" && onUpdateTitle && !selectionMode;
 
   // Only skills support owner management
   const canManageOwners = item.type === "skill" && onUpdateOwners;
 
+  // Only skills support category management
+  const canManageCategories = item.type === "skill" && onUpdateCategories;
+
+  // Skills with source URLs can be refreshed
+  const canRefresh = item.type === "skill" && item.sourceUrls && item.sourceUrls.length > 0 && onRefresh;
+
+  // Skills can view sources and history
+  const canViewSources = item.type === "skill";
+  const canViewHistory = item.type === "skill" && item.history && item.history.length > 0;
+
+  // Documents can be converted to skills
+  const canConvertToSkill = item.type === "document";
+
+  const handleSaveTitle = async () => {
+    if (!onUpdateTitle || editedTitle === item.title) {
+      setIsEditingTitle(false);
+      return;
+    }
+    setIsSavingTitle(true);
+    try {
+      await onUpdateTitle(item.id, editedTitle);
+      setIsEditingTitle(false);
+    } finally {
+      setIsSavingTitle(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditedTitle(item.title);
+    setIsEditingTitle(false);
+  };
+
+  const handleConvertToSkill = () => {
+    if (item.type === "document") {
+      router.push(`/knowledge/add?docId=${item.id}`);
+    }
+  };
+
+  const handleRefreshClick = async () => {
+    if (!onRefresh) return;
+    setShowRefreshDialog(true);
+    try {
+      const result = await onRefresh(item.id);
+      setRefreshResult(result);
+    } catch (error) {
+      // Error will be shown in dialog
+      setRefreshResult(null);
+    }
+  };
+
+  const handleApplyRefresh = async (title: string, content: string, changeHighlights?: string[]) => {
+    if (!onApplyRefresh) return;
+    await onApplyRefresh(item.id, title, content, changeHighlights);
+    setShowRefreshDialog(false);
+    setRefreshResult(null);
+  };
+
+  const handleCloseRefreshDialog = () => {
+    setShowRefreshDialog(false);
+    setRefreshResult(null);
+  };
+
   const handleSaveOwners = async (owners: SkillOwner[]) => {
     if (onUpdateOwners) {
       await onUpdateOwners(item.id, owners);
+    }
+  };
+
+  const handleSaveCategories = async (categories: string[]) => {
+    if (onUpdateCategories) {
+      await onUpdateCategories(item.id, categories);
     }
   };
 
@@ -50,7 +147,7 @@ export function KnowledgeItemCard({
   return (
     <Card
       className={cn(
-        "transition-all",
+        "transition-all group",
         !item.isActive && item.type === "skill" && "opacity-60",
         selectionMode && "cursor-pointer hover:border-blue-400",
         isSelected && "border-blue-500 bg-blue-50/50"
@@ -76,7 +173,52 @@ export function KnowledgeItemCard({
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-medium text-foreground truncate">{item.title}</h3>
+                {isEditingTitle ? (
+                  <div className="flex items-center gap-1 flex-1">
+                    <input
+                      type="text"
+                      value={editedTitle}
+                      onChange={(e) => setEditedTitle(e.target.value)}
+                      className="flex-1 px-2 py-1 text-sm font-medium border border-blue-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleSaveTitle();
+                        if (e.key === "Escape") handleCancelEdit();
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleSaveTitle}
+                      disabled={isSavingTitle}
+                      className="h-7 w-7 p-0 text-green-600 hover:text-green-700"
+                    >
+                      {isSavingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleCancelEdit}
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="font-medium text-foreground truncate">{item.title}</h3>
+                    {canEditTitle && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsEditingTitle(true)}
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </>
+                )}
                 {item.type === "skill" && !item.isActive && (
                   <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">
                     Inactive
@@ -85,6 +227,15 @@ export function KnowledgeItemCard({
               </div>
               {item.subtitle && (
                 <p className="text-sm text-muted-foreground truncate mt-0.5">{item.subtitle}</p>
+              )}
+              {/* Linked skill badge for sources */}
+              {linkedSkillName && (
+                <div className="flex items-center gap-1 mt-2">
+                  <Link2 className="h-3 w-3 text-blue-500" />
+                  <span className="text-xs text-blue-600 font-medium">
+                    {linkedSkillName}
+                  </span>
+                </div>
               )}
               {/* Owners */}
               {item.owners && item.owners.length > 0 && (
@@ -100,6 +251,59 @@ export function KnowledgeItemCard({
 
           {/* Actions */}
           <div className="flex items-center gap-1">
+            {canViewSources && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSourcesDialog(true)}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-emerald-600"
+                aria-label="View sources"
+                title="View sources"
+              >
+                <FolderOpen className="h-4 w-4" />
+              </Button>
+            )}
+            {canViewHistory && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowHistoryDialog(true)}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-amber-600"
+                aria-label="View history"
+                title="View history"
+              >
+                <History className="h-4 w-4" />
+              </Button>
+            )}
+            {canRefresh && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefreshClick}
+                disabled={isRefreshing}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-green-600"
+                aria-label="Refresh from source URLs"
+                title="Refresh from source URLs"
+              >
+                {isRefreshing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+              </Button>
+            )}
+            {canManageCategories && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCategoryDialog(true)}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-purple-600"
+                aria-label="Manage categories"
+                title="Manage categories"
+              >
+                <Tag className="h-4 w-4" />
+              </Button>
+            )}
             {canManageOwners && (
               <Button
                 variant="ghost"
@@ -109,6 +313,18 @@ export function KnowledgeItemCard({
                 aria-label="Manage owners"
               >
                 <UserCog className="h-4 w-4" />
+              </Button>
+            )}
+            {canConvertToSkill && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleConvertToSkill}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-violet-600"
+                aria-label="Convert to skill"
+                title="Convert to skill"
+              >
+                <Wand2 className="h-4 w-4" />
               </Button>
             )}
             <Button
@@ -150,11 +366,12 @@ export function KnowledgeItemCard({
             {/* Content preview */}
             {item.content && (
               <div>
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">Content</h4>
-                <pre className="text-sm text-foreground whitespace-pre-wrap font-sans max-h-64 overflow-y-auto bg-muted/50 p-3 rounded-md">
-                  {item.content.length > 1500
-                    ? item.content.slice(0, 1500) + "..."
-                    : item.content}
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2 flex items-center justify-between">
+                  <span>Content</span>
+                  <span className="font-normal text-muted-foreground/70">{item.content.length.toLocaleString()} characters</span>
+                </h4>
+                <pre className="text-sm text-foreground whitespace-pre-wrap font-sans max-h-96 overflow-y-auto bg-muted/50 p-3 rounded-md">
+                  {item.content}
                 </pre>
               </div>
             )}
@@ -241,6 +458,47 @@ export function KnowledgeItemCard({
           currentOwners={item.owners || []}
           onSave={handleSaveOwners}
           itemTitle={item.title}
+        />
+      )}
+
+      {/* Skill Refresh Dialog */}
+      {canRefresh && (
+        <SkillRefreshDialog
+          open={showRefreshDialog}
+          onOpenChange={handleCloseRefreshDialog}
+          skillTitle={item.title}
+          refreshResult={refreshResult}
+          isLoading={!!isRefreshing && !refreshResult}
+          onApply={handleApplyRefresh}
+        />
+      )}
+
+      {/* Category Management Dialog */}
+      {canManageCategories && (
+        <CategoryManagementDialog
+          open={showCategoryDialog}
+          onOpenChange={setShowCategoryDialog}
+          currentCategories={item.categories || []}
+          onSave={handleSaveCategories}
+          itemTitle={item.title}
+        />
+      )}
+
+      {/* Sources Dialog */}
+      {canViewSources && (
+        <SkillSourcesDialog
+          open={showSourcesDialog}
+          onOpenChange={setShowSourcesDialog}
+          item={item}
+        />
+      )}
+
+      {/* History Dialog */}
+      {canViewHistory && (
+        <SkillHistoryDialog
+          open={showHistoryDialog}
+          onOpenChange={setShowHistoryDialog}
+          item={item}
         />
       )}
     </Card>

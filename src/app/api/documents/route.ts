@@ -6,6 +6,7 @@ import { logDocumentChange, getUserFromSession } from "@/lib/auditLog";
 import { getAnthropicClient } from "@/lib/apiHelpers";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 60;
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     return apiSuccess({ documents });
   } catch (error) {
-    console.error("Failed to fetch documents:", error);
+    logger.error("Failed to fetch documents", error, { route: "/api/documents" });
     return errors.internal("Failed to fetch documents");
   }
 }
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     try {
       content = await extractTextContent(buffer, fileType);
     } catch (extractError) {
-      console.error("Text extraction failed:", extractError);
+      logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType });
       // If saving as template, text extraction is required
       if (saveAsTemplate) {
         return errors.badRequest("Failed to extract text from document. Text extraction is required for templates.");
@@ -178,7 +179,7 @@ export async function POST(request: NextRequest) {
       },
     }, { status: 201 });
   } catch (error) {
-    console.error("Failed to upload document:", error);
+    logger.error("Failed to upload document", error, { route: "/api/documents" });
     return errors.internal("Failed to upload document");
   }
 }
@@ -285,7 +286,7 @@ Return the markdown template with appropriate placeholders.`;
 
     return textContent.text;
   } catch (error) {
-    console.error("Failed to generate template:", error);
+    logger.error("Failed to generate template", error, { route: "/api/documents" });
     // Fall back to returning the original content as-is with a header
     return `# ${title} Template\n\n[Template generation failed - original content below]\n\n${content}`;
   }

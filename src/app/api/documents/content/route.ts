@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET - Get all documents with content (for LLM context)
 // Requires authentication: exposes full document content
@@ -21,12 +22,9 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ documents });
+    return apiSuccess({ documents });
   } catch (error) {
-    console.error("Failed to fetch document content:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch document content" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch document content", error, { route: "/api/documents/content" });
+    return errors.internal("Failed to fetch document content");
   }
 }

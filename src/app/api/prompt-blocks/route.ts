@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
 import { defaultBlocks, defaultModifiers } from "@/lib/promptBlocks";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type BlockInput = {
   id: string;
@@ -28,9 +29,9 @@ export async function GET() {
       dbBlocks = await prisma.promptBlock.findMany();
       dbModifiers = await prisma.promptModifier.findMany();
     } catch (dbError) {
-      console.error("DB query failed:", dbError);
+      logger.error("DB query failed for prompt blocks", dbError, { route: "/api/prompt-blocks" });
       // Return defaults if DB fails
-      return NextResponse.json({ blocks: defaultBlocks, modifiers: defaultModifiers });
+      return apiSuccess({ blocks: defaultBlocks, modifiers: defaultModifiers });
     }
 
     // Merge with defaults (DB overrides defaults)
@@ -63,13 +64,10 @@ export async function GET() {
       return defaultMod;
     });
 
-    return NextResponse.json({ blocks, modifiers });
+    return apiSuccess({ blocks, modifiers });
   } catch (error) {
-    console.error("Failed to load prompt blocks:", error);
-    return NextResponse.json(
-      { error: "Failed to load prompt blocks" },
-      { status: 500 }
-    );
+    logger.error("Failed to load prompt blocks", error, { route: "/api/prompt-blocks" });
+    return errors.internal("Failed to load prompt blocks");
   }
 }
 
@@ -88,13 +86,13 @@ export async function PUT(request: Request) {
     };
 
     if (!blocks || !Array.isArray(blocks)) {
-      console.error("Invalid blocks data:", blocks);
-      return NextResponse.json({ error: "Invalid blocks data" }, { status: 400 });
+      logger.error("Invalid blocks data", new Error("Validation failed"), { route: "/api/prompt-blocks" });
+      return errors.badRequest("Invalid blocks data");
     }
 
     if (!modifiers || !Array.isArray(modifiers)) {
-      console.error("Invalid modifiers data:", modifiers);
-      return NextResponse.json({ error: "Invalid modifiers data" }, { status: 400 });
+      logger.error("Invalid modifiers data", new Error("Validation failed"), { route: "/api/prompt-blocks" });
+      return errors.badRequest("Invalid modifiers data");
     }
 
     const userEmail = auth.session.user?.email || "unknown";
@@ -139,13 +137,10 @@ export async function PUT(request: Request) {
       });
     }
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to save prompt blocks:", error);
+    logger.error("Failed to save prompt blocks", error, { route: "/api/prompt-blocks" });
     const errorMessage = error instanceof Error ? error.message : "Unknown database error";
-    return NextResponse.json(
-      { error: `Failed to save prompt blocks: ${errorMessage}` },
-      { status: 500 }
-    );
+    return errors.internal(`Failed to save prompt blocks: ${errorMessage}`);
   }
 }

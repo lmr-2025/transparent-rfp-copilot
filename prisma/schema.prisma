@@ -33,6 +33,7 @@ model User {
   questionHistory  QuestionHistory[]
   chatSessions     ChatSession[]
   apiUsage         ApiUsage[]
+  answerFeedback   AnswerFeedback[]
   ownedProjects    BulkProject[]       @relation("ProjectOwner")
   ownedSkills      Skill[]             @relation("SkillOwner")
   ownedCustomers   CustomerProfile[]   @relation("CustomerOwner")
@@ -129,8 +130,21 @@ model BulkRow {
   flaggedBy            String?
   flagNote             String?  @db.Text
 
-  // Review workflow fields
+  // Queue for batch review (persisted across sessions for collaboration)
+  queuedForReview      Boolean  @default(false)
+  queuedAt             DateTime?
+  queuedBy             String?
+  queuedNote           String?  @db.Text
+  queuedReviewerId     String?  // Intended reviewer when queue is sent
+  queuedReviewerName   String?
+
+  // Review workflow fields (separate from flagging)
   reviewStatus         RowReviewStatus @default(NONE)
+  reviewRequestedAt    DateTime?
+  reviewRequestedBy    String?
+  reviewNote           String?  @db.Text  // Note from requester to reviewer
+  assignedReviewerId   String?  // User ID of assigned reviewer (null = anyone can review)
+  assignedReviewerName String?  // Cached name for display
   reviewedAt           DateTime?
   reviewedBy           String?
   userEditedAnswer     String?  @db.Text  // If user manually corrected the answer
@@ -141,6 +155,7 @@ model BulkRow {
   @@index([projectId])
   @@index([status])
   @@index([flaggedForReview])
+  @@index([queuedForReview])
 }
 
 enum ProjectStatus {
@@ -178,10 +193,14 @@ model KnowledgeDocument {
   ownerId         String?  // Foreign key to User
   owner           User?    @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdBy       String?  // User email for display
+  // Unified Knowledge Pipeline fields
+  skillId         String?  // Link to skill if converted to skill
+  isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
 
   @@index([uploadedAt])
   @@index([isTemplate])
   @@index([ownerId])
+  @@index([skillId])
 }
 
 // Customer Profiles (The Rolodex)
@@ -236,6 +255,7 @@ model Skill {
   quickFacts      Json?    // Array of {question, answer}
   edgeCases       String[]
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
+  sourceDocuments Json?    // Array of {id, filename, uploadedAt} - docs that fed into this skill
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -315,9 +335,13 @@ model ReferenceUrl {
   ownerId     String?  // Foreign key to User
   owner       User?    @relation("UrlOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdBy   String?  // User email for display
+  // Unified Knowledge Pipeline fields
+  skillId         String?  // Link to skill if converted to skill
+  isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
 
   @@index([addedAt])
   @@index([ownerId])
+  @@index([skillId])
 }
 
 // Chat Prompts (prompt library for The Oracle)
@@ -449,17 +473,28 @@ model QuestionHistory {
   skillsUsed      Json?    // Array of {id, title}
   createdAt       DateTime @default(now())
 
-  // Review workflow fields
-  reviewStatus    RowReviewStatus @default(NONE)
-  reviewNote      String?  @db.Text  // Note from requester to reviewer
-  reviewedAt      DateTime?
-  reviewedBy      String?
-  userEditedAnswer String? @db.Text  // If user/reviewer corrected the answer
+  // Review flagging for individual questions
+  flaggedForReview     Boolean  @default(false)
+  flaggedAt            DateTime?
+  flaggedBy            String?
+  flagNote             String?  @db.Text
+
+  // Review workflow fields (separate from flagging)
+  reviewStatus         RowReviewStatus @default(NONE)
+  reviewRequestedAt    DateTime?
+  reviewRequestedBy    String?
+  reviewNote           String?  @db.Text  // Note from requester to reviewer
+  assignedReviewerId   String?  // User ID of assigned reviewer (null = anyone can review)
+  assignedReviewerName String?  // Cached name for display
+  reviewedAt           DateTime?
+  reviewedBy           String?
+  userEditedAnswer     String? @db.Text  // If user/reviewer corrected the answer
 
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, createdAt])
   @@index([createdAt])
+  @@index([flaggedForReview])
 }
 
 // Chat Session - tracks full chat conversations in The Oracle
@@ -547,6 +582,7 @@ enum AuditEntityType {
   SETTING
   PROMPT
   CONTEXT_SNIPPET
+  ANSWER
 }
 
 enum AuditAction {
@@ -560,5 +596,48 @@ enum AuditAction {
   STATUS_CHANGED
   REFRESHED
   MERGED
+  CORRECTED
+  APPROVED
+  REVIEW_REQUESTED
+}
+
+// Answer Feedback - tracks user ratings on AI-generated responses
+model AnswerFeedback {
+  id              String          @id @default(uuid())
+  userId          String?         // User who gave feedback
+  userEmail       String?         // For display purposes
+  feature         String          // "questions", "chat", "projects" - which feature generated this
+  rating          FeedbackRating  // thumbs_up, thumbs_down
+  comment         String?         @db.Text // Optional user comment
+
+  // Context about the answer
+  question        String          @db.Text // The question asked
+  answer          String          @db.Text // The AI's response
+  confidence      String?         // The confidence level if applicable
+  skillsUsed      Json?           // Skills that were used
+
+  // Optional references to source entities
+  questionHistoryId String?       // If from quick questions
+  bulkRowId         String?       // If from a project row
+  chatSessionId     String?       // If from chat
+
+  // Metadata
+  model           String?         // Which AI model was used
+  usedFallback    Boolean         @default(false) // Whether fallback was used
+  metadata        Json?           // Additional context
+
+  createdAt       DateTime        @default(now())
+
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([feature, createdAt])
+  @@index([rating, createdAt])
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+enum FeedbackRating {
+  THUMBS_UP
+  THUMBS_DOWN
 }
 

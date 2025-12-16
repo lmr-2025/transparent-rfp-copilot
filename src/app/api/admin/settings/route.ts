@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { requireAdmin } from "@/lib/apiAuth";
 import { prisma } from "@/lib/prisma";
 import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
 import { encrypt, isEncryptionConfigured } from "@/lib/encryption";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // Settings are stored in a simple key-value table
 // Sensitive values (secrets, tokens, keys) are encrypted at rest using AES-256-GCM
@@ -67,7 +69,7 @@ export async function GET() {
     },
   };
 
-  return NextResponse.json(response);
+  return apiSuccess(response);
 }
 
 // POST /api/admin/settings - Update settings (admin only)
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
     const { key, value } = body;
 
     if (!key || typeof key !== "string") {
-      return NextResponse.json({ error: "key is required" }, { status: 400 });
+      return errors.badRequest("key is required");
     }
 
     // Whitelist of allowed settings keys
@@ -101,20 +103,14 @@ export async function POST(request: NextRequest) {
     ];
 
     if (!allowedKeys.includes(key)) {
-      return NextResponse.json(
-        { error: `Setting '${key}' cannot be modified via API` },
-        { status: 400 }
-      );
+      return errors.badRequest(`Setting '${key}' cannot be modified via API`);
     }
 
     const isSensitive = isSensitiveKey(key);
 
     // Require encryption to be configured for sensitive values
     if (isSensitive && !isEncryptionConfigured()) {
-      return NextResponse.json(
-        { error: "ENCRYPTION_KEY environment variable must be configured to store sensitive settings" },
-        { status: 500 }
-      );
+      return errors.internal("ENCRYPTION_KEY environment variable must be configured to store sensitive settings");
     }
 
     // Get existing value for audit log
@@ -154,13 +150,10 @@ export async function POST(request: NextRequest) {
       metadata: isSensitive ? { note: "Sensitive value changed (encrypted, not logged)" } : undefined,
     });
 
-    return NextResponse.json({ success: true, key, encrypted: isSensitive });
+    return apiSuccess({ success: true, key, encrypted: isSensitive });
   } catch (error) {
-    console.error("Failed to update setting:", error);
-    return NextResponse.json(
-      { error: "Failed to update setting" },
-      { status: 500 }
-    );
+    logger.error("Failed to update setting", error, { route: "/api/admin/settings" });
+    return errors.internal("Failed to update setting");
   }
 }
 
@@ -176,7 +169,7 @@ export async function DELETE(request: NextRequest) {
     const key = searchParams.get("key");
 
     if (!key) {
-      return NextResponse.json({ error: "key parameter required" }, { status: 400 });
+      return errors.badRequest("key parameter required");
     }
 
     const existing = await prisma.appSetting.findUnique({ where: { key } });
@@ -194,12 +187,9 @@ export async function DELETE(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ success: true, key });
+    return apiSuccess({ success: true, key });
   } catch (error) {
-    console.error("Failed to delete setting:", error);
-    return NextResponse.json(
-      { error: "Failed to delete setting" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete setting", error, { route: "/api/admin/settings" });
+    return errors.internal("Failed to delete setting");
   }
 }

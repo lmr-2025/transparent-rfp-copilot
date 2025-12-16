@@ -2,9 +2,11 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown, LayoutTemplate } from "lucide-react";
+import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { getApiErrorMessage } from "@/lib/utils";
+import { DocumentActionDialog } from "../components/document-action-dialog";
 
 interface CategoryItem {
   id: string;
@@ -46,10 +48,16 @@ export default function DocumentsPage() {
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Post-upload action dialog
+  const [showActionDialog, setShowActionDialog] = useState(false);
+  const [uploadedDocument, setUploadedDocument] = useState<DocumentMeta | null>(null);
+
   useEffect(() => {
     loadDocuments();
     // Load categories from API
-    loadCategoriesFromApi().then(setAvailableCategories).catch(console.error);
+    loadCategoriesFromApi().then(setAvailableCategories).catch(() => {
+      // Silent failure - categories are optional
+    });
   }, []);
 
   const loadDocuments = async () => {
@@ -61,8 +69,8 @@ export default function DocumentsPage() {
         const data = json.data?.documents ?? json.documents ?? [];
         setDocuments(Array.isArray(data) ? data : []);
       }
-    } catch (error) {
-      console.error("Failed to load documents:", error);
+    } catch {
+      toast.error("Failed to load documents");
     } finally {
       setIsLoading(false);
     }
@@ -116,6 +124,12 @@ export default function DocumentsPage() {
 
       setDocuments([data.document, ...documents]);
       resetForm();
+
+      // Show action dialog for non-template uploads
+      if (!saveAsTemplate) {
+        setUploadedDocument(data.document);
+        setShowActionDialog(true);
+      }
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Failed to upload document");
     } finally {
@@ -135,8 +149,8 @@ export default function DocumentsPage() {
       if (response.ok) {
         setDocuments(documents.filter((d) => d.id !== id));
       }
-    } catch (error) {
-      console.error("Failed to delete document:", error);
+    } catch {
+      toast.error("Failed to delete document");
     }
   };
 
@@ -178,9 +192,28 @@ export default function DocumentsPage() {
     return <File size={20} style={{ color: "#3b82f6" }} />;
   };
 
+  // Handle saving document as reference only
+  const handleSaveAsReference = async (id: string) => {
+    const response = await fetch(`/api/documents/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isReferenceOnly: true }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to update document");
+    }
+  };
+
   return (
     <div style={{ padding: "32px", maxWidth: "900px", margin: "0 auto" }}>
       <ConfirmDialog />
+      <DocumentActionDialog
+        open={showActionDialog}
+        onOpenChange={setShowActionDialog}
+        document={uploadedDocument}
+        onSaveAsReference={handleSaveAsReference}
+      />
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "1.75rem", fontWeight: 700, marginBottom: "8px" }}>
           Knowledge Documents

@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type ExistingProfileInfo = {
   id: string;
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as AnalyzeRequestBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const sourceUrls = Array.isArray(body?.sourceUrls)
@@ -72,10 +74,7 @@ export async function POST(request: NextRequest) {
   const documentNames = body?.documentNames || [];
 
   if (sourceUrls.length === 0 && !documentContent) {
-    return NextResponse.json(
-      { error: "Provide at least one source URL or upload a document." },
-      { status: 400 }
-    );
+    return errors.badRequest("Provide at least one source URL or upload a document.");
   }
 
   try {
@@ -119,10 +118,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!combinedContent) {
-      return NextResponse.json(
-        { error: "Could not fetch any content from the provided URLs or documents." },
-        { status: 400 }
-      );
+      return errors.badRequest("Could not fetch any content from the provided URLs or documents.");
     }
 
     // Analyze with LLM
@@ -139,7 +135,7 @@ export async function POST(request: NextRequest) {
         urlMatches.matchedUrls.length === sourceUrls.length;
 
       if (allUrlsMatchSameProfile) {
-        return NextResponse.json({
+        return apiSuccess({
           ...analysis,
           urlAlreadyUsed: urlMatches,
           suggestion: {
@@ -152,18 +148,18 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return NextResponse.json({
+      return apiSuccess({
         ...analysis,
         urlAlreadyUsed: urlMatches,
       });
     }
 
-    return NextResponse.json(analysis);
+    return apiSuccess(analysis);
   } catch (error) {
-    console.error("Failed to analyze URLs:", error);
+    logger.error("Failed to analyze URLs", error, { route: "/api/customers/analyze" });
     const message =
       error instanceof Error ? error.message : "Unable to analyze URLs.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errors.internal(message);
   }
 }
 
@@ -201,7 +197,7 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
       // SSRF protection: validate URL before fetching
       const ssrfCheck = await validateUrlForSSRF(url);
       if (!ssrfCheck.valid) {
-        console.warn(`SSRF check failed for URL ${url}: ${ssrfCheck.error}`);
+        logger.warn("SSRF check failed for URL", { url, error: ssrfCheck.error });
         continue;
       }
 

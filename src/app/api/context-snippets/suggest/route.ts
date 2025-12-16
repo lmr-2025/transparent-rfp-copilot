@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { logUsage } from "@/lib/usageTracking";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type SuggestSnippetRequestBody = {
   sourceText?: string;
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as SuggestSnippetRequestBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const sourceText = body?.sourceText?.trim() ?? "";
@@ -42,10 +44,7 @@ export async function POST(request: NextRequest) {
     : [];
 
   if (!sourceText && sourceUrls.length === 0) {
-    return NextResponse.json(
-      { error: "Provide at least one valid source entry (text or URL)." },
-      { status: 400 },
-    );
+    return errors.badRequest("Provide at least one valid source entry (text or URL).");
   }
 
   try {
@@ -124,17 +123,14 @@ Return ONLY the JSON object.`;
       metadata: { urlCount: sourceUrls.length },
     });
 
-    return NextResponse.json({ draft, sourceUrls });
+    return apiSuccess({ draft, sourceUrls });
   } catch (error) {
-    console.error("Failed to generate snippet draft:", error);
+    logger.error("Failed to generate snippet draft", error, { route: "/api/context-snippets/suggest" });
     const message =
       error instanceof Error
         ? error.message
         : "Unable to generate snippet draft. Please try again later.";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 },
-    );
+    return errors.internal(message);
   }
 }
 

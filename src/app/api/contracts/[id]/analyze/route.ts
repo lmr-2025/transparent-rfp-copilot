@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +12,8 @@ import {
 } from "@/lib/contractAnalysisPromptSections";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 120; // 2 minutes for analysis
 
@@ -49,10 +51,7 @@ export async function POST(
     });
 
     if (!contract) {
-      return NextResponse.json(
-        { error: "Contract review not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Contract review");
     }
 
     // Update status to analyzing
@@ -154,7 +153,7 @@ Identify and rate security-related clauses against our documented capabilities. 
     try {
       result = parseJsonResponse<AnalysisResult>(content.text);
     } catch {
-      console.error("Failed to parse LLM response:", content.text);
+      logger.error("Failed to parse LLM response", new Error("Parse error"), { route: "/api/contracts/[id]/analyze", response: content.text.slice(0, 500) });
       await prisma.contractReview.update({
         where: { id },
         data: { status: "PENDING" },
@@ -187,16 +186,18 @@ Identify and rate security-related clauses against our documented capabilities. 
       },
     });
 
-    return NextResponse.json({
-      id: updated.id,
-      status: updated.status,
-      overallRating: updated.overallRating,
-      summary: updated.summary,
-      findings,
-      analyzedAt: updated.analyzedAt?.toISOString(),
+    return apiSuccess({
+      analysis: {
+        id: updated.id,
+        status: updated.status,
+        overallRating: updated.overallRating,
+        summary: updated.summary,
+        findings,
+        analyzedAt: updated.analyzedAt?.toISOString(),
+      },
     });
   } catch (error) {
-    console.error("Contract analysis error:", error);
+    logger.error("Contract analysis failed", error, { route: "/api/contracts/[id]/analyze" });
 
     // Try to reset status on error
     try {
@@ -209,9 +210,6 @@ Identify and rate security-related clauses against our documented capabilities. 
       // Ignore cleanup errors
     }
 
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Analysis failed" },
-      { status: 500 }
-    );
+    return errors.internal(error instanceof Error ? error.message : "Analysis failed");
   }
 }

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { logDocumentChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET - Get a single document (with content)
 export async function GET(
@@ -22,7 +23,7 @@ export async function GET(
 
     return apiSuccess({ document });
   } catch (error) {
-    console.error("Failed to fetch document:", error);
+    logger.error("Failed to fetch document", error, { route: "/api/documents/[id]" });
     return errors.internal("Failed to fetch document");
   }
 }
@@ -62,7 +63,7 @@ export async function DELETE(
 
     return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete document:", error);
+    logger.error("Failed to delete document", error, { route: "/api/documents/[id]" });
     return errors.internal("Failed to delete document");
   }
 }
@@ -80,7 +81,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, categories } = body;
+    const { title, description, categories, isReferenceOnly, skillId } = body;
 
     // Get existing document for audit log
     const existing = await prisma.knowledgeDocument.findUnique({ where: { id } });
@@ -94,6 +95,8 @@ export async function PATCH(
         ...(title && { title: title.trim() }),
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(categories !== undefined && { categories }),
+        ...(isReferenceOnly !== undefined && { isReferenceOnly }),
+        ...(skillId !== undefined && { skillId }),
       },
     });
 
@@ -101,7 +104,7 @@ export async function PATCH(
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       document as unknown as Record<string, unknown>,
-      ["title", "description", "categories"]
+      ["title", "description", "categories", "isReferenceOnly", "skillId"]
     );
 
     // Audit log
@@ -123,10 +126,12 @@ export async function PATCH(
         categories: document.categories,
         uploadedAt: document.uploadedAt,
         description: document.description,
+        isReferenceOnly: document.isReferenceOnly,
+        skillId: document.skillId,
       },
     });
   } catch (error) {
-    console.error("Failed to update document:", error);
+    logger.error("Failed to update document", error, { route: "/api/documents/[id]" });
     return errors.internal("Failed to update document");
   }
 }

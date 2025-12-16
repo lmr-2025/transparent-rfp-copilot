@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type ExistingSkillInfo = {
   id: string;
@@ -16,7 +18,8 @@ type ExistingSkillInfo = {
 };
 
 type AnalyzeRequestBody = {
-  sourceUrls: string[];
+  sourceUrls?: string[];
+  sourceDocuments?: { id: string; filename: string; content: string }[]; // Documents with extracted text
   existingSkills: ExistingSkillInfo[];
   groupUrls?: boolean; // If true, return grouped skill recommendations for all URLs at once
 };
@@ -59,6 +62,7 @@ type SkillGroup = {
   skillTitle: string;
   existingSkillId?: string;
   urls: string[];
+  documentIds?: string[]; // Document IDs if source is documents
   reason: string;
 };
 
@@ -79,15 +83,19 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as AnalyzeRequestBody;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const sourceUrls = Array.isArray(body?.sourceUrls)
     ? body.sourceUrls.map((url) => url.trim()).filter((url) => url.length > 0)
     : [];
 
-  if (sourceUrls.length === 0) {
-    return NextResponse.json({ error: "Provide at least one source URL." }, { status: 400 });
+  const sourceDocuments = Array.isArray(body?.sourceDocuments)
+    ? body.sourceDocuments.filter((doc) => doc.id && doc.content)
+    : [];
+
+  if (sourceUrls.length === 0 && sourceDocuments.length === 0) {
+    return errors.badRequest("Provide at least one source URL or document.");
   }
 
   const existingSkills: ExistingSkillInfo[] = Array.isArray(body?.existingSkills) ? body.existingSkills : [];
@@ -95,9 +103,11 @@ export async function POST(request: NextRequest) {
 
   try {
     // For grouped analysis (bulk import), use the dedicated grouped analysis function
-    if (groupUrls && sourceUrls.length > 1) {
-      const groupedAnalysis = await analyzeAndGroupUrls(sourceUrls, existingSkills);
-      return NextResponse.json(groupedAnalysis);
+    // Now supports both URLs and documents
+    const totalSources = sourceUrls.length + sourceDocuments.length;
+    if (groupUrls && totalSources >= 1) {
+      const groupedAnalysis = await analyzeAndGroupSources(sourceUrls, sourceDocuments, existingSkills);
+      return apiSuccess(groupedAnalysis);
     }
 
     // Single URL analysis (original behavior)
@@ -107,7 +117,7 @@ export async function POST(request: NextRequest) {
     // Fetch URL content (limited)
     const sourceContent = await fetchSourceContent(sourceUrls);
     if (!sourceContent) {
-      return NextResponse.json({ error: "Could not fetch any content from the provided URLs." }, { status: 400 });
+      return errors.badRequest("Could not fetch any content from the provided URLs.");
     }
 
     // Analyze with LLM
@@ -119,7 +129,7 @@ export async function POST(request: NextRequest) {
       const allUrlsMatchSameSkill = urlMatches.matchedUrls.length === sourceUrls.length;
 
       if (allUrlsMatchSameSkill) {
-        return NextResponse.json({
+        return apiSuccess({
           ...analysis,
           urlAlreadyUsed: urlMatches,
           suggestion: {
@@ -133,17 +143,17 @@ export async function POST(request: NextRequest) {
       }
 
       // Some URLs match - include the info but let LLM suggestion stand
-      return NextResponse.json({
+      return apiSuccess({
         ...analysis,
         urlAlreadyUsed: urlMatches,
       });
     }
 
-    return NextResponse.json(analysis);
+    return apiSuccess(analysis);
   } catch (error) {
-    console.error("Failed to analyze URLs:", error);
+    logger.error("Failed to analyze URLs", error, { route: "/api/skills/analyze" });
     const message = error instanceof Error ? error.message : "Unable to analyze URLs.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errors.internal(message);
   }
 }
 
@@ -182,7 +192,7 @@ async function fetchSourceContent(urls: string[]): Promise<string | null> {
       // SSRF protection: validate URL before fetching
       const ssrfCheck = await validateUrlForSSRF(url);
       if (!ssrfCheck.valid) {
-        console.warn(`SSRF check failed for URL ${url}: ${ssrfCheck.error}`);
+        logger.warn("SSRF check failed for URL", { url, error: ssrfCheck.error });
         return null;
       }
 
@@ -320,63 +330,89 @@ Return ONLY the JSON object.`;
   return parseJsonResponse<AnalyzeResponse>(content.text);
 }
 
-// Analyze multiple URLs and group them into skill recommendations
-async function analyzeAndGroupUrls(
+// Analyze multiple URLs and/or documents and group them into skill recommendations
+async function analyzeAndGroupSources(
   sourceUrls: string[],
+  sourceDocuments: { id: string; filename: string; content: string }[],
   existingSkills: ExistingSkillInfo[]
 ): Promise<GroupedAnalyzeResponse> {
   const anthropic = getAnthropicClient();
 
   // Fetch content from all URLs in parallel (with limits)
-  const fetchPromises = sourceUrls.slice(0, 20).map(async (url): Promise<{ url: string; content: string }> => {
-    try {
-      const ssrfCheck = await validateUrlForSSRF(url);
-      if (!ssrfCheck.valid) return { url, content: "[Could not fetch content]" };
+  const urlContents: { type: "url"; url: string; content: string }[] = [];
+  if (sourceUrls.length > 0) {
+    const fetchPromises = sourceUrls.slice(0, 20).map(async (url): Promise<{ type: "url"; url: string; content: string }> => {
+      try {
+        const ssrfCheck = await validateUrlForSSRF(url);
+        if (!ssrfCheck.valid) return { type: "url", url, content: "[Could not fetch content]" };
 
-      const parsed = new URL(url);
-      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-        return { url, content: "[Could not fetch content]" };
+        const parsed = new URL(url);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          return { type: "url", url, content: "[Could not fetch content]" };
+        }
+
+        const response = await fetch(parsed.toString(), {
+          headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
+        });
+        if (!response.ok) return { type: "url", url, content: "[Could not fetch content]" };
+
+        const contentType = response.headers.get("content-type") || "";
+        if (!contentType.includes("text")) return { type: "url", url, content: "[Could not fetch content]" };
+
+        const text = await response.text();
+        // Take first 3000 chars per URL to fit more in context
+        return { type: "url", url, content: text.slice(0, 3000) };
+      } catch {
+        return { type: "url", url, content: "[Could not fetch content]" };
       }
+    });
+    urlContents.push(...await Promise.all(fetchPromises));
+  }
 
-      const response = await fetch(parsed.toString(), {
-        headers: { "User-Agent": "GRCMinionAnalyzer/1.0" },
-      });
-      if (!response.ok) return { url, content: "[Could not fetch content]" };
-
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("text")) return { url, content: "[Could not fetch content]" };
-
-      const text = await response.text();
-      // Take first 3000 chars per URL to fit more in context
-      return { url, content: text.slice(0, 3000) };
-    } catch {
-      // Include URL even if we couldn't fetch it
-      return { url, content: "[Could not fetch content]" };
-    }
-  });
-
-  const urlContents = await Promise.all(fetchPromises);
+  // Prepare document contents
+  const docContents: { type: "document"; id: string; filename: string; content: string }[] = sourceDocuments.map(doc => ({
+    type: "document",
+    id: doc.id,
+    filename: doc.filename,
+    // Take first 3000 chars per document to fit more in context
+    content: doc.content.slice(0, 3000),
+  }));
 
   const skillsSummary = existingSkills.length > 0
     ? existingSkills.map(s => `- "${s.title}" (ID: ${s.id})\n  Category: ${s.category || s.categories?.[0] || "Uncategorized"}\n  Preview: ${s.contentPreview.substring(0, 150)}...`).join("\n")
     : "No existing skills in the knowledge base.";
 
-  const urlSummary = urlContents.map((u, i) =>
-    `[URL ${i + 1}] ${u.url}\nContent preview: ${u.content.substring(0, 500)}...`
-  ).join("\n\n");
+  // Build source summary combining URLs and documents
+  let sourceCounter = 0;
+  const sourceSummaryParts: string[] = [];
 
-  const systemPrompt = `You are a knowledge management expert helping organize documentation URLs into skills.
+  for (const urlItem of urlContents) {
+    sourceCounter++;
+    sourceSummaryParts.push(`[SOURCE ${sourceCounter}] URL: ${urlItem.url}\nContent preview: ${urlItem.content.substring(0, 500)}...`);
+  }
 
-Your task is to analyze multiple URLs and GROUP them into skill recommendations. Each group becomes one skill.
+  for (const docItem of docContents) {
+    sourceCounter++;
+    sourceSummaryParts.push(`[SOURCE ${sourceCounter}] DOCUMENT: ${docItem.filename} (ID: ${docItem.id})\nContent preview: ${docItem.content.substring(0, 500)}...`);
+  }
 
-GOAL: Group related URLs together so each skill is comprehensive. A skill should cover a BROAD CAPABILITY AREA.
+  const sourceSummary = sourceSummaryParts.join("\n\n");
+  const hasUrls = sourceUrls.length > 0;
+  const hasDocs = sourceDocuments.length > 0;
+
+  const systemPrompt = `You are a knowledge management expert helping organize documentation into skills.
+
+Your task is to analyze ${hasUrls && hasDocs ? "URLs and documents" : hasUrls ? "URLs" : "documents"} and GROUP them into skill recommendations. Each group becomes one skill.
+
+GOAL: Group related sources together so each skill is comprehensive. A skill should cover a BROAD CAPABILITY AREA.
 
 RULES:
-1. Group URLs by TOPIC SIMILARITY - URLs about the same feature/capability go together
+1. Group sources by TOPIC SIMILARITY - sources about the same feature/capability go together
 2. PREFER updating existing skills over creating new ones
-3. Each URL must appear in exactly one group
-4. A group can have 1 or many URLs
+3. Each source (URL or document) must appear in exactly one group
+4. A group can have 1 or many sources
 5. Skills should be broad (like book chapters, not individual pages)
+6. Sources can be mixed (URLs and documents in the same group if they cover the same topic)
 
 OUTPUT FORMAT:
 Return a JSON object:
@@ -386,32 +422,33 @@ Return a JSON object:
       "action": "create" | "update_existing",
       "skillTitle": "Name of the skill",
       "existingSkillId": "ID if updating existing skill",
-      "urls": ["array of URLs in this group"],
-      "reason": "Why these URLs belong together and why this action"
+      "urls": ["array of URLs in this group - only include if there are URLs"],
+      "documentIds": ["array of document IDs in this group - only include if there are documents"],
+      "reason": "Why these sources belong together and why this action"
     }
   ],
-  "summary": "Brief overall summary of how URLs were organized"
+  "summary": "Brief overall summary of how sources were organized"
 }
 
 GROUPING GUIDELINES:
-- URLs from the same documentation section → same group
-- URLs about the same product feature → same group
-- If a URL clearly relates to an existing skill → update_existing
-- Only create new skills for genuinely new topics`;
+- Sources from the same topic/feature → same group
+- If a source clearly relates to an existing skill → update_existing
+- Only create new skills for genuinely new topics
+- Don't create empty arrays - only include "urls" if there are URLs, only include "documentIds" if there are documents`;
 
   const userPrompt = `EXISTING SKILLS:
 ${skillsSummary}
 
 ---
 
-URLs TO ANALYZE (${sourceUrls.length} total):
-${urlSummary}
+SOURCES TO ANALYZE (${sourceUrls.length} URLs, ${sourceDocuments.length} documents):
+${sourceSummary}
 
 ---
 
-Group these URLs into skill recommendations. Each group will become or update one skill.
-Related URLs should be grouped together.
-URLs that match existing skills should update those skills.
+Group these sources into skill recommendations. Each group will become or update one skill.
+Related sources should be grouped together.
+Sources that match existing skills should update those skills.
 
 Return ONLY the JSON object.`;
 
@@ -430,17 +467,27 @@ Return ONLY the JSON object.`;
 
   const parsed = parseJsonResponse<GroupedAnalyzeResponse>(content.text);
 
-  // Ensure all URLs are accounted for (add any missing ones)
-  const groupedUrls = new Set(parsed.skillGroups.flatMap(g => g.urls));
-  const missingUrls = sourceUrls.filter(url => !groupedUrls.has(url));
+  // Validate and ensure skillGroups exists
+  if (!parsed.skillGroups || !Array.isArray(parsed.skillGroups)) {
+    logger.error("LLM returned invalid skillGroups", new Error("Invalid response"), { route: "/api/skills/analyze", response: JSON.stringify(parsed).slice(0, 500) });
+    throw new Error("LLM response missing skillGroups array");
+  }
 
-  if (missingUrls.length > 0) {
-    // Add missing URLs to a "Miscellaneous" group
+  // Ensure all sources are accounted for
+  const groupedUrls = new Set(parsed.skillGroups.flatMap(g => g.urls || []));
+  const groupedDocIds = new Set(parsed.skillGroups.flatMap(g => g.documentIds || []));
+
+  const missingUrls = sourceUrls.filter(url => !groupedUrls.has(url));
+  const missingDocIds = sourceDocuments.filter(doc => !groupedDocIds.has(doc.id)).map(d => d.id);
+
+  if (missingUrls.length > 0 || missingDocIds.length > 0) {
+    // Add missing sources to a "Miscellaneous" group
     parsed.skillGroups.push({
       action: "create",
       skillTitle: "Miscellaneous Documentation",
-      urls: missingUrls,
-      reason: "URLs that couldn't be categorized into other groups",
+      urls: missingUrls.length > 0 ? missingUrls : [],
+      documentIds: missingDocIds.length > 0 ? missingDocIds : undefined,
+      reason: "Sources that couldn't be categorized into other groups",
     });
   }
 

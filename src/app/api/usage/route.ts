@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getDailyUsage } from "@/lib/usageTracking";
+import { logger } from "@/lib/logger";
+import { apiSuccess, errors } from "@/lib/apiResponse";
 
 // GET /api/usage - Get usage statistics
 export async function GET(request: NextRequest) {
@@ -35,7 +37,7 @@ export async function GET(request: NextRequest) {
       where.userId = session.user.id;
     } else if (scope === "user") {
       // Anonymous user - show nothing
-      return NextResponse.json({
+      return apiSuccess({
         summary: {
           totalInputTokens: 0,
           totalOutputTokens: 0,
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    return apiSuccess({
       summary: {
         totalInputTokens: aggregated._sum.inputTokens || 0,
         totalOutputTokens: aggregated._sum.outputTokens || 0,
@@ -130,10 +132,7 @@ export async function GET(request: NextRequest) {
       })),
     });
   } catch (error) {
-    console.error("Error fetching usage data:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch usage data" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch usage data", error, { route: "/api/usage" });
+    return errors.internal("Failed to fetch usage data");
   }
 }

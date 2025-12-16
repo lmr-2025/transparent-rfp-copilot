@@ -1,7 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RowReviewStatus } from "@prisma/client";
 import { requireAuth } from "@/lib/apiAuth";
+import { logAnswerChange, computeChanges, getUserFromSession, getRequestContext } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 interface RouteContext {
   params: Promise<{ id: string; rowId: string }>;
@@ -26,28 +29,55 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     });
 
     if (!row) {
-      return NextResponse.json(
-        { error: "Row not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Row");
     }
 
     // Build update data based on provided fields
     const updateData: Record<string, unknown> = {};
 
-    // Review workflow fields
-    if (body.reviewStatus !== undefined) {
-      updateData.reviewStatus = body.reviewStatus as RowReviewStatus;
-    }
-    if (body.reviewNote !== undefined) {
-      updateData.flagNote = body.reviewNote; // Store note in flagNote field
-    }
+    // Flagging fields (for self-notes, attention markers)
     if (body.flaggedForReview !== undefined) {
       updateData.flaggedForReview = body.flaggedForReview;
       if (body.flaggedForReview) {
         updateData.flaggedAt = new Date();
         updateData.flaggedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
       }
+    }
+    if (body.flagNote !== undefined) {
+      updateData.flagNote = body.flagNote;
+    }
+
+    // Queue fields (for batch review workflow - persisted across sessions)
+    if (body.queuedForReview !== undefined) {
+      updateData.queuedForReview = body.queuedForReview;
+      if (body.queuedForReview) {
+        updateData.queuedAt = new Date();
+        updateData.queuedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
+      } else {
+        // Clear queue fields when un-queueing
+        updateData.queuedAt = null;
+        updateData.queuedBy = null;
+        updateData.queuedNote = null;
+        updateData.queuedReviewerId = null;
+        updateData.queuedReviewerName = null;
+      }
+    }
+    if (body.queuedNote !== undefined) {
+      updateData.queuedNote = body.queuedNote;
+    }
+    if (body.queuedReviewerId !== undefined) {
+      updateData.queuedReviewerId = body.queuedReviewerId;
+    }
+    if (body.queuedReviewerName !== undefined) {
+      updateData.queuedReviewerName = body.queuedReviewerName;
+    }
+
+    // Review workflow fields (for formal approval process)
+    if (body.reviewStatus !== undefined) {
+      updateData.reviewStatus = body.reviewStatus as RowReviewStatus;
+    }
+    if (body.reviewNote !== undefined) {
+      updateData.reviewNote = body.reviewNote;
     }
     if (body.reviewedAt !== undefined) {
       updateData.reviewedAt = body.reviewedAt ? new Date(body.reviewedAt) : null;
@@ -65,13 +95,63 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       data: updateData,
     });
 
-    return NextResponse.json({ row: updatedRow }, { status: 200 });
+    // Log answer changes to audit log
+    const user = auth.session ? getUserFromSession(auth.session) : undefined;
+    const requestContext = getRequestContext(request);
+
+    // Determine the action based on what changed
+    if (body.reviewStatus === "CORRECTED" || body.userEditedAnswer !== undefined) {
+      // Answer was corrected
+      const changes = computeChanges(
+        {
+          response: row.response,
+          reviewStatus: row.reviewStatus,
+          userEditedAnswer: row.userEditedAnswer,
+        },
+        {
+          response: updatedRow.response,
+          reviewStatus: updatedRow.reviewStatus,
+          userEditedAnswer: updatedRow.userEditedAnswer,
+        }
+      );
+
+      await logAnswerChange(
+        "CORRECTED",
+        rowId,
+        row.question?.substring(0, 100) || "Answer",
+        user,
+        changes,
+        {
+          projectId,
+          projectName: row.project.name,
+          originalResponse: row.response,
+          correctedAnswer: body.userEditedAnswer || updatedRow.userEditedAnswer,
+          confidence: row.confidence,
+        },
+        requestContext
+      );
+    } else if (body.reviewStatus === "APPROVED") {
+      // Answer was approved
+      await logAnswerChange(
+        "APPROVED",
+        rowId,
+        row.question?.substring(0, 100) || "Answer",
+        user,
+        undefined,
+        {
+          projectId,
+          projectName: row.project.name,
+          response: row.response,
+          confidence: row.confidence,
+        },
+        requestContext
+      );
+    }
+
+    return apiSuccess({ row: updatedRow });
   } catch (error) {
-    console.error("Error updating row:", error);
-    return NextResponse.json(
-      { error: "Failed to update row" },
-      { status: 500 }
-    );
+    logger.error("Failed to update row", error, { route: "/api/projects/[id]/rows/[rowId]" });
+    return errors.internal("Failed to update row");
   }
 }
 
@@ -86,7 +166,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const params = await context.params;
     const { id: projectId, rowId } = params;
     const body = await request.json();
-    const { reviewNote, sendSlack = true } = body;
+    const { reviewNote, sendSlack = true, assignedReviewerId, assignedReviewerName } = body;
 
     // Verify row exists and belongs to project
     const row = await prisma.bulkRow.findFirst({
@@ -95,25 +175,51 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
 
     if (!row) {
-      return NextResponse.json(
-        { error: "Row not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Row");
     }
 
     const requesterName = auth.session?.user?.name || auth.session?.user?.email || "Unknown User";
 
-    // Update the row with review request
+    // Update the row with review request (separate from flagging)
+    // Also clear queue status if this was a queued item being sent
     const updatedRow = await prisma.bulkRow.update({
       where: { id: rowId },
       data: {
         reviewStatus: "REQUESTED",
-        flaggedForReview: true,
-        flaggedAt: new Date(),
-        flaggedBy: requesterName,
-        flagNote: reviewNote || null,
+        reviewRequestedAt: new Date(),
+        reviewRequestedBy: requesterName,
+        reviewNote: reviewNote || null,
+        assignedReviewerId: assignedReviewerId || null,
+        assignedReviewerName: assignedReviewerName || null,
+        // Clear queue status now that it's been sent
+        queuedForReview: false,
+        queuedAt: null,
+        queuedBy: null,
+        queuedNote: null,
+        queuedReviewerId: null,
+        queuedReviewerName: null,
       },
     });
+
+    // Log the review request to audit log
+    const user = auth.session ? getUserFromSession(auth.session) : undefined;
+    const requestContext = getRequestContext(request);
+    await logAnswerChange(
+      "REVIEW_REQUESTED",
+      rowId,
+      row.question?.substring(0, 100) || "Answer",
+      user,
+      undefined,
+      {
+        projectId,
+        projectName: row.project.name,
+        response: row.response,
+        confidence: row.confidence,
+        reviewNote,
+        assignedReviewerName,
+      },
+      requestContext
+    );
 
     // Send Slack notification if enabled
     let slackSent = false;
@@ -142,19 +248,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
         slackSent = slackResponse.ok;
       } catch (slackError) {
-        console.warn("Slack notification failed:", slackError);
+        logger.warn("Slack notification failed", slackError);
       }
     }
 
-    return NextResponse.json({
+    return apiSuccess({
       row: updatedRow,
       slackSent,
-    }, { status: 200 });
+    });
   } catch (error) {
-    console.error("Error requesting review:", error);
-    return NextResponse.json(
-      { error: "Failed to request review" },
-      { status: 500 }
-    );
+    logger.error("Failed to request review", error, { route: "/api/projects/[id]/rows/[rowId]" });
+    return errors.internal("Failed to request review");
   }
 }

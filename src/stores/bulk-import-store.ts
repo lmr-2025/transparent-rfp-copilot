@@ -9,12 +9,22 @@ export type DraftContent = {
   changeHighlights?: string[];
 };
 
+// Document source info
+export type DocumentSource = {
+  id: string;
+  title: string;
+  filename: string;
+  content: string;
+};
+
 export type SkillGroup = {
   id: string;
   type: "create" | "update";
   skillTitle: string;
   existingSkillId?: string;
   urls: string[];
+  documentIds?: string[]; // Document IDs in this group
+  documents?: DocumentSource[]; // Full document data for generation
   status:
     | "pending"
     | "approved"
@@ -67,6 +77,7 @@ interface BulkImportState {
 
   // Data
   urlInput: string;
+  uploadedDocuments: DocumentSource[]; // Documents uploaded for import
   skillGroups: SkillGroup[];
   snippetDraft: SnippetDraft | null;
   processedResult: ProcessedResult | null;
@@ -83,6 +94,9 @@ interface BulkImportState {
 
   // Actions - Data
   setUrlInput: (input: string) => void;
+  addUploadedDocument: (doc: DocumentSource) => void;
+  removeUploadedDocument: (docId: string) => void;
+  clearUploadedDocuments: () => void;
   setSkillGroups: (groups: SkillGroup[]) => void;
   updateSkillGroup: (
     groupId: string,
@@ -127,6 +141,7 @@ const initialState = {
   workflowStep: "input" as WorkflowStep,
   buildType: "skill" as BuildType,
   urlInput: "",
+  uploadedDocuments: [] as DocumentSource[],
   skillGroups: [] as SkillGroup[],
   snippetDraft: null as SnippetDraft | null,
   processedResult: null as ProcessedResult | null,
@@ -145,6 +160,15 @@ export const useBulkImportStore = create<BulkImportState>((set, get) => ({
 
   // Data actions
   setUrlInput: (urlInput) => set({ urlInput }),
+  addUploadedDocument: (doc) =>
+    set((state) => ({
+      uploadedDocuments: [...state.uploadedDocuments, doc],
+    })),
+  removeUploadedDocument: (docId) =>
+    set((state) => ({
+      uploadedDocuments: state.uploadedDocuments.filter((d) => d.id !== docId),
+    })),
+  clearUploadedDocuments: () => set({ uploadedDocuments: [] }),
   setSkillGroups: (skillGroups) => set({ skillGroups }),
   updateSkillGroup: (groupId, updates) =>
     set((state) => ({

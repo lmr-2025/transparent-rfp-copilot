@@ -1,6 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -16,19 +18,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!category) {
-      return NextResponse.json(
-        { error: "Category not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Category");
     }
 
-    return NextResponse.json(category);
+    return apiSuccess({ category });
   } catch (error) {
-    console.error("Failed to fetch skill category:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch skill category" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch skill category", error, { route: "/api/skill-categories/[id]" });
+    return errors.internal("Failed to fetch skill category");
   }
 }
 
@@ -53,13 +49,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       },
     });
 
-    return NextResponse.json(category);
+    return apiSuccess({ category });
   } catch (error) {
-    console.error("Failed to update skill category:", error);
-    return NextResponse.json(
-      { error: "Failed to update skill category" },
-      { status: 500 }
-    );
+    logger.error("Failed to update skill category", error, { route: "/api/skill-categories/[id]" });
+    return errors.internal("Failed to update skill category");
   }
 }
 
@@ -77,12 +70,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete skill category:", error);
-    return NextResponse.json(
-      { error: "Failed to delete skill category" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete skill category", error, { route: "/api/skill-categories/[id]" });
+    return errors.internal("Failed to delete skill category");
   }
 }

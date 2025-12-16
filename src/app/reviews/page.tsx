@@ -7,27 +7,37 @@ import { toast } from "sonner";
 
 interface ReviewItem {
   id: string;
-  rowNumber: number;
+  rowNumber: number | null;
   question: string;
   response: string;
   confidence?: string;
   reviewStatus: string;
+  // Review workflow fields
+  reviewRequestedAt?: string;
+  reviewRequestedBy?: string;
+  reviewNote?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
+  // Flagging fields
+  flaggedForReview?: boolean;
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
-  reviewedAt?: string;
-  reviewedBy?: string;
+  // Source info
+  source: "project" | "questions";
   project: {
     id: string;
     name: string;
     customerName?: string;
-  };
+  } | null;
+  userEmail?: string;
 }
 
 interface ReviewCounts {
   pending: number;
   approved: number;
   corrected: number;
+  flagged: number;
 }
 
 const styles = {
@@ -194,7 +204,10 @@ function getConfidenceStyle(confidence?: string) {
   return { backgroundColor: "#f1f5f9", color: "#64748b" };
 }
 
-function getStatusStyle(status: string) {
+function getStatusStyle(status: string, isFlagged?: boolean) {
+  if (isFlagged) {
+    return { backgroundColor: "#fee2e2", color: "#b91c1c" };
+  }
   switch (status) {
     case "REQUESTED":
       return { backgroundColor: "#fef3c7", color: "#92400e" };
@@ -225,45 +238,35 @@ function formatTimeAgo(dateString?: string) {
 
 export default function ReviewsPage() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<"pending" | "approved" | "corrected" | "all">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "approved" | "corrected" | "all">("pending");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0 });
+  const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0, flagged: 0 });
   const [loading, setLoading] = useState(true);
 
   const fetchReviews = useCallback(async () => {
     setLoading(true);
     try {
-      let status = "REQUESTED";
-      if (activeTab === "approved") status = "APPROVED";
-      else if (activeTab === "corrected") status = "CORRECTED";
-      else if (activeTab === "all") status = "REQUESTED"; // Will fetch all below
+      let url = "/api/reviews?limit=100";
 
-      const response = await fetch(`/api/reviews?status=${status}&limit=100`);
+      if (activeTab === "pending") {
+        url += "&type=review&status=REQUESTED";
+      } else if (activeTab === "flagged") {
+        url += "&type=flagged";
+      } else if (activeTab === "approved") {
+        url += "&type=review&status=APPROVED";
+      } else if (activeTab === "corrected") {
+        url += "&type=review&status=CORRECTED";
+      }
+      // "all" tab uses default (no type filter, fetches both)
+
+      const response = await fetch(url);
       if (response.ok) {
         const data = await response.json();
-        let reviewList = data.data?.reviews || [];
-
-        // For "all" tab, fetch all statuses
-        if (activeTab === "all") {
-          const [approvedRes, correctedRes] = await Promise.all([
-            fetch("/api/reviews?status=APPROVED&limit=100"),
-            fetch("/api/reviews?status=CORRECTED&limit=100"),
-          ]);
-          const approvedData = approvedRes.ok ? await approvedRes.json() : { data: { reviews: [] } };
-          const correctedData = correctedRes.ok ? await correctedRes.json() : { data: { reviews: [] } };
-
-          reviewList = [
-            ...reviewList,
-            ...(approvedData.data?.reviews || []),
-            ...(correctedData.data?.reviews || []),
-          ].sort((a, b) => new Date(b.flaggedAt || 0).getTime() - new Date(a.flaggedAt || 0).getTime());
-        }
-
+        const reviewList = data.data?.reviews || [];
         setReviews(reviewList);
-        setCounts(data.data?.counts || { pending: 0, approved: 0, corrected: 0 });
+        setCounts(data.data?.counts || { pending: 0, approved: 0, corrected: 0, flagged: 0 });
       }
-    } catch (error) {
-      console.error("Failed to fetch reviews:", error);
+    } catch {
       toast.error("Failed to load reviews");
     } finally {
       setLoading(false);
@@ -312,7 +315,11 @@ export default function ReviewsPage() {
       <div style={styles.stats}>
         <div style={{ ...styles.statCard, borderLeft: "4px solid #f59e0b" }}>
           <div style={styles.statValue}>{counts.pending}</div>
-          <div style={styles.statLabel}>Pending Review</div>
+          <div style={styles.statLabel}>Need Help</div>
+        </div>
+        <div style={{ ...styles.statCard, borderLeft: "4px solid #ef4444" }}>
+          <div style={styles.statValue}>{counts.flagged}</div>
+          <div style={styles.statLabel}>Flagged</div>
         </div>
         <div style={{ ...styles.statCard, borderLeft: "4px solid #22c55e" }}>
           <div style={styles.statValue}>{counts.approved}</div>
@@ -326,7 +333,7 @@ export default function ReviewsPage() {
 
       {/* Tabs */}
       <div style={styles.tabs}>
-        {(["pending", "approved", "corrected", "all"] as const).map((tab) => (
+        {(["pending", "flagged", "approved", "corrected", "all"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -336,10 +343,11 @@ export default function ReviewsPage() {
               color: activeTab === tab ? "#fff" : "#64748b",
             }}
           >
-            {tab === "pending" && `📝 Pending (${counts.pending})`}
-            {tab === "approved" && `✓ Approved (${counts.approved})`}
-            {tab === "corrected" && `✎ Corrected (${counts.corrected})`}
-            {tab === "all" && `All (${counts.pending + counts.approved + counts.corrected})`}
+            {tab === "pending" && `Need Help (${counts.pending})`}
+            {tab === "flagged" && `Flagged (${counts.flagged})`}
+            {tab === "approved" && `Approved (${counts.approved})`}
+            {tab === "corrected" && `Corrected (${counts.corrected})`}
+            {tab === "all" && `All (${counts.pending + counts.flagged + counts.approved + counts.corrected})`}
           </button>
         ))}
       </div>
@@ -350,14 +358,18 @@ export default function ReviewsPage() {
       ) : reviews.length === 0 ? (
         <div style={styles.empty}>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>
-            {activeTab === "pending" ? "🎉" : "📭"}
+            {activeTab === "pending" || activeTab === "flagged" ? "🎉" : "📭"}
           </div>
           <p style={{ fontSize: "16px", fontWeight: 500, color: "#1e293b", marginBottom: "8px" }}>
-            {activeTab === "pending" ? "No pending reviews!" : "No reviews found"}
+            {activeTab === "pending" && "No items needing help!"}
+            {activeTab === "flagged" && "No flagged items!"}
+            {activeTab !== "pending" && activeTab !== "flagged" && "No reviews found"}
           </p>
           <p>
             {activeTab === "pending"
               ? "All caught up. Check back later for new review requests."
+              : activeTab === "flagged"
+              ? "No answers have been flagged for investigation."
               : "Try switching tabs to see other reviews."}
           </p>
         </div>
@@ -366,24 +378,36 @@ export default function ReviewsPage() {
           <div key={review.id} style={styles.card}>
             <div style={styles.cardHeader}>
               <div>
-                <span style={styles.projectName}>{review.project.name}</span>
-                {review.project.customerName && (
-                  <span style={styles.customerName}>• {review.project.customerName}</span>
+                {review.source === "project" && review.project ? (
+                  <>
+                    <span style={styles.projectName}>{review.project.name}</span>
+                    {review.project.customerName && (
+                      <span style={styles.customerName}>• {review.project.customerName}</span>
+                    )}
+                  </>
+                ) : (
+                  <span style={styles.projectName}>Quick Question</span>
                 )}
               </div>
               <div style={styles.meta}>
-                <span style={{ ...styles.statusBadge, ...getStatusStyle(review.reviewStatus) }}>
-                  {review.reviewStatus === "REQUESTED" && "📝 Pending"}
-                  {review.reviewStatus === "APPROVED" && "✓ Approved"}
-                  {review.reviewStatus === "CORRECTED" && "✎ Corrected"}
-                </span>
-                <span>Row {review.rowNumber}</span>
+                {review.flaggedForReview ? (
+                  <span style={{ ...styles.statusBadge, ...getStatusStyle("", true) }}>
+                    Flagged
+                  </span>
+                ) : (
+                  <span style={{ ...styles.statusBadge, ...getStatusStyle(review.reviewStatus) }}>
+                    {review.reviewStatus === "REQUESTED" && "Need Help"}
+                    {review.reviewStatus === "APPROVED" && "Approved"}
+                    {review.reviewStatus === "CORRECTED" && "Corrected"}
+                  </span>
+                )}
+                {review.rowNumber !== null && <span>Row {review.rowNumber}</span>}
                 {review.confidence && (
                   <span style={{ ...styles.confidenceBadge, ...getConfidenceStyle(review.confidence) }}>
                     {review.confidence}
                   </span>
                 )}
-                <span>{formatTimeAgo(review.flaggedAt)}</span>
+                <span>{formatTimeAgo(review.reviewRequestedAt || review.flaggedAt)}</span>
               </div>
             </div>
 
@@ -391,9 +415,9 @@ export default function ReviewsPage() {
               <div style={styles.question}>Q: {review.question}</div>
               <div style={styles.response}>{review.response}</div>
 
-              {review.flagNote && (
+              {(review.reviewNote || review.flagNote) && (
                 <div style={styles.note}>
-                  <strong>Note from {review.flaggedBy}:</strong> "{review.flagNote}"
+                  <strong>Note from {review.reviewRequestedBy || review.flaggedBy}:</strong> "{review.reviewNote || review.flagNote}"
                 </div>
               )}
 
@@ -404,41 +428,71 @@ export default function ReviewsPage() {
               )}
 
               <div style={styles.actions}>
-                <Link
-                  href={`/projects/${review.project.id}?filter=flagged`}
-                  style={{
-                    ...styles.button,
-                    backgroundColor: "#f1f5f9",
-                    color: "#475569",
-                    textDecoration: "none",
-                  }}
-                >
-                  View in Project
-                </Link>
+                {review.source === "project" && review.project ? (
+                  <Link
+                    href={`/projects/${review.project.id}?filter=flagged`}
+                    style={{
+                      ...styles.button,
+                      backgroundColor: "#f1f5f9",
+                      color: "#475569",
+                      textDecoration: "none",
+                    }}
+                  >
+                    View in Project
+                  </Link>
+                ) : (
+                  <Link
+                    href={`/projects/questions?id=${review.id}`}
+                    style={{
+                      ...styles.button,
+                      backgroundColor: "#f1f5f9",
+                      color: "#475569",
+                      textDecoration: "none",
+                    }}
+                  >
+                    View in Questions
+                  </Link>
+                )}
 
                 {review.reviewStatus === "REQUESTED" && (
                   <>
-                    <button
-                      onClick={() => handleApprove(review.id, review.project.id)}
-                      style={{
-                        ...styles.button,
-                        backgroundColor: "#22c55e",
-                        color: "#fff",
-                      }}
-                    >
-                      ✓ Approve
-                    </button>
-                    <Link
-                      href={`/projects/${review.project.id}?filter=flagged`}
-                      style={{
-                        ...styles.button,
-                        backgroundColor: "#3b82f6",
-                        color: "#fff",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Edit & Correct
-                    </Link>
+                    {review.source === "project" && review.project && (
+                      <button
+                        onClick={() => handleApprove(review.id, review.project!.id)}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#22c55e",
+                          color: "#fff",
+                        }}
+                      >
+                        ✓ Approve
+                      </button>
+                    )}
+                    {review.source === "project" && review.project ? (
+                      <Link
+                        href={`/projects/${review.project.id}?filter=flagged`}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#3b82f6",
+                          color: "#fff",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Edit & Correct
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/projects/questions?id=${review.id}&edit=true`}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#3b82f6",
+                          color: "#fff",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Edit & Correct
+                      </Link>
+                    )}
                   </>
                 )}
               </div>

@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { logContractChange, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 60;
 
@@ -58,13 +60,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(summaries);
+    return apiSuccess({ contracts: summaries });
   } catch (error) {
-    console.error("Failed to fetch contract reviews:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch contract reviews" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch contract reviews", error, { route: "/api/contracts" });
+    return errors.internal("Failed to fetch contract reviews");
   }
 }
 
@@ -83,17 +82,14 @@ export async function POST(request: NextRequest) {
     const contractType = formData.get("contractType") as string | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return errors.badRequest("No file provided");
     }
 
     const filename = file.name;
     const fileType = filename.split(".").pop()?.toLowerCase() || "";
 
     if (!["pdf", "docx", "doc"].includes(fileType)) {
-      return NextResponse.json(
-        { error: "Unsupported file type. Please upload PDF or DOCX." },
-        { status: 400 }
-      );
+      return errors.badRequest("Unsupported file type. Please upload PDF or DOCX.");
     }
 
     // Extract text from file
@@ -112,10 +108,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!extractedText.trim()) {
-      return NextResponse.json(
-        { error: "Could not extract text from file. The file may be empty or corrupted." },
-        { status: 400 }
-      );
+      return errors.badRequest("Could not extract text from file. The file may be empty or corrupted.");
     }
 
     // Create the contract review record
@@ -141,21 +134,20 @@ export async function POST(request: NextRequest) {
       { filename, fileType, customerName, contractType }
     );
 
-    return NextResponse.json({
-      id: review.id,
-      name: review.name,
-      filename: review.filename,
-      customerName: review.customerName,
-      contractType: review.contractType,
-      status: review.status,
-      createdAt: review.createdAt.toISOString(),
-      textLength: extractedText.length,
-    });
+    return apiSuccess({
+      contract: {
+        id: review.id,
+        name: review.name,
+        filename: review.filename,
+        customerName: review.customerName,
+        contractType: review.contractType,
+        status: review.status,
+        createdAt: review.createdAt.toISOString(),
+        textLength: extractedText.length,
+      },
+    }, { status: 201 });
   } catch (error) {
-    console.error("Failed to upload contract:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Failed to upload contract" },
-      { status: 500 }
-    );
+    logger.error("Failed to upload contract", error, { route: "/api/contracts" });
+    return errors.internal(error instanceof Error ? error.message : "Failed to upload contract");
   }
 }

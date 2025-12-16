@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
@@ -10,6 +10,8 @@ import { getAnthropicClient } from "@/lib/apiHelpers";
 import { interpolateSnippets } from "@/lib/snippetInterpolation";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { CONTEXT_LIMITS } from "@/lib/constants";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 60;
 
@@ -59,18 +61,18 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const validation = validateBody(knowledgeChatSchema, body);
   if (!validation.success) {
-    return NextResponse.json({ error: validation.error }, { status: 400 });
+    return errors.validation(validation.error);
   }
 
   const data = validation.data;
   const message = data.message.trim();
   if (!message) {
-    return NextResponse.json({ error: "Message is required." }, { status: 400 });
+    return errors.badRequest("Message is required.");
   }
 
   const skills = data.skills;
@@ -277,10 +279,10 @@ ${keyFactsText}`;
       },
     };
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
-    console.error("Knowledge chat error:", error);
+    logger.error("Knowledge chat error", error, { route: "/api/knowledge-chat" });
     const errorMessage = error instanceof Error ? error.message : "Failed to process chat request";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return errors.internal(errorMessage);
   }
 }

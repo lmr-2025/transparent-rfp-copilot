@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { CustomerProfileHistoryEntry } from "@/types/customerProfile";
 import { requireAuth } from "@/lib/apiAuth";
 import { updateCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -36,19 +38,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!profile) {
-      return NextResponse.json(
-        { error: "Customer profile not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Customer profile");
     }
 
-    return NextResponse.json({ profile }, { status: 200 });
+    return apiSuccess({ profile });
   } catch (error) {
-    console.error("Error fetching customer profile:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch customer profile" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch customer profile", error, { route: "/api/customers/[id]" });
+    return errors.internal("Failed to fetch customer profile");
   }
 }
 
@@ -66,7 +62,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
 
     const validation = validateBody(updateCustomerSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const {
@@ -91,10 +87,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: "Customer profile not found" },
-        { status: 404 }
-      );
+      return errors.notFound("Customer profile");
     }
 
     // Build history entry
@@ -145,13 +138,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
-    return NextResponse.json({ profile }, { status: 200 });
+    return apiSuccess({ profile });
   } catch (error) {
-    console.error("Error updating customer profile:", error);
-    return NextResponse.json(
-      { error: "Failed to update customer profile" },
-      { status: 500 }
-    );
+    logger.error("Failed to update customer profile", error, { route: "/api/customers/[id]" });
+    return errors.internal("Failed to update customer profile");
   }
 }
 
@@ -172,11 +162,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     });
 
     if (linkedProjects > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete profile: it is linked to ${linkedProjects} project(s). Remove the associations first.`,
-        },
-        { status: 400 }
+      return errors.badRequest(
+        `Cannot delete profile: it is linked to ${linkedProjects} project(s). Remove the associations first.`
       );
     }
 
@@ -199,15 +186,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
-    return NextResponse.json(
-      { message: "Customer profile deleted successfully" },
-      { status: 200 }
-    );
+    return apiSuccess({ message: "Customer profile deleted successfully" });
   } catch (error) {
-    console.error("Error deleting customer profile:", error);
-    return NextResponse.json(
-      { error: "Failed to delete customer profile" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete customer profile", error, { route: "/api/customers/[id]" });
+    return errors.internal("Failed to delete customer profile");
   }
 }

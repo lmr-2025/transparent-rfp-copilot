@@ -64,6 +64,7 @@ const navItems: NavSection[] = [
     adminOnly: true,
     items: [
       { href: "/admin/prompt-blocks", label: "Prompt Builder" },
+      { href: "/accuracy", label: "AI Accuracy" },
       { href: "/admin/settings", label: "Settings" },
     ],
   },

@@ -7,12 +7,13 @@
  * @module /api/chat
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { CLAUDE_MODEL } from '@/lib/config';
 import { simpleChatSchema, validateBody } from '@/lib/validations';
 import { getAnthropicClient } from '@/lib/apiHelpers';
 import { requireAuth } from '@/lib/apiAuth';
 import { checkRateLimit, getRateLimitIdentifier } from '@/lib/rateLimit';
+import { apiSuccess, errors } from '@/lib/apiResponse';
 import { logger } from '@/lib/logger';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -64,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     const validation = validateBody(simpleChatSchema, body);
     if (!validation.success) {
-      return NextResponse.json({ error: validation.error }, { status: 400 });
+      return errors.validation(validation.error);
     }
 
     const { messages, systemPrompt } = validation.data;
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Return response
-    return NextResponse.json({
+    return apiSuccess({
       content: response.content,
       usage: response.usage,
       id: response.id,
@@ -89,9 +90,6 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     logger.error('Chat API failed', error, { route: '/api/chat' });
     const message = error instanceof Error ? error.message : 'Failed to process request';
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    );
+    return errors.internal(message);
   }
 }

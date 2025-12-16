@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET - Fetch question history for the current user
 export async function GET(request: NextRequest) {
@@ -10,7 +12,7 @@ export async function GET(request: NextRequest) {
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.json({ history: [] });
+      return apiSuccess({ history: [] });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -33,6 +35,17 @@ export async function GET(request: NextRequest) {
         remarks: true,
         skillsUsed: true,
         createdAt: true,
+        reviewStatus: true,
+        reviewNote: true,
+        reviewedBy: true,
+        flaggedForReview: true,
+        flaggedAt: true,
+        flaggedBy: true,
+        flagNote: true,
+        reviewRequestedAt: true,
+        reviewRequestedBy: true,
+        assignedReviewerId: true,
+        assignedReviewerName: true,
       },
     });
 
@@ -40,13 +53,10 @@ export async function GET(request: NextRequest) {
       where: { userId },
     });
 
-    return NextResponse.json({ history, total });
+    return apiSuccess({ history, total });
   } catch (error) {
-    console.error("Error fetching question history:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch question history" },
-      { status: 500 }
-    );
+    logger.error("Error fetching question history", error, { route: "/api/question-history" });
+    return errors.internal("Failed to fetch question history");
   }
 }
 
@@ -62,10 +72,7 @@ export async function POST(request: NextRequest) {
     const { question, response, confidence, sources, reasoning, inference, remarks, skillsUsed } = body;
 
     if (!question || !response) {
-      return NextResponse.json(
-        { error: "Question and response are required" },
-        { status: 400 }
-      );
+      return errors.badRequest("Question and response are required");
     }
 
     const entry = await prisma.questionHistory.create({
@@ -83,13 +90,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(entry);
+    return apiSuccess({ entry });
   } catch (error) {
-    console.error("Error saving question history:", error);
-    return NextResponse.json(
-      { error: "Failed to save question history" },
-      { status: 500 }
-    );
+    logger.error("Error saving question history", error, { route: "/api/question-history" });
+    return errors.internal("Failed to save question history");
   }
 }
 
@@ -100,22 +104,16 @@ export async function DELETE() {
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+      return errors.unauthorized();
     }
 
     await prisma.questionHistory.deleteMany({
       where: { userId },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error clearing question history:", error);
-    return NextResponse.json(
-      { error: "Failed to clear question history" },
-      { status: 500 }
-    );
+    logger.error("Error clearing question history", error, { route: "/api/question-history" });
+    return errors.internal("Failed to clear question history");
   }
 }

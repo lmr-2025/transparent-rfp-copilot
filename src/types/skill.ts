@@ -41,8 +41,16 @@ export type SkillCategory = string;
 
 export type SourceUrl = {
   url: string;
+  title?: string; // User-friendly name for the URL
   addedAt: string;
   lastFetchedAt?: string;
+};
+
+// Source document info (for skills built from uploaded documents)
+export type SourceDocument = {
+  id: string;
+  filename: string;
+  uploadedAt: string;
 };
 
 export type SkillOwner = {
@@ -68,6 +76,7 @@ export type Skill = {
   quickFacts: SkillFact[];
   edgeCases: string[];
   sourceUrls: SourceUrl[]; // URLs used to build/update this skill
+  sourceDocuments?: SourceDocument[]; // Documents used to build this skill
   information?: SkillInformation; // Deprecated - keeping for backwards compatibility
   isActive: boolean;
   createdAt: string;

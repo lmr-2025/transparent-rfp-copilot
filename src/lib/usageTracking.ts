@@ -1,5 +1,6 @@
 import prisma from "./prisma";
 import { Prisma } from "@prisma/client";
+import { logger } from "@/lib/logger";
 
 // Claude API pricing (per 1M tokens) as of Dec 2024
 // https://www.anthropic.com/pricing
@@ -80,7 +81,7 @@ export async function logUsage(data: UsageData): Promise<void> {
     });
   } catch (error) {
     // Log but don't throw - we don't want usage tracking to break the main flow
-    console.error("Failed to log API usage:", error);
+    logger.error("Failed to log API usage", error, { feature: data.feature, model: data.model });
   }
 }
 

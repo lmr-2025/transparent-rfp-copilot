@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/instruction-presets/[id] - Get a single preset
 export async function GET(
@@ -19,7 +21,7 @@ export async function GET(
     });
 
     if (!preset) {
-      return NextResponse.json({ error: "Preset not found" }, { status: 404 });
+      return errors.notFound("Preset");
     }
 
     // Check access: must be approved+shared, OR owned by user, OR admin viewing pending
@@ -28,16 +30,13 @@ export async function GET(
     const isPendingAndAdmin = preset.shareStatus === "PENDING_APPROVAL" && isAdmin;
 
     if (!isApprovedShared && !isOwner && !isPendingAndAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return errors.forbidden("Access denied");
     }
 
-    return NextResponse.json({ preset });
+    return apiSuccess({ preset });
   } catch (error) {
-    console.error("Error fetching instruction preset:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch instruction preset" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch instruction preset", error, { route: "/api/instruction-presets/[id]" });
+    return errors.internal("Failed to fetch instruction preset");
   }
 }
 
@@ -50,7 +49,7 @@ export async function PUT(
     const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errors.unauthorized();
     }
 
     const preset = await prisma.instructionPreset.findUnique({
@@ -58,7 +57,7 @@ export async function PUT(
     });
 
     if (!preset) {
-      return NextResponse.json({ error: "Preset not found" }, { status: 404 });
+      return errors.notFound("Preset");
     }
 
     const isOwner = preset.createdBy === session.user.id;
@@ -79,11 +78,11 @@ export async function PUT(
     // Handle admin approval/rejection
     if (action === "approve" || action === "reject") {
       if (!isAdmin) {
-        return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+        return errors.forbidden("Admin access required");
       }
 
       if (preset.shareStatus !== "PENDING_APPROVAL") {
-        return NextResponse.json({ error: "Preset is not pending approval" }, { status: 400 });
+        return errors.badRequest("Preset is not pending approval");
       }
 
       if (action === "approve") {
@@ -99,7 +98,7 @@ export async function PUT(
             rejectionReason: null,
           },
         });
-        return NextResponse.json({ preset: updated });
+        return apiSuccess({ preset: updated });
       } else {
         const updated = await prisma.instructionPreset.update({
           where: { id },
@@ -111,13 +110,13 @@ export async function PUT(
             rejectionReason: rejectionReason || null,
           },
         });
-        return NextResponse.json({ preset: updated });
+        return apiSuccess({ preset: updated });
       }
     }
 
     // Regular updates - must be owner OR admin
     if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return errors.forbidden("Access denied");
     }
 
     const updates: Record<string, unknown> = {};
@@ -169,13 +168,10 @@ export async function PUT(
       data: updates,
     });
 
-    return NextResponse.json({ preset: updated });
+    return apiSuccess({ preset: updated });
   } catch (error) {
-    console.error("Error updating instruction preset:", error);
-    return NextResponse.json(
-      { error: "Failed to update instruction preset" },
-      { status: 500 }
-    );
+    logger.error("Failed to update instruction preset", error, { route: "/api/instruction-presets/[id]" });
+    return errors.internal("Failed to update instruction preset");
   }
 }
 
@@ -188,7 +184,7 @@ export async function DELETE(
     const { id } = await params;
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errors.unauthorized();
     }
 
     const preset = await prisma.instructionPreset.findUnique({
@@ -196,26 +192,23 @@ export async function DELETE(
     });
 
     if (!preset) {
-      return NextResponse.json({ error: "Preset not found" }, { status: 404 });
+      return errors.notFound("Preset");
     }
 
     // Check ownership: must be owner OR admin
     const isOwner = preset.createdBy === session.user.id;
     const isAdmin = session.user.role === "ADMIN";
     if (!isOwner && !isAdmin) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 });
+      return errors.forbidden("Access denied");
     }
 
     await prisma.instructionPreset.delete({
       where: { id },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error deleting instruction preset:", error);
-    return NextResponse.json(
-      { error: "Failed to delete instruction preset" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete instruction preset", error, { route: "/api/instruction-presets/[id]" });
+    return errors.internal("Failed to delete instruction preset");
   }
 }

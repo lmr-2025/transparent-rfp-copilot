@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { AuditEntityType, AuditAction, Prisma } from "@prisma/client";
+import { logger } from "@/lib/logger";
 
 export type AuditUser = {
   id?: string;
@@ -41,7 +42,7 @@ export async function createAuditLog(entry: AuditLogEntry): Promise<void> {
     });
   } catch (error) {
     // Log but don't fail the main operation
-    console.error("Failed to create audit log:", error);
+    logger.error("Failed to create audit log", error, { entityType: entry.entityType, entityId: entry.entityId, action: entry.action });
   }
 }
 
@@ -287,6 +288,30 @@ export async function logContextSnippetChange(
     entityType: "CONTEXT_SNIPPET",
     entityId: snippetId,
     entityTitle: snippetName,
+    action,
+    user,
+    changes,
+    metadata,
+    ...requestContext,
+  });
+}
+
+/**
+ * Log an answer change (corrections, reviews, edits)
+ */
+export async function logAnswerChange(
+  action: AuditAction,
+  answerId: string,
+  answerTitle: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
+): Promise<void> {
+  await createAuditLog({
+    entityType: "ANSWER",
+    entityId: answerId,
+    entityTitle: answerTitle,
     action,
     user,
     changes,

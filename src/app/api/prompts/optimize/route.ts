@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
@@ -6,6 +6,8 @@ import { logUsage } from "@/lib/usageTracking";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 120;
 
@@ -66,18 +68,18 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as OptimizePromptRequest;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const { promptType, sections, outputFormat = "plain_text" } = body;
 
   if (!Array.isArray(sections) || sections.length === 0) {
-    return NextResponse.json({ error: "No sections to analyze." }, { status: 400 });
+    return errors.badRequest("No sections to analyze.");
   }
 
   const enabledSections = sections.filter(s => s.enabled && s.text.trim());
   if (enabledSections.length === 0) {
-    return NextResponse.json({ error: "No enabled sections with content." }, { status: 400 });
+    return errors.badRequest("No enabled sections with content.");
   }
 
   try {
@@ -204,10 +206,10 @@ Return ONLY the JSON object with your analysis.`;
       },
     };
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
-    console.error("Prompt optimization error:", error);
+    logger.error("Prompt optimization error", error, { route: "/api/prompts/optimize" });
     const errorMessage = error instanceof Error ? error.message : "Failed to analyze prompt";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return errors.internal(errorMessage);
   }
 }

@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET - Fetch chat sessions for the current user
 export async function GET(request: NextRequest) {
@@ -10,7 +12,7 @@ export async function GET(request: NextRequest) {
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.json({ sessions: [] });
+      return apiSuccess({ sessions: [] });
     }
 
     const searchParams = request.nextUrl.searchParams;
@@ -39,13 +41,10 @@ export async function GET(request: NextRequest) {
       where: { userId },
     });
 
-    return NextResponse.json({ sessions, total });
+    return apiSuccess({ sessions, total });
   } catch (error) {
-    console.error("Error fetching chat sessions:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch chat sessions" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch chat sessions", error, { route: "/api/chat-sessions" });
+    return errors.internal("Failed to fetch chat sessions");
   }
 }
 
@@ -60,10 +59,7 @@ export async function POST(request: NextRequest) {
     const { title, messages, skillsUsed, documentsUsed, customersUsed, urlsUsed } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json(
-        { error: "Messages array is required" },
-        { status: 400 }
-      );
+      return errors.badRequest("Messages array is required");
     }
 
     // Auto-generate title from first user message if not provided
@@ -82,13 +78,10 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json(chatSession);
+    return apiSuccess({ session: chatSession }, { status: 201 });
   } catch (error) {
-    console.error("Error creating chat session:", error);
-    return NextResponse.json(
-      { error: "Failed to create chat session" },
-      { status: 500 }
-    );
+    logger.error("Failed to create chat session", error, { route: "/api/chat-sessions" });
+    return errors.internal("Failed to create chat session");
   }
 }
 
@@ -99,22 +92,16 @@ export async function DELETE() {
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "Authentication required" },
-        { status: 401 }
-      );
+      return errors.unauthorized();
     }
 
     await prisma.chatSession.deleteMany({
       where: { userId },
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error clearing chat sessions:", error);
-    return NextResponse.json(
-      { error: "Failed to clear chat sessions" },
-      { status: 500 }
-    );
+    logger.error("Failed to clear chat sessions", error, { route: "/api/chat-sessions" });
+    return errors.internal("Failed to clear chat sessions");
   }
 }

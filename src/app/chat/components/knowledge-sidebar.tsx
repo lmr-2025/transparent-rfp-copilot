@@ -61,8 +61,8 @@ export function KnowledgeSidebar({
             localStorage.setItem(STORAGE_KEYS.USER_INSTRUCTIONS, defaultPreset.content);
           }
         }
-      } catch (err) {
-        console.error("Failed to load presets:", err);
+      } catch {
+        // Silent failure - presets are optional
       } finally {
         setPresetsLoading(false);
       }

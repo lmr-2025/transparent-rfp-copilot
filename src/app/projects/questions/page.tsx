@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { useSession } from "next-auth/react";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
@@ -16,6 +17,8 @@ import TransparencyDetails from "@/components/TransparencyDetails";
 import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import DomainSelector, { Domain } from "@/components/DomainSelector";
+import { useFlagReview } from "@/components/FlagReviewModal";
+import ReviewStatusBanner, { getEffectiveReviewStatus, getReviewerName } from "@/components/ReviewStatusBanner";
 
 type QuestionHistoryItem = {
   id: string;
@@ -28,6 +31,12 @@ type QuestionHistoryItem = {
   remarks?: string;
   skillsUsed?: { id: string; title: string }[];
   createdAt: string;
+  reviewStatus?: string;
+  reviewNote?: string;
+  reviewRequestedBy?: string;
+  reviewedBy?: string;
+  flaggedForReview?: boolean;
+  flagNote?: string;
 };
 
 const formatHistoryDate = (dateString: string) => {
@@ -85,6 +94,7 @@ const styles = {
 };
 
 export default function QuestionsPage() {
+  const searchParams = useSearchParams();
   const [questionText, setQuestionText] = useState("");
   const [questionResponse, setQuestionResponse] = useState("");
   const [questionConfidence, setQuestionConfidence] = useState("");
@@ -107,8 +117,17 @@ export default function QuestionsPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
+  const [currentHistoryId, setCurrentHistoryId] = useState<string | null>(null);
+  const [currentFlagged, setCurrentFlagged] = useState(false);
+  const [currentFlagNote, setCurrentFlagNote] = useState<string | null>(null);
+  const [currentReviewStatus, setCurrentReviewStatus] = useState<string | null>(null);
+  const [currentReviewedBy, setCurrentReviewedBy] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedResponse, setEditedResponse] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const { data: session } = useSession();
+  const { openFlagReview, FlagReviewDialog } = useFlagReview();
 
   // Fetch question history
   const fetchHistory = useCallback(async () => {
@@ -120,8 +139,8 @@ export default function QuestionsPage() {
         const data = await response.json();
         setQuestionHistory(data.history || []);
       }
-    } catch (error) {
-      console.error("Failed to fetch question history:", error);
+    } catch {
+      // Silent failure - history is not critical
     } finally {
       setLoadingHistory(false);
     }
@@ -137,10 +156,10 @@ export default function QuestionsPage() {
     inference: string,
     remarks: string,
     skillsUsed: { id: string; title: string }[]
-  ) => {
-    if (!session?.user) return;
+  ): Promise<string | null> => {
+    if (!session?.user) return null;
     try {
-      await fetch("/api/question-history", {
+      const res = await fetch("/api/question-history", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -154,10 +173,13 @@ export default function QuestionsPage() {
           skillsUsed,
         }),
       });
+      const data = await res.json();
       // Refresh history after saving
       fetchHistory();
-    } catch (error) {
-      console.error("Failed to save to history:", error);
+      return data.id || null;
+    } catch {
+      // Silent failure - saving history is not critical
+      return null;
     }
   };
 
@@ -170,8 +192,8 @@ export default function QuestionsPage() {
       if (response.ok) {
         setQuestionHistory((prev) => prev.filter((item) => item.id !== id));
       }
-    } catch (error) {
-      console.error("Failed to delete history item:", error);
+    } catch {
+      toast.error("Failed to delete history item");
     }
   };
 
@@ -184,6 +206,11 @@ export default function QuestionsPage() {
     setQuestionRemarks(item.remarks || "");
     setQuestionReasoning(item.reasoning || "");
     setQuestionInference(item.inference || "");
+    setCurrentHistoryId(item.id);
+    setCurrentFlagged(item.flaggedForReview || false);
+    setCurrentFlagNote(item.flagNote || null);
+    setCurrentReviewStatus(item.reviewStatus || null);
+    setCurrentReviewedBy(item.reviewedBy || null);
     // For history items, create minimal skill objects for display purposes
     setCurrentUsedSkills(
       (item.skillsUsed || []).map((s) => ({
@@ -202,6 +229,51 @@ export default function QuestionsPage() {
     setShowHistory(false);
   };
 
+  // Load a specific question by ID
+  const loadQuestionById = useCallback(async (id: string, startEditing: boolean = false) => {
+    try {
+      const response = await fetch(`/api/question-history/${id}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.question) {
+          const item = data.question;
+          setQuestionText(item.question);
+          setQuestionResponse(item.response);
+          setQuestionConfidence(item.confidence || "");
+          setQuestionSources(item.sources || "");
+          setQuestionRemarks(item.remarks || "");
+          setQuestionReasoning(item.reasoning || "");
+          setQuestionInference(item.inference || "");
+          setCurrentHistoryId(item.id);
+          setCurrentFlagged(item.flaggedForReview || false);
+          setCurrentFlagNote(item.flagNote || null);
+          setCurrentReviewStatus(item.reviewStatus || null);
+          setCurrentReviewedBy(item.reviewedBy || null);
+          setCurrentUsedSkills(
+            (item.skillsUsed || []).map((s: { id: string; title: string }) => ({
+              id: s.id,
+              title: s.title,
+              content: "",
+              tags: [],
+              isActive: true,
+              createdAt: "",
+              updatedAt: "",
+              quickFacts: [],
+              edgeCases: [],
+              sourceUrls: [],
+            }))
+          );
+          if (startEditing) {
+            setEditedResponse(item.response);
+            setIsEditing(true);
+          }
+        }
+      }
+    } catch {
+      toast.error("Failed to load question");
+    }
+  }, []);
+
   // Load skills on mount
   useEffect(() => {
     loadSkillsFromApi().then(setAvailableSkills).catch(() => toast.error("Failed to load skills"));
@@ -213,6 +285,15 @@ export default function QuestionsPage() {
       fetchHistory();
     }
   }, [session?.user, fetchHistory]);
+
+  // Handle URL params for deep linking
+  useEffect(() => {
+    const questionId = searchParams.get("id");
+    const shouldEdit = searchParams.get("edit") === "true";
+    if (questionId) {
+      loadQuestionById(questionId, shouldEdit);
+    }
+  }, [searchParams, loadQuestionById]);
 
   const handleQuestionInput = (value: string) => {
     setQuestionText(value);
@@ -278,8 +359,8 @@ export default function QuestionsPage() {
       setCurrentUsedSkills(relevantSkills);
       setShowRecommendation(true);
 
-      // Save to history (async, don't await)
-      saveToHistory(
+      // Save to history and capture ID
+      const historyId = await saveToHistory(
         question,
         parsed.response,
         parsed.confidence,
@@ -289,6 +370,11 @@ export default function QuestionsPage() {
         parsed.remarks,
         relevantSkills.map((s) => ({ id: s.id, title: s.title }))
       );
+      setCurrentHistoryId(historyId);
+      setCurrentFlagged(false);
+      setCurrentFlagNote(null);
+      setCurrentReviewStatus(null);
+      setCurrentReviewedBy(null);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "Unexpected error while generating response.",
@@ -302,6 +388,170 @@ export default function QuestionsPage() {
     if (e.key === "Enter" && !e.shiftKey && !isAnswering) {
       e.preventDefault();
       askQuestion();
+    }
+  };
+
+  // Handle Flag or Need Help action for the current answer
+  const handleFlagOrReview = async (initialAction: "flag" | "need-help" = "need-help") => {
+    if (!currentHistoryId) {
+      toast.error("No answer to review. Ask a question first.");
+      return;
+    }
+
+    // Open the unified modal (no queueing for quick questions - always send now)
+    const data = await openFlagReview(initialAction);
+    if (!data) return; // Cancelled
+
+    try {
+      if (data.action === "flag") {
+        // Just flag
+        const response = await fetch(`/api/question-history/${currentHistoryId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            flaggedForReview: true,
+            flagNote: data.note || null,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to flag answer");
+        }
+
+        setCurrentFlagged(true);
+        setCurrentFlagNote(data.note || null);
+        toast.success("Answer flagged!");
+      } else {
+        // Need help - send for review
+        const response = await fetch(`/api/question-history/${currentHistoryId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            reviewStatus: "REQUESTED",
+            reviewNote: data.note || null,
+            reviewRequestedBy: session?.user?.name || session?.user?.email || "Unknown User",
+            assignedReviewerId: data.reviewerId || null,
+            assignedReviewerName: data.reviewerName || null,
+            flaggedForReview: true,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || "Failed to request review");
+        }
+
+        setCurrentReviewStatus("REQUESTED");
+        setCurrentFlagged(true);
+        const reviewerMsg = data.reviewerName ? ` to ${data.reviewerName}` : "";
+        toast.success(`Review requested${reviewerMsg}!`);
+      }
+      fetchHistory();
+    } catch {
+      toast.error("Failed to process. Please try again.");
+    }
+  };
+
+  // Save edited response (mark as corrected)
+  const handleSaveCorrection = async () => {
+    if (!currentHistoryId || !editedResponse.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/question-history/${currentHistoryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userEditedAnswer: editedResponse,
+          response: editedResponse, // Also update the main response
+          reviewStatus: "CORRECTED",
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: session?.user?.name || session?.user?.email || "Unknown User",
+          flaggedForReview: false, // Clear flagged status
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save correction");
+      }
+
+      const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
+      setQuestionResponse(editedResponse);
+      setCurrentReviewStatus("CORRECTED");
+      setCurrentReviewedBy(reviewerName);
+      setCurrentFlagged(false);
+      setIsEditing(false);
+      toast.success("Correction saved!");
+      fetchHistory();
+    } catch {
+      toast.error("Failed to save correction");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Approve the answer as-is (no correction needed)
+  const handleApprove = async () => {
+    if (!currentHistoryId) return;
+
+    setIsSaving(true);
+    try {
+      const response = await fetch(`/api/question-history/${currentHistoryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewStatus: "APPROVED",
+          reviewedAt: new Date().toISOString(),
+          reviewedBy: session?.user?.name || session?.user?.email || "Unknown User",
+          flaggedForReview: false, // Clear flagged status
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to approve");
+      }
+
+      const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
+      setCurrentReviewStatus("APPROVED");
+      setCurrentReviewedBy(reviewerName);
+      setCurrentFlagged(false);
+      setIsEditing(false);
+      toast.success("Answer verified!");
+      fetchHistory();
+    } catch {
+      toast.error("Failed to approve");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Unflag the current answer
+  const handleUnflag = async () => {
+    if (!currentHistoryId) return;
+
+    try {
+      const response = await fetch(`/api/question-history/${currentHistoryId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          flaggedForReview: false,
+          flagNote: null,
+          reviewStatus: "NONE",
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to unflag");
+      }
+
+      setCurrentFlagged(false);
+      setCurrentFlagNote(null);
+      setCurrentReviewStatus("NONE");
+      toast.success("Flag removed");
+      fetchHistory();
+    } catch {
+      toast.error("Failed to remove flag");
     }
   };
 
@@ -511,19 +761,143 @@ export default function QuestionsPage() {
           <div style={{
             marginTop: "20px",
             padding: "16px",
-            backgroundColor: "#f8fafc",
+            backgroundColor: isEditing ? "#fefce8" : "#f8fafc",
             borderRadius: "8px",
-            border: "1px solid #e2e8f0",
+            border: isEditing ? "2px solid #fbbf24" : "1px solid #e2e8f0",
           }}>
-            <h3 style={{ margin: "0 0 12px 0", fontSize: "1rem", color: "#0f172a" }}>Response</h3>
-            <div style={{
-              whiteSpace: "pre-wrap",
-              lineHeight: 1.6,
-              color: "#1e293b",
-              fontSize: "0.95rem",
-            }}>
-              {questionResponse}
+            {/* Review Status Banner */}
+            {!isEditing && (
+              <ReviewStatusBanner
+                status={getEffectiveReviewStatus(currentReviewStatus, null)}
+                reviewedBy={getReviewerName(currentReviewStatus, currentReviewedBy, null)}
+              />
+            )}
+            {currentFlagged && currentReviewStatus !== "REQUESTED" && !isEditing && (
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "8px 12px",
+                marginBottom: "12px",
+                borderRadius: "6px",
+                fontSize: "0.85rem",
+                backgroundColor: "#fee2e2",
+                color: "#b91c1c",
+                border: "1px solid #fecaca",
+              }}>
+                <span>🚩</span>
+                <span><strong>Flagged</strong> - This answer has been flagged for investigation</span>
+                {currentFlagNote && <span style={{ fontStyle: "italic" }}>: &quot;{currentFlagNote}&quot;</span>}
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+              <h3 style={{ margin: 0, fontSize: "1rem", color: "#0f172a" }}>
+                {isEditing ? "Edit Response" : "Response"}
+              </h3>
+              {!isEditing && currentHistoryId && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditedResponse(questionResponse);
+                    setIsEditing(true);
+                  }}
+                  style={{
+                    padding: "4px 10px",
+                    fontSize: "0.8rem",
+                    backgroundColor: "#f1f5f9",
+                    color: "#64748b",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "6px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Edit
+                </button>
+              )}
             </div>
+            {isEditing ? (
+              <div>
+                <textarea
+                  value={editedResponse}
+                  onChange={(e) => setEditedResponse(e.target.value)}
+                  style={{
+                    width: "100%",
+                    minHeight: "200px",
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: "1px solid #e2e8f0",
+                    fontSize: "0.95rem",
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                    fontFamily: "inherit",
+                  }}
+                />
+                <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={handleSaveCorrection}
+                    disabled={isSaving || !editedResponse.trim()}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "0.9rem",
+                      backgroundColor: isSaving ? "#94a3b8" : "#3b82f6",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    {isSaving ? "Saving..." : "Save Correction"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleApprove}
+                    disabled={isSaving}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "0.9rem",
+                      backgroundColor: isSaving ? "#94a3b8" : "#22c55e",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: isSaving ? "not-allowed" : "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    Approve (No Change Needed)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setEditedResponse("");
+                    }}
+                    style={{
+                      padding: "8px 16px",
+                      fontSize: "0.9rem",
+                      backgroundColor: "#f1f5f9",
+                      color: "#64748b",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.6,
+                color: "#1e293b",
+                fontSize: "0.95rem",
+              }}>
+                {questionResponse}
+              </div>
+            )}
 
             {/* Transparency Details using component */}
             <TransparencyDetails
@@ -542,24 +916,103 @@ export default function QuestionsPage() {
                 type: "skill" as const,
               }))}
               renderClarifyButton={!conversationOpen ? () => (
-                <button
-                  type="button"
-                  onClick={() => setConversationOpen(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 12px",
-                    fontSize: "0.8rem",
-                    backgroundColor: "#0ea5e9",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: "6px",
-                    cursor: "pointer",
-                    fontWeight: 500,
-                  }}
-                >
-                  Clarify
-                </button>
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => setConversationOpen(true)}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 12px",
+                      fontSize: "0.8rem",
+                      backgroundColor: "#0ea5e9",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      cursor: "pointer",
+                      fontWeight: 500,
+                    }}
+                  >
+                    Clarify
+                  </button>
+                  {session?.user && currentHistoryId && !currentFlagged && currentReviewStatus !== "REQUESTED" && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handleFlagOrReview("flag")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 12px",
+                          fontSize: "0.8rem",
+                          backgroundColor: "#f1f5f9",
+                          color: "#64748b",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: 500,
+                        }}
+                      >
+                        🚩 Flag
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleFlagOrReview("need-help")}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 12px",
+                          fontSize: "0.8rem",
+                          backgroundColor: "#f1f5f9",
+                          color: "#64748b",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          fontWeight: 500,
+                        }}
+                      >
+                        🤚 Need Help?
+                      </button>
+                    </>
+                  )}
+                  {session?.user && currentHistoryId && currentFlagged && currentReviewStatus !== "REQUESTED" && (
+                    <button
+                      type="button"
+                      onClick={handleUnflag}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 12px",
+                        fontSize: "0.8rem",
+                        backgroundColor: "#fee2e2",
+                        color: "#b91c1c",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "6px",
+                        cursor: "pointer",
+                        fontWeight: 500,
+                      }}
+                    >
+                      ✕ Unflag
+                    </button>
+                  )}
+                  {session?.user && currentHistoryId && currentReviewStatus === "REQUESTED" && (
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "6px 12px",
+                        fontSize: "0.8rem",
+                        backgroundColor: "#dbeafe",
+                        color: "#1d4ed8",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: "6px",
+                        fontWeight: 500,
+                      }}
+                    >
+                      📨 Review Requested
+                    </span>
+                  )}
+                </div>
               ) : undefined}
             />
           </div>
@@ -610,6 +1063,9 @@ export default function QuestionsPage() {
           <Link href="/knowledge" style={{ color: "#0ea5e9" }}>Manage your library</Link>
         </div>
       )}
+
+      {/* Flag/Review Modal */}
+      <FlagReviewDialog />
     </div>
   );
 }

@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { InstructionShareStatus, Prisma } from "@prisma/client";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/instruction-presets - List all presets (user's own + approved shared presets)
 // Admins also see pending approval requests
@@ -44,13 +46,10 @@ export async function GET(request: NextRequest) {
       ],
     });
 
-    return NextResponse.json({ presets });
+    return apiSuccess({ presets });
   } catch (error) {
-    console.error("Error fetching instruction presets:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch instruction presets" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch instruction presets", error, { route: "/api/instruction-presets" });
+    return errors.internal("Failed to fetch instruction presets");
   }
 }
 
@@ -59,17 +58,14 @@ export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      return errors.unauthorized();
     }
 
     const data = await request.json();
     const { name, content, description, requestShare } = data;
 
     if (!name || !content) {
-      return NextResponse.json(
-        { error: "Name and content are required" },
-        { status: 400 }
-      );
+      return errors.badRequest("Name and content are required");
     }
 
     const isAdmin = session.user.role === "ADMIN";
@@ -105,12 +101,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ preset });
+    return apiSuccess({ preset }, { status: 201 });
   } catch (error) {
-    console.error("Error creating instruction preset:", error);
-    return NextResponse.json(
-      { error: "Failed to create instruction preset" },
-      { status: 500 }
-    );
+    logger.error("Failed to create instruction preset", error, { route: "/api/instruction-presets" });
+    return errors.internal("Failed to create instruction preset");
   }
 }

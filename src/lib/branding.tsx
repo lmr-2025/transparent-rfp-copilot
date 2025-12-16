@@ -41,8 +41,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
           setBranding(data.branding);
         }
       }
-    } catch (error) {
-      console.error("Failed to fetch branding:", error);
+    } catch {
+      // Silent failure - branding falls back to defaults
     } finally {
       setIsLoading(false);
     }

@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { LibraryRecommendation, AnalyzeLibraryResponse } from "@/types/libraryAnalysis";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 120;
 
@@ -31,13 +33,13 @@ export async function POST(request: NextRequest) {
   try {
     body = (await request.json()) as AnalyzeLibraryRequest;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return errors.badRequest("Invalid JSON body.");
   }
 
   const skills = Array.isArray(body?.skills) ? body.skills : [];
 
   if (skills.length === 0) {
-    return NextResponse.json({
+    return apiSuccess({
       recommendations: [],
       summary: "No skills to analyze. Add some skills to your knowledge library first.",
       healthScore: 100,
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (skills.length === 1) {
-    return NextResponse.json({
+    return apiSuccess({
       recommendations: [],
       summary: "Only one skill in the library. Add more skills to enable redundancy analysis.",
       healthScore: 100,
@@ -142,10 +144,10 @@ Return ONLY the JSON object with your analysis.`;
       },
     };
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
-    console.error("Library analysis error:", error);
+    logger.error("Library analysis error", error, { route: "/api/skills/analyze-library" });
     const errorMessage = error instanceof Error ? error.message : "Failed to analyze library";
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return errors.internal(errorMessage);
   }
 }

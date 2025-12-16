@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
+import { logger } from "@/lib/logger";
 
 /**
  * Get an initialized Anthropic client.
@@ -76,7 +77,7 @@ export async function fetchUrlContent(
   // SSRF protection: validate URL before fetching
   const ssrfCheck = await validateUrlForSSRF(urlString);
   if (!ssrfCheck.valid) {
-    console.warn(`SSRF check failed for URL ${urlString}: ${ssrfCheck.error}`);
+    logger.warn("SSRF check failed for URL", { url: urlString, error: ssrfCheck.error });
     return null;
   }
 
@@ -86,20 +87,20 @@ export async function fetchUrlContent(
     });
 
     if (!response.ok) {
-      console.warn(`Failed to fetch ${urlString}: ${response.statusText}`);
+      logger.warn("Failed to fetch URL", { url: urlString, status: response.statusText });
       return null;
     }
 
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("text")) {
-      console.warn(`Skipping non-text content from ${urlString}`);
+      logger.warn("Skipping non-text content", { url: urlString, contentType });
       return null;
     }
 
     const text = await response.text();
     return text.slice(0, maxLength);
   } catch (error) {
-    console.warn(`Error fetching ${urlString}:`, error);
+    logger.warn("Error fetching URL", error, { url: urlString });
     return null;
   }
 }

@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // Project-level review request
 type ProjectReviewBody = {
@@ -171,25 +173,19 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!projectName?.trim() || !projectUrl?.trim() || !requesterName?.trim()) {
-      return NextResponse.json(
-        { error: "projectName, projectUrl, and requesterName are required" },
-        { status: 400 }
-      );
+      return errors.badRequest("projectName, projectUrl, and requesterName are required");
     }
 
     // Validate URL is from our domain (prevent open redirect attacks)
     if (!isValidProjectUrl(projectUrl, request)) {
-      return NextResponse.json(
-        { error: "Invalid project URL" },
-        { status: 400 }
-      );
+      return errors.badRequest("Invalid project URL");
     }
 
     const webhookUrl = process.env.SLACK_WEBHOOK_URL;
 
     if (!webhookUrl) {
-      console.warn("SLACK_WEBHOOK_URL not configured, skipping notification");
-      return NextResponse.json({ success: true, skipped: true }, { status: 200 });
+      logger.warn("SLACK_WEBHOOK_URL not configured, skipping notification");
+      return apiSuccess({ success: true, skipped: true });
     }
 
     // Sanitize all user input for Slack
@@ -204,10 +200,7 @@ export async function POST(request: NextRequest) {
       const { question, answer, confidence, reviewNote } = body;
 
       if (!question?.trim() || !answer?.trim()) {
-        return NextResponse.json(
-          { error: "question and answer are required for question reviews" },
-          { status: 400 }
-        );
+        return errors.badRequest("question and answer are required for question reviews");
       }
 
       message = buildQuestionReviewMessage(
@@ -238,19 +231,13 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("Slack webhook error:", errorText);
-      return NextResponse.json(
-        { error: "Failed to send Slack notification" },
-        { status: 500 }
-      );
+      logger.error("Slack webhook error", new Error(errorText), { route: "/api/slack/notify" });
+      return errors.internal("Failed to send Slack notification");
     }
 
-    return NextResponse.json({ success: true }, { status: 200 });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Error sending Slack notification:", error);
-    return NextResponse.json(
-      { error: "Failed to send notification" },
-      { status: 500 }
-    );
+    logger.error("Failed to send Slack notification", error, { route: "/api/slack/notify" });
+    return errors.internal("Failed to send notification");
   }
 }

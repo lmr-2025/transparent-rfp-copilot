@@ -1,9 +1,11 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RFPEntry = {
   question: string;
@@ -49,15 +51,12 @@ export async function POST(request: NextRequest) {
     const existingSkills = body.existingSkills as ExistingSkill[];
 
     if (!Array.isArray(rfpEntries) || rfpEntries.length === 0) {
-      return NextResponse.json({ error: "No RFP entries provided" }, { status: 400 });
+      return errors.badRequest("No RFP entries provided");
     }
 
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "ANTHROPIC_API_KEY not configured" },
-        { status: 500 }
-      );
+      return errors.internal("ANTHROPIC_API_KEY not configured");
     }
 
     const anthropic = new Anthropic({ apiKey });
@@ -175,7 +174,7 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
       }
       parsed = JSON.parse(jsonText);
     } catch {
-      console.error("Failed to parse LLM response:", content.text);
+      logger.error("Failed to parse LLM response", new Error("Parse error"), { route: "/api/skills/analyze-rfp", response: content.text.slice(0, 500) });
       throw new Error("Failed to parse analysis results");
     }
 
@@ -198,12 +197,9 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
         .map((i) => rfpEntries[i - 1]),
     };
 
-    return NextResponse.json(result);
+    return apiSuccess(result);
   } catch (error) {
-    console.error("RFP analysis error:", error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Analysis failed" },
-      { status: 500 }
-    );
+    logger.error("RFP analysis error", error, { route: "/api/skills/analyze-rfp" });
+    return errors.internal(error instanceof Error ? error.message : "Analysis failed");
   }
 }

@@ -14,6 +14,7 @@ import { requireAuth } from "@/lib/apiAuth";
 import { createCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 /**
  * GET /api/customers - List customer profiles
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     return apiSuccess({ profiles });
   } catch (error) {
-    console.error("Error fetching customer profiles:", error);
+    logger.error("Failed to fetch customer profiles", error, { route: "/api/customers" });
     return errors.internal("Failed to fetch customer profiles");
   }
 }
@@ -167,7 +168,7 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({ profile }, { status: 201 });
   } catch (error) {
-    console.error("Error creating customer profile:", error);
+    logger.error("Failed to create customer profile", error, { route: "/api/customers" });
     return errors.internal("Failed to create customer profile");
   }
 }

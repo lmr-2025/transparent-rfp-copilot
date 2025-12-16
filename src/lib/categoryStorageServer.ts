@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { DEFAULT_SKILL_CATEGORIES } from "@/types/skill";
+import { logger } from "@/lib/logger";
 
 // Server-side function to get category names from database
 export async function getCategoryNamesFromDb(): Promise<string[]> {
@@ -25,7 +26,7 @@ export async function getCategoryNamesFromDb(): Promise<string[]> {
 
     return categories.map((c) => c.name);
   } catch (error) {
-    console.error("Failed to fetch categories from DB:", error);
+    logger.error("Failed to fetch categories from DB", error);
     // Fall back to defaults
     return [...DEFAULT_SKILL_CATEGORIES];
   }

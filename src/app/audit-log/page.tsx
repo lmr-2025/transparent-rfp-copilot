@@ -17,6 +17,9 @@ import {
   Loader2,
   X,
   AlertCircle,
+  MessageSquare,
+  Settings,
+  Code,
 } from "lucide-react";
 
 type AuditEntityType =
@@ -27,7 +30,10 @@ type AuditEntityType =
   | "REFERENCE_URL"
   | "CONTRACT"
   | "USER"
-  | "SETTING";
+  | "SETTING"
+  | "PROMPT"
+  | "CONTEXT_SNIPPET"
+  | "ANSWER";
 
 type AuditAction =
   | "CREATED"
@@ -39,7 +45,10 @@ type AuditAction =
   | "OWNER_REMOVED"
   | "STATUS_CHANGED"
   | "REFRESHED"
-  | "MERGED";
+  | "MERGED"
+  | "CORRECTED"
+  | "APPROVED"
+  | "REVIEW_REQUESTED";
 
 type AuditLogEntry = {
   id: string;
@@ -73,7 +82,10 @@ const entityTypeConfig: Record<
   REFERENCE_URL: { label: "URL", icon: Globe, color: "#6366f1" },
   CONTRACT: { label: "Contract", icon: FileCheck, color: "#ec4899" },
   USER: { label: "User", icon: User, color: "#64748b" },
-  SETTING: { label: "Setting", icon: FileText, color: "#94a3b8" },
+  SETTING: { label: "Setting", icon: Settings, color: "#94a3b8" },
+  PROMPT: { label: "Prompt", icon: Code, color: "#f59e0b" },
+  CONTEXT_SNIPPET: { label: "Snippet", icon: Code, color: "#84cc16" },
+  ANSWER: { label: "Answer", icon: MessageSquare, color: "#14b8a6" },
 };
 
 const actionConfig: Record<AuditAction, { label: string; color: string }> = {
@@ -87,6 +99,9 @@ const actionConfig: Record<AuditAction, { label: string; color: string }> = {
   STATUS_CHANGED: { label: "Status Changed", color: "#0ea5e9" },
   REFRESHED: { label: "Refreshed", color: "#6366f1" },
   MERGED: { label: "Merged", color: "#ec4899" },
+  CORRECTED: { label: "Corrected", color: "#f59e0b" },
+  APPROVED: { label: "Approved", color: "#10b981" },
+  REVIEW_REQUESTED: { label: "Review Requested", color: "#8b5cf6" },
 };
 
 function formatDate(dateString: string): string {

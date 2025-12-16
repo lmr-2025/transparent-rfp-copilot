@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
@@ -8,6 +8,8 @@ import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 export const maxDuration = 120; // Allow longer for multiple docs
 
@@ -41,17 +43,11 @@ export async function POST(request: NextRequest) {
     const existingProfileId = formData.get("existingProfileId") as string | null;
 
     if (!files || files.length === 0) {
-      return NextResponse.json(
-        { error: "No files provided. Upload at least one document." },
-        { status: 400 }
-      );
+      return errors.badRequest("No files provided. Upload at least one document.");
     }
 
     if (files.length > 20) {
-      return NextResponse.json(
-        { error: "Maximum 20 files allowed per request." },
-        { status: 400 }
-      );
+      return errors.badRequest("Maximum 20 files allowed per request.");
     }
 
     // Extract text from all documents
@@ -63,7 +59,7 @@ export async function POST(request: NextRequest) {
       const fileType = filename.split(".").pop()?.toLowerCase() || "";
 
       if (!supportedTypes.includes(fileType)) {
-        console.warn(`Skipping unsupported file type: ${filename}`);
+        logger.warn("Skipping unsupported file type", { filename, fileType });
         continue;
       }
 
@@ -87,15 +83,12 @@ export async function POST(request: NextRequest) {
           documentTexts.push({ filename, text: extractedText });
         }
       } catch (extractError) {
-        console.warn(`Failed to extract text from ${filename}:`, extractError);
+        logger.warn("Failed to extract text from document", extractError, { filename });
       }
     }
 
     if (documentTexts.length === 0) {
-      return NextResponse.json(
-        { error: "Could not extract text from any of the uploaded files." },
-        { status: 400 }
-      );
+      return errors.badRequest("Could not extract text from any of the uploaded files.");
     }
 
     // Combine all document content with clear separators
@@ -137,7 +130,7 @@ export async function POST(request: NextRequest) {
         auth.session
       );
 
-      return NextResponse.json({
+      return apiSuccess({
         draft: result.draft,
         documentsProcessed: documentTexts.length,
         totalTextLength,
@@ -158,7 +151,7 @@ export async function POST(request: NextRequest) {
       auth.session
     );
 
-    return NextResponse.json({
+    return apiSuccess({
       draft: result.draft,
       documentsProcessed: documentTexts.length,
       totalTextLength,
@@ -166,12 +159,12 @@ export async function POST(request: NextRequest) {
       transparency: result.transparency,
     });
   } catch (error) {
-    console.error("Failed to build customer profile from documents:", error);
+    logger.error("Failed to build customer profile from documents", error, { route: "/api/customers/build-from-docs" });
     const message =
       error instanceof Error
         ? error.message
         : "Unable to process documents. Please try again.";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errors.internal(message);
   }
 }
 

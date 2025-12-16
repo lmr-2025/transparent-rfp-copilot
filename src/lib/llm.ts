@@ -212,6 +212,189 @@ export async function answerQuestionWithPrompt(
   }
 }
 
+// Batch answer type for processing multiple questions in one API call
+export type BatchAnswerItem = {
+  questionIndex: number;
+  response: string;
+  confidence: string;
+  sources: string;
+  reasoning: string;
+  inference: string;
+  remarks: string;
+};
+
+export type BatchAnswerResult = {
+  answers: BatchAnswerItem[];
+  usedFallback: boolean;
+  usage?: UsageInfo;
+};
+
+/**
+ * Answer multiple questions in a single API call.
+ * Much more efficient than calling answerQuestionWithPrompt multiple times
+ * as the system prompt and skills context are only sent once.
+ */
+export async function answerQuestionsBatch(
+  questions: { index: number; question: string }[],
+  promptText = defaultQuestionPrompt,
+  skills?: { title: string; content: string }[],
+  fallbackContent?: FallbackContent[],
+): Promise<BatchAnswerResult> {
+  if (!questions || questions.length === 0) {
+    throw new Error("At least one question is required.");
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("ANTHROPIC_API_KEY is not set. Please configure it in .env.local.");
+  }
+
+  const anthropic = new Anthropic({
+    apiKey: apiKey,
+  });
+
+  // Build skills context if provided
+  let skillsContext = "";
+  const hasSkills = skills && skills.length > 0;
+
+  if (hasSkills) {
+    const skillBlocks = skills.map((skill, index) => {
+      return [
+        `### Skill ${index + 1}: ${skill.title}`,
+        "",
+        skill.content,
+      ].join("\n");
+    });
+
+    skillsContext = [
+      "# AVAILABLE SKILLS (Reference Material)",
+      "",
+      "The following pre-verified skills are available for reference when answering these questions. Use these as your primary source of truth:",
+      "",
+      ...skillBlocks,
+      "",
+      "---",
+      "",
+    ].join("\n");
+  }
+
+  // Build fallback URL content if no skills matched and fallback content provided
+  let fallbackContext = "";
+  const usedFallback = !hasSkills && fallbackContent && fallbackContent.length > 0;
+
+  if (usedFallback) {
+    const fallbackBlocks = fallbackContent
+      .filter((fb) => fb.content.trim().length > 0)
+      .map((fb, index) => {
+        return [
+          `### Reference ${index + 1}: ${fb.title}`,
+          `Source: ${fb.url}`,
+          "",
+          fb.content,
+        ].join("\n");
+      });
+
+    if (fallbackBlocks.length > 0) {
+      fallbackContext = [
+        "# REFERENCE DOCUMENTS (Fallback Context)",
+        "",
+        "No pre-verified skills matched these questions. The following reference documents were fetched as fallback context:",
+        "",
+        ...fallbackBlocks,
+        "",
+        "---",
+        "",
+      ].join("\n");
+    }
+  }
+
+  // Build the questions list
+  const questionsText = questions
+    .map((q) => `${q.index}. ${q.question.trim()}`)
+    .join("\n");
+
+  // Build the batch instruction
+  const batchInstruction = [
+    "Answer each of the following questions. Return a JSON array where each element has these fields:",
+    "- questionIndex: the question number (integer)",
+    "- response: the complete answer",
+    "- confidence: \"High\", \"Medium\", or \"Low\"",
+    "- sources: which skills/documents were used (or \"None\" if answering from general knowledge)",
+    "- reasoning: what information was found directly in the sources",
+    "- inference: what was logically deduced or inferred (or \"None\" if everything was found directly)",
+    "- remarks: any important caveats, limitations, or notes (or \"None\" if none)",
+    "",
+    "IMPORTANT: Return ONLY a valid JSON array. No markdown code fences, no explanations outside the JSON.",
+    "",
+    "Questions:",
+    questionsText,
+  ].join("\n");
+
+  // Combine context with the batch instruction
+  const contextPrefix = skillsContext || fallbackContext;
+  const userMessage = contextPrefix ? `${contextPrefix}${batchInstruction}` : batchInstruction;
+
+  try {
+    const response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 16000,
+      temperature: 0.2,
+      system: promptText,
+      messages: [
+        {
+          role: "user",
+          content: userMessage,
+        },
+      ],
+    });
+
+    const content = response.content[0];
+    if (content.type !== "text" || !content.text?.trim()) {
+      throw new Error("The assistant returned an empty response.");
+    }
+
+    const responseText = content.text.trim();
+
+    // Parse the JSON array response
+    const parsed = parseJsonContent(responseText);
+    if (!Array.isArray(parsed)) {
+      throw new Error("Expected JSON array response from batch answer.");
+    }
+
+    // Normalize and validate each answer
+    const answers: BatchAnswerItem[] = parsed.map((item) => {
+      if (!item || typeof item !== "object") {
+        throw new Error("Invalid answer item in batch response.");
+      }
+      const obj = item as Record<string, unknown>;
+      return {
+        questionIndex: typeof obj.questionIndex === "number" ? obj.questionIndex : parseInt(String(obj.questionIndex), 10),
+        response: String(obj.response || ""),
+        confidence: String(obj.confidence || "Medium"),
+        sources: String(obj.sources || "None"),
+        reasoning: String(obj.reasoning || ""),
+        inference: String(obj.inference || "None"),
+        remarks: String(obj.remarks || "None"),
+      };
+    });
+
+    return {
+      answers,
+      usedFallback: usedFallback || false,
+      usage: {
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        model: CLAUDE_MODEL,
+      },
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate batch response: ${error.message}`);
+    }
+    throw new Error("Failed to generate batch response.");
+  }
+}
+
 function parseJsonContent(content: string): unknown {
   const trimmed = content.trim();
   const withoutFence = stripCodeFence(trimmed);

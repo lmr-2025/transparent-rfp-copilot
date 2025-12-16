@@ -1,7 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/apiAuth";
 import { createAuditLog, getUserFromSession } from "@/lib/auditLog";
+import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 type RouteContext = {
   params: Promise<{ key: string }>;
@@ -17,19 +19,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
 
     if (!prompt) {
-      return NextResponse.json(
-        { error: "System prompt not found" },
-        { status: 404 }
-      );
+      return errors.notFound("System prompt");
     }
 
-    return NextResponse.json(prompt);
+    return apiSuccess({ prompt });
   } catch (error) {
-    console.error("Failed to fetch system prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch system prompt" },
-      { status: 500 }
-    );
+    logger.error("Failed to fetch system prompt", error, { route: "/api/system-prompts/[key]" });
+    return errors.internal("Failed to fetch system prompt");
   }
 }
 
@@ -76,13 +72,10 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       },
     });
 
-    return NextResponse.json(prompt);
+    return apiSuccess({ prompt });
   } catch (error) {
-    console.error("Failed to update system prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to update system prompt" },
-      { status: 500 }
-    );
+    logger.error("Failed to update system prompt", error, { route: "/api/system-prompts/[key]" });
+    return errors.internal("Failed to update system prompt");
   }
 }
 
@@ -101,10 +94,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const prompt = await prisma.systemPrompt.findUnique({ where: { key } });
 
     if (!prompt) {
-      return NextResponse.json(
-        { error: "System prompt not found" },
-        { status: 404 }
-      );
+      return errors.notFound("System prompt");
     }
 
     await prisma.systemPrompt.delete({
@@ -120,12 +110,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       user: getUserFromSession(auth.session),
     });
 
-    return NextResponse.json({ success: true });
+    return apiSuccess({ success: true });
   } catch (error) {
-    console.error("Failed to delete system prompt:", error);
-    return NextResponse.json(
-      { error: "Failed to delete system prompt" },
-      { status: 500 }
-    );
+    logger.error("Failed to delete system prompt", error, { route: "/api/system-prompts/[key]" });
+    return errors.internal("Failed to delete system prompt");
   }
 }

@@ -3,7 +3,7 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, Filter, CheckSquare, Trash2 } from "lucide-react";
+import { Plus, Search, Loader2, Filter, CheckSquare, Trash2, FileText, Globe } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,17 +13,16 @@ import {
   useAllSkills,
   useAllDocuments,
   useAllReferenceUrls,
-  useAllSnippets,
   useAllCategories,
   useDeleteSkill,
   useDeleteDocument,
   useDeleteUrl,
-  useDeleteSnippet,
   useUpdateSkill,
+  useRefreshSkill,
+  useApplyRefreshChanges,
   skillToUnifiedItem,
   documentToUnifiedItem,
   urlToUnifiedItem,
-  snippetToUnifiedItem,
   UnifiedLibraryItem,
   SkillOwner,
 } from "@/hooks/use-knowledge-data";
@@ -36,6 +35,10 @@ import {
 } from "@/components/ui/select";
 import { LibraryTabs, TabType } from "./components/library-tabs";
 import { KnowledgeItemCard } from "./components/knowledge-item-card";
+import { cn } from "@/lib/utils";
+
+// Source type filter for Sources tab
+type SourceTypeFilter = "all" | "document" | "url";
 
 function KnowledgeLibraryContent() {
   const searchParams = useSearchParams();
@@ -45,6 +48,7 @@ function KnowledgeLibraryContent() {
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || "skills");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -54,15 +58,15 @@ function KnowledgeLibraryContent() {
   const { data: skills = [], isLoading: skillsLoading } = useAllSkills();
   const { data: documents = [], isLoading: documentsLoading } = useAllDocuments();
   const { data: urls = [], isLoading: urlsLoading } = useAllReferenceUrls();
-  const { data: snippets = [], isLoading: snippetsLoading } = useAllSnippets();
   const { data: categories = [] } = useAllCategories();
 
   // Mutations
   const deleteSkillMutation = useDeleteSkill();
   const deleteDocumentMutation = useDeleteDocument();
   const deleteUrlMutation = useDeleteUrl();
-  const deleteSnippetMutation = useDeleteSnippet();
   const updateSkillMutation = useUpdateSkill();
+  const refreshSkillMutation = useRefreshSkill();
+  const applyRefreshMutation = useApplyRefreshChanges();
 
   // Confirm dialog
   const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
@@ -72,7 +76,57 @@ function KnowledgeLibraryContent() {
     variant: "danger",
   });
 
-  const isLoading = skillsLoading || documentsLoading || urlsLoading || snippetsLoading;
+  const isLoading = skillsLoading || documentsLoading || urlsLoading;
+
+  // Create a map of skillId -> skill title for sources display
+  const skillIdToTitle = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const skill of skills) {
+      map.set(skill.id, skill.title);
+    }
+    return map;
+  }, [skills]);
+
+  // Extract URLs from skills' sourceUrls field for the Sources tab
+  const skillSourceUrls = useMemo((): UnifiedLibraryItem[] => {
+    const items: UnifiedLibraryItem[] = [];
+    const seenUrls = new Set<string>();
+
+    for (const skill of skills) {
+      if (skill.sourceUrls && Array.isArray(skill.sourceUrls)) {
+        for (const source of skill.sourceUrls) {
+          // Dedupe by URL
+          if (seenUrls.has(source.url)) continue;
+          seenUrls.add(source.url);
+
+          // Use stored title or extract a readable one from the URL path
+          let title = source.title;
+          if (!title) {
+            const urlObj = new URL(source.url);
+            const pathParts = urlObj.pathname.split("/").filter(Boolean);
+            const lastPart = pathParts[pathParts.length - 1] || urlObj.hostname;
+            // Clean up: remove file extensions, replace dashes/underscores with spaces, title case
+            title = lastPart
+              .replace(/\.(md|html|htm|pdf|txt)$/i, "")
+              .replace(/[-_]/g, " ")
+              .replace(/\b\w/g, c => c.toUpperCase());
+          }
+
+          items.push({
+            id: `skill-url-${skill.id}-${source.url}`,
+            type: "url",
+            title,
+            subtitle: source.url,
+            categories: skill.categories || [],
+            createdAt: source.addedAt,
+            updatedAt: source.lastFetchedAt || source.addedAt,
+            linkedSkillId: skill.id,
+          });
+        }
+      }
+    }
+    return items;
+  }, [skills]);
 
   // Transform to unified items
   const allItems = useMemo((): UnifiedLibraryItem[] => {
@@ -80,16 +134,23 @@ function KnowledgeLibraryContent() {
 
     if (activeTab === "skills") {
       items.push(...skills.map(skillToUnifiedItem));
-    } else if (activeTab === "documents") {
-      items.push(...documents.map(documentToUnifiedItem));
-    } else if (activeTab === "urls") {
-      items.push(...urls.map(urlToUnifiedItem));
-    } else if (activeTab === "snippets") {
-      items.push(...snippets.map(snippetToUnifiedItem));
+    } else if (activeTab === "sources") {
+      // Sources tab combines documents and URLs from skills
+      if (sourceTypeFilter === "all" || sourceTypeFilter === "document") {
+        items.push(...documents.map(documentToUnifiedItem));
+      }
+      if (sourceTypeFilter === "all" || sourceTypeFilter === "url") {
+        // Use URLs extracted from skills' sourceUrls
+        items.push(...skillSourceUrls);
+        // Also include standalone ReferenceUrl records (not linked to skills)
+        const skillUrlSet = new Set(skillSourceUrls.map(u => u.subtitle));
+        const standaloneUrls = urls.filter(u => !skillUrlSet.has(u.url));
+        items.push(...standaloneUrls.map(urlToUnifiedItem));
+      }
     }
 
     return items;
-  }, [activeTab, skills, documents, urls, snippets]);
+  }, [activeTab, skills, documents, urls, sourceTypeFilter, skillSourceUrls]);
 
   // Filter items by search and category
   const filteredItems = useMemo(() => {
@@ -174,9 +235,6 @@ function KnowledgeLibraryContent() {
           case "url":
             await deleteUrlMutation.mutateAsync(id);
             break;
-          case "snippet":
-            await deleteSnippetMutation.mutateAsync(id);
-            break;
         }
         successCount++;
       } catch {
@@ -205,6 +263,79 @@ function KnowledgeLibraryContent() {
     }
   };
 
+  // Handle update categories (skills only)
+  const handleUpdateCategories = async (id: string, categories: string[]) => {
+    try {
+      await updateSkillMutation.mutateAsync({ id, updates: { categories } });
+      toast.success("Categories updated");
+    } catch (err) {
+      toast.error("Failed to update categories");
+      throw err;
+    }
+  };
+
+  // Handle refresh skill from source URLs
+  const handleRefreshSkill = async (id: string) => {
+    try {
+      const result = await refreshSkillMutation.mutateAsync(id);
+      if (!result.hasChanges) {
+        toast.success("Skill is already up to date");
+      }
+      return result;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to refresh skill");
+      throw err;
+    }
+  };
+
+  // Apply refresh changes after user review
+  const handleApplyRefresh = async (
+    id: string,
+    title: string,
+    content: string,
+    changeHighlights?: string[]
+  ) => {
+    try {
+      await applyRefreshMutation.mutateAsync({ id, title, content, changeHighlights });
+      toast.success("Skill updated with new content");
+    } catch (err) {
+      toast.error("Failed to apply changes");
+      throw err;
+    }
+  };
+
+  // Update source URL title (for URLs derived from skills)
+  const handleUpdateSourceUrlTitle = async (itemId: string, newTitle: string) => {
+    // itemId format: skill-url-{skillId}-{url}
+    const match = itemId.match(/^skill-url-([^-]+(?:-[^-]+)*?)-(.+)$/);
+    if (!match) return;
+
+    // Parse the ID to extract skillId and url
+    const parts = itemId.replace("skill-url-", "").split("-");
+    // URL is everything after the skill ID (which is a UUID with dashes)
+    // Skill ID is 36 chars (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+    const skillId = itemId.substring("skill-url-".length, "skill-url-".length + 36);
+    const url = itemId.substring("skill-url-".length + 36 + 1); // +1 for the dash
+
+    const skill = skills.find(s => s.id === skillId);
+    if (!skill) return;
+
+    // Update the sourceUrls array with the new title
+    const updatedSourceUrls = skill.sourceUrls.map(su =>
+      su.url === url ? { ...su, title: newTitle } : su
+    );
+
+    try {
+      await updateSkillMutation.mutateAsync({
+        id: skillId,
+        updates: { sourceUrls: updatedSourceUrls },
+      });
+      toast.success("URL title updated");
+    } catch {
+      toast.error("Failed to update title");
+    }
+  };
+
   // Handle delete
   const handleDelete = async (item: UnifiedLibraryItem) => {
     const confirmed = await confirmDelete({
@@ -225,9 +356,6 @@ function KnowledgeLibraryContent() {
         case "url":
           await deleteUrlMutation.mutateAsync(item.id);
           break;
-        case "snippet":
-          await deleteSnippetMutation.mutateAsync(item.id);
-          break;
       }
       toast.success(`${item.type} deleted`);
     } catch {
@@ -237,19 +365,15 @@ function KnowledgeLibraryContent() {
     }
   };
 
+  // Count sources: documents + skill source URLs + standalone reference URLs
+  const standaloneUrlCount = urls.filter(u => !skillSourceUrls.some(su => su.subtitle === u.url)).length;
   const counts = {
     skills: skills.length,
-    documents: documents.length,
-    urls: urls.length,
-    snippets: snippets.length,
+    sources: documents.length + skillSourceUrls.length + standaloneUrlCount,
   };
 
-  const addLinks: Record<TabType, { href: string; label: string }> = {
-    skills: { href: "/knowledge/add", label: "Add Skill" },
-    documents: { href: "/knowledge/documents", label: "Upload Document" },
-    urls: { href: "/knowledge/urls/add", label: "Add URL" },
-    snippets: { href: "/knowledge/snippets", label: "Add Snippet" },
-  };
+  // Single unified "Add Knowledge" flow for both tabs
+  const addLink = { href: "/knowledge/add", label: "Add Knowledge" };
 
   return (
     <div className="max-w-5xl mx-auto p-6">
@@ -260,7 +384,7 @@ function KnowledgeLibraryContent() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Knowledge Library</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your skills, documents, URLs, and snippets that power AI responses.
+            Manage the skills and source materials that power AI responses.
           </p>
         </div>
         <div className="flex gap-2">
@@ -275,9 +399,9 @@ function KnowledgeLibraryContent() {
                 Select
               </Button>
               <Button asChild>
-                <Link href={addLinks[activeTab].href} className="gap-2">
+                <Link href={addLink.href} className="gap-2">
                   <Plus className="h-4 w-4" />
-                  {addLinks[activeTab].label}
+                  {addLink.label}
                 </Link>
               </Button>
             </>
@@ -322,20 +446,47 @@ function KnowledgeLibraryContent() {
             className="pl-10"
           />
         </div>
-        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-          <SelectTrigger className="w-[180px]">
-            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-            <SelectValue placeholder="All Categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
-            {categories.map((category) => (
-              <SelectItem key={category.id} value={category.name}>
-                {category.name}
-              </SelectItem>
+        {/* Source type filter - only show on Sources tab */}
+        {activeTab === "sources" && (
+          <div className="flex border rounded-md overflow-hidden">
+            {[
+              { value: "all", label: "All", icon: null },
+              { value: "document", label: "Docs", icon: <FileText className="h-3.5 w-3.5" /> },
+              { value: "url", label: "URLs", icon: <Globe className="h-3.5 w-3.5" /> },
+            ].map((item) => (
+              <button
+                key={item.value}
+                onClick={() => setSourceTypeFilter(item.value as SourceTypeFilter)}
+                className={cn(
+                  "px-3 py-2 text-sm font-medium flex items-center gap-1.5 transition-colors",
+                  sourceTypeFilter === item.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-background hover:bg-muted text-muted-foreground"
+                )}
+              >
+                {item.icon}
+                {item.label}
+              </button>
             ))}
-          </SelectContent>
-        </Select>
+          </div>
+        )}
+        {/* Category filter - only show on Skills tab */}
+        {activeTab === "skills" && (
+          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+            <SelectTrigger className="w-[180px]">
+              <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="All Categories" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={category.name}>
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Content */}
@@ -372,9 +523,9 @@ function KnowledgeLibraryContent() {
                   No {activeTab} yet. Add your first one to get started.
                 </p>
                 <Button asChild>
-                  <Link href={addLinks[activeTab].href}>
+                  <Link href={addLink.href}>
                     <Plus className="h-4 w-4 mr-2" />
-                    {addLinks[activeTab].label}
+                    {addLink.label}
                   </Link>
                 </Button>
               </>
@@ -390,9 +541,15 @@ function KnowledgeLibraryContent() {
               onDelete={selectionMode ? undefined : () => handleDelete(item)}
               isDeleting={deletingId === item.id}
               onUpdateOwners={item.type === "skill" && !selectionMode ? handleUpdateOwners : undefined}
+              onUpdateCategories={item.type === "skill" && !selectionMode ? handleUpdateCategories : undefined}
+              onRefresh={item.type === "skill" && !selectionMode ? handleRefreshSkill : undefined}
+              onApplyRefresh={item.type === "skill" && !selectionMode ? handleApplyRefresh : undefined}
+              onUpdateTitle={item.type === "url" && item.linkedSkillId && !selectionMode ? handleUpdateSourceUrlTitle : undefined}
+              isRefreshing={refreshSkillMutation.isPending}
               selectionMode={selectionMode}
               isSelected={selectedIds.has(item.id)}
               onToggleSelection={() => toggleSelection(item.id)}
+              linkedSkillName={item.linkedSkillId ? skillIdToTitle.get(item.linkedSkillId) : undefined}
             />
           ))}
         </div>
