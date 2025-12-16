@@ -1040,7 +1040,7 @@ export default function BulkResponsesPage() {
           </p>
         </div>
       ) : (
-        <div style={{ ...styles.card, maxHeight: "600px", overflowY: "auto" }}>
+        <div style={styles.card}>
           {filteredRows.map((row) => (
             <RowCard
               key={row.id}
