@@ -473,7 +473,7 @@ export default function RowCard({
               .filter((s): s is Skill => typeof s === "object" && s !== null && "id" in s && "title" in s)
               .map(s => ({ id: s.id, title: s.title, type: "skill" as const }))
             }
-            renderClarifyButton={!row.conversationOpen && !locked ? () => (
+            renderClarifyButton={!row.conversationOpen ? () => (
               <button
                 type="button"
                 onClick={() => onUpdateRow(row.id, { conversationOpen: true })}
