@@ -1,13 +1,15 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { FileText, Link as LinkIcon, Loader2, Upload, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine } from "lucide-react";
 import { toast } from "sonner";
 import { getApiErrorMessage } from "@/lib/utils";
+import { createSkillViaApi } from "@/lib/skillStorage";
 import { type DocumentSource } from "@/stores/bulk-import-store";
 import { styles } from "./styles";
 
-type InputMode = "urls" | "documents";
+type InputMode = "urls" | "documents" | "manual";
 
 type SourceInputStepProps = {
   urlInput: string;
@@ -28,10 +30,17 @@ export default function SourceInputStep({
   onStartAnalysis,
   parsedUrls,
 }: SourceInputStepProps) {
+  const router = useRouter();
   const [inputMode, setInputMode] = useState<InputMode>("urls");
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Manual skill creation state
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualContent, setManualContent] = useState("");
+  const [isSavingManual, setIsSavingManual] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -77,7 +86,47 @@ export default function SourceInputStep({
     }
   };
 
+  const handleSaveManualSkill = async () => {
+    if (!manualTitle.trim() || !manualContent.trim()) {
+      setManualError("Title and content are required");
+      return;
+    }
+
+    setIsSavingManual(true);
+    setManualError(null);
+
+    try {
+      const now = new Date().toISOString();
+      const skillData = {
+        title: manualTitle.trim(),
+        content: manualContent.trim(),
+        quickFacts: [] as { question: string; answer: string }[],
+        edgeCases: [] as string[],
+        sourceUrls: [],
+        isActive: true,
+        history: [
+          {
+            date: now,
+            action: "created" as const,
+            summary: "Created manually",
+          },
+        ],
+      };
+
+      await createSkillViaApi(skillData);
+      toast.success(`Skill "${manualTitle.trim()}" created successfully`);
+
+      // Navigate to knowledge library
+      router.push("/knowledge");
+    } catch (error) {
+      setManualError(error instanceof Error ? error.message : "Failed to create skill");
+    } finally {
+      setIsSavingManual(false);
+    }
+  };
+
   const canAnalyze = parsedUrls.length > 0 || uploadedDocuments.length > 0;
+  const canSaveManual = manualTitle.trim().length > 0 && manualContent.trim().length > 0;
 
   return (
     <div style={styles.card}>
@@ -128,6 +177,24 @@ export default function SourceInputStep({
               fontWeight: 600,
             }}>{uploadedDocuments.length}</span>
           )}
+        </button>
+        <button
+          onClick={() => setInputMode("manual")}
+          style={{
+            padding: "12px 20px",
+            backgroundColor: "transparent",
+            border: "none",
+            borderBottom: inputMode === "manual" ? "2px solid #2563eb" : "2px solid transparent",
+            color: inputMode === "manual" ? "#2563eb" : "#64748b",
+            fontWeight: inputMode === "manual" ? 600 : 400,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <PenLine size={16} />
+          Manual
         </button>
       </div>
 
@@ -252,37 +319,119 @@ export default function SourceInputStep({
         </>
       )}
 
-      {/* Summary & Analyze Button */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        marginTop: "16px",
-        paddingTop: "16px",
-        borderTop: "1px solid #e2e8f0",
-      }}>
-        <div style={{ color: "#64748b", fontSize: "13px" }}>
-          {parsedUrls.length > 0 && `${parsedUrls.length} URL${parsedUrls.length !== 1 ? "s" : ""}`}
-          {parsedUrls.length > 0 && uploadedDocuments.length > 0 && " + "}
-          {uploadedDocuments.length > 0 && `${uploadedDocuments.length} document${uploadedDocuments.length !== 1 ? "s" : ""}`}
-          {parsedUrls.length === 0 && uploadedDocuments.length === 0 && "Add URLs or documents to analyze"}
+      {/* Manual Skill Input */}
+      {inputMode === "manual" && (
+        <>
+          <p style={{ color: "#64748b", fontSize: "14px", marginBottom: "16px" }}>
+            Create a skill directly by entering a title and content. Use this for quick notes, internal policies, or knowledge that doesn&apos;t come from a URL or document.
+          </p>
+
+          {manualError && (
+            <div style={{ ...styles.error, marginBottom: "16px" }}>{manualError}</div>
+          )}
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#475569", marginBottom: "6px" }}>
+              Skill Title
+            </label>
+            <input
+              type="text"
+              value={manualTitle}
+              onChange={(e) => setManualTitle(e.target.value)}
+              placeholder="e.g., SOC 2 Attestation vs Certification"
+              style={{
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "6px",
+                fontSize: "14px",
+              }}
+            />
+          </div>
+
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "block", fontSize: "13px", fontWeight: 500, color: "#475569", marginBottom: "6px" }}>
+              Content
+            </label>
+            <textarea
+              value={manualContent}
+              onChange={(e) => setManualContent(e.target.value)}
+              placeholder="Enter the knowledge content here. This can include facts, policies, clarifications, or any information you want the AI to reference when answering questions."
+              style={{
+                width: "100%",
+                minHeight: "200px",
+                padding: "12px",
+                border: "1px solid #cbd5e1",
+                borderRadius: "6px",
+                fontSize: "14px",
+                resize: "vertical",
+                lineHeight: "1.5",
+              }}
+            />
+          </div>
+
+          <div style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            paddingTop: "16px",
+            borderTop: "1px solid #e2e8f0",
+          }}>
+            <button
+              onClick={handleSaveManualSkill}
+              disabled={!canSaveManual || isSavingManual}
+              style={{
+                padding: "10px 20px",
+                backgroundColor: canSaveManual && !isSavingManual ? "#2563eb" : "#cbd5e1",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                fontWeight: 600,
+                cursor: canSaveManual && !isSavingManual ? "pointer" : "not-allowed",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
+              {isSavingManual && <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />}
+              {isSavingManual ? "Saving..." : "Create Skill"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Summary & Analyze Button (only for URLs and Documents modes) */}
+      {inputMode !== "manual" && (
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginTop: "16px",
+          paddingTop: "16px",
+          borderTop: "1px solid #e2e8f0",
+        }}>
+          <div style={{ color: "#64748b", fontSize: "13px" }}>
+            {parsedUrls.length > 0 && `${parsedUrls.length} URL${parsedUrls.length !== 1 ? "s" : ""}`}
+            {parsedUrls.length > 0 && uploadedDocuments.length > 0 && " + "}
+            {uploadedDocuments.length > 0 && `${uploadedDocuments.length} document${uploadedDocuments.length !== 1 ? "s" : ""}`}
+            {parsedUrls.length === 0 && uploadedDocuments.length === 0 && "Add URLs or documents to analyze"}
+          </div>
+          <button
+            onClick={onStartAnalysis}
+            disabled={!canAnalyze}
+            style={{
+              padding: "10px 20px",
+              backgroundColor: canAnalyze ? "#2563eb" : "#cbd5e1",
+              color: "#fff",
+              border: "none",
+              borderRadius: "6px",
+              fontWeight: 600,
+              cursor: canAnalyze ? "pointer" : "not-allowed",
+            }}
+          >
+            Analyze Sources →
+          </button>
         </div>
-        <button
-          onClick={onStartAnalysis}
-          disabled={!canAnalyze}
-          style={{
-            padding: "10px 20px",
-            backgroundColor: canAnalyze ? "#2563eb" : "#cbd5e1",
-            color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            fontWeight: 600,
-            cursor: canAnalyze ? "pointer" : "not-allowed",
-          }}
-        >
-          Analyze Sources →
-        </button>
-      </div>
+      )}
     </div>
   );
 }
