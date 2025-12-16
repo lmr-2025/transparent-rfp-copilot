@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
@@ -23,6 +23,7 @@ import DomainSelector, { Domain } from "@/components/DomainSelector";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { CustomerProfile } from "@/types/customerProfile";
 import { features } from "@/lib/featureFlags";
+import UserSelector, { SelectableUser } from "@/components/UserSelector";
 
 import {
   RowCard,
@@ -35,7 +36,7 @@ import {
 
 const styles = {
   container: {
-    maxWidth: "1100px",
+    maxWidth: "1400px",
     margin: "0 auto",
     padding: "24px",
     fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
@@ -92,6 +93,8 @@ export default function BulkResponsesPage() {
   const [allCustomerProfiles, setAllCustomerProfiles] = useState<CustomerProfile[]>([]);
   const [showCustomerSelector, setShowCustomerSelector] = useState(false);
   const [savingCustomers, setSavingCustomers] = useState(false);
+  const [showOwnerSelector, setShowOwnerSelector] = useState(false);
+  const [savingOwner, setSavingOwner] = useState(false);
 
   const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
     title: "Delete Project",
@@ -105,6 +108,26 @@ export default function BulkResponsesPage() {
   const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
   const [sendingReviewRowId, setSendingReviewRowId] = useState<string | null>(null);
   const [isSendingQueued, setIsSendingQueued] = useState(false);
+
+  // Track processing state for beforeunload warning
+  const isProcessingRef = useRef(false);
+
+  useEffect(() => {
+    isProcessingRef.current = isGeneratingAll;
+  }, [isGeneratingAll]);
+
+  // Warn user if they try to leave while generating
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isProcessingRef.current) {
+        e.preventDefault();
+        e.returnValue = "Generation is in progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   // Compute queued items from project rows
   const queuedItems = useMemo(() => {
@@ -367,7 +390,9 @@ export default function BulkResponsesPage() {
             }),
           });
 
-          data = await response.json().catch(() => null);
+          const json = await response.json().catch(() => null);
+          // Handle wrapped API response: { data: { answers, usedFallback } }
+          data = json?.data ?? json;
 
           if (response.status === 429 || (data?.error && data.error.includes("rate_limit"))) {
             retries++;
@@ -834,6 +859,34 @@ export default function BulkResponsesPage() {
     }
   };
 
+  const handleSaveOwner = async (user: SelectableUser) => {
+    if (!project) return;
+
+    setSavingOwner(true);
+    try {
+      const response = await fetch(`/api/projects/${project.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ownerId: user.id,
+          ownerName: user.name || user.email || "Unknown",
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update owner");
+
+      const json = await response.json();
+      const data = json.data ?? json;
+      setProject(data.project);
+      setShowOwnerSelector(false);
+      toast.success(`Owner changed to ${user.name || user.email}`);
+    } catch {
+      toast.error("Failed to update owner. Please try again.");
+    } finally {
+      setSavingOwner(false);
+    }
+  };
+
   if (!project) {
     return (
       <div style={styles.container}>
@@ -872,6 +925,7 @@ export default function BulkResponsesPage() {
         onSendAllQueued={handleSendAllQueued}
         onDeleteProject={clearProject}
         onEditCustomers={() => setShowCustomerSelector(true)}
+        onEditOwner={() => setShowOwnerSelector(true)}
       />
 
       <FilterBar
@@ -1046,6 +1100,47 @@ export default function BulkResponsesPage() {
               onSave={handleSaveCustomerProfiles}
               onCancel={() => setShowCustomerSelector(false)}
               saving={savingCustomers}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Owner Selector Modal */}
+      {showOwnerSelector && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 1000,
+          }}
+          onClick={() => setShowOwnerSelector(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: "12px",
+              padding: "24px",
+              maxWidth: "400px",
+              width: "90%",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: "0 0 8px 0" }}>Change Project Owner</h3>
+            <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 16px 0" }}>
+              The owner can edit this project and receives review notifications.
+            </p>
+            <UserSelector
+              onSelect={handleSaveOwner}
+              onCancel={() => setShowOwnerSelector(false)}
+              disabled={savingOwner}
+              placeholder="Search for a user..."
             />
           </div>
         </div>

@@ -45,7 +45,7 @@ export async function fetchMultipleUrls(
       const content = await fetchUrlContent(refUrl.url);
       return {
         url: refUrl.url,
-        title: refUrl.title,
+        title: refUrl.title || refUrl.url, // Fallback to URL if no title
         content,
       };
     })
@@ -60,7 +60,7 @@ export async function fetchMultipleUrls(
       console.warn(`Failed to fetch ${urls[index].url}:`, result.reason);
       fetched.push({
         url: urls[index].url,
-        title: urls[index].title,
+        title: urls[index].title || urls[index].url, // Fallback to URL if no title
         content: "",
         error: result.reason?.message || "Failed to fetch",
       });

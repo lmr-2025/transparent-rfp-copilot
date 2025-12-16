@@ -69,6 +69,7 @@ export type BulkProject = {
   lastModifiedAt: string;
   ownerId?: string;
   ownerName?: string;
+  owner?: { id: string; name: string | null; email: string | null };
   customerName?: string;
   status: "draft" | "in_progress" | "needs_review" | "approved";
   notes?: string;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useSession } from "next-auth/react";
 import { useBranding } from "@/lib/branding";
+import { features } from "@/lib/featureFlags";
 
 type CardProps = {
   href: string;
@@ -161,7 +162,7 @@ export default function HomePage() {
         }}>
           Features
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
           <Card
             href="/projects"
             title="RFP Projects"
@@ -169,20 +170,33 @@ export default function HomePage() {
             accentColor="#0ea5e9"
             bgColor="#f0f9ff"
           />
-          <Card
-            href="/chat"
-            title="Chat"
-            description="Conversational interface to explore your knowledge base. Select specific skills and customer profiles."
-            accentColor="#22c55e"
-            bgColor="#f0fdf4"
-          />
-          <Card
-            href="/contracts"
-            title="Contracts"
-            description="Upload and analyze contracts. Extract key terms, identify risks, and review obligations."
-            accentColor="#ec4899"
-            bgColor="#fdf2f8"
-          />
+          {features.customerProfiles && (
+            <Card
+              href="/customers"
+              title="The Rolodex"
+              description="Build and manage customer intelligence from websites, documents, and Salesforce. AI-powered profile generation."
+              accentColor="#f97316"
+              bgColor="#fff7ed"
+            />
+          )}
+          {features.chat && (
+            <Card
+              href="/chat"
+              title="Chat"
+              description="Conversational interface to explore your knowledge base. Select specific skills and customer profiles."
+              accentColor="#22c55e"
+              bgColor="#f0fdf4"
+            />
+          )}
+          {features.contracts && (
+            <Card
+              href="/contracts"
+              title="Contracts"
+              description="Upload and analyze contracts. Extract key terms, identify risks, and review obligations."
+              accentColor="#ec4899"
+              bgColor="#fdf2f8"
+            />
+          )}
         </div>
       </div>
 

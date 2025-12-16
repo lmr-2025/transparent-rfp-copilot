@@ -347,13 +347,13 @@ export function urlToUnifiedItem(url: ReferenceUrl): UnifiedLibraryItem {
   return {
     id: url.id,
     type: "url",
-    title: url.title,
+    title: url.title || url.url, // Fallback to URL if no title
     subtitle: url.url,
     content: url.description || undefined,
     categories: url.categories,
     createdAt: url.addedAt,
     updatedAt: url.lastUsedAt || url.addedAt,
-    linkedSkillId: url.skillId,
+    linkedSkillId: url.skillId || undefined,
   };
 }
 

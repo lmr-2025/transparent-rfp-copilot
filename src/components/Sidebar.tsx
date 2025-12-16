@@ -44,6 +44,14 @@ const navItems: NavSection[] = [
     ],
   },
   {
+    section: "The Rolodex",
+    featureFlag: "customerProfiles",
+    items: [
+      { href: "/customers", label: "Customer Profiles" },
+      { href: "/customers/add", label: "Build Profile" },
+    ],
+  },
+  {
     section: "Oracle",
     featureFlag: "chat",
     items: [

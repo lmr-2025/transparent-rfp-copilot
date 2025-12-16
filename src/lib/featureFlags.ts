@@ -36,8 +36,8 @@ export const features = {
   // Audit log - production ready
   auditLog: envBool("NEXT_PUBLIC_FEATURE_AUDIT_LOG_ENABLED", true),
 
-  // Customer profiles - POC, links customer data to projects
-  customerProfiles: envBool("NEXT_PUBLIC_FEATURE_CUSTOMER_PROFILES_ENABLED", false),
+  // Customer profiles - links customer data to projects
+  customerProfiles: envBool("NEXT_PUBLIC_FEATURE_CUSTOMER_PROFILES_ENABLED", true),
 } as const;
 
 /**

@@ -87,7 +87,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const body = await request.json();
 
     const {
-      name, sheetName, columns, rows, ownerName, customerName, notes, status,
+      name, sheetName, columns, rows, ownerId, ownerName, customerName, notes, status,
       reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy,
       customerProfileIds
     } = body;
@@ -137,6 +137,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       if (name) updateData.name = name;
       if (sheetName) updateData.sheetName = sheetName;
       if (columns) updateData.columns = columns;
+      if (ownerId !== undefined) updateData.ownerId = ownerId || null;
       if (ownerName !== undefined) updateData.ownerName = ownerName;
       if (customerName !== undefined) updateData.customerName = customerName;
       if (notes !== undefined) updateData.notes = notes;
@@ -241,7 +242,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const changes = computeChanges(
       result.existing as unknown as Record<string, unknown>,
       result.project as unknown as Record<string, unknown>,
-      ["name", "customerName", "status", "notes"]
+      ["name", "customerName", "status", "notes", "ownerId", "ownerName"]
     );
 
     // Determine action type

@@ -141,7 +141,9 @@ export function useSendMessage() {
         throw new Error(getApiErrorMessage(errorData, "Failed to get response"));
       }
 
-      return res.json();
+      const json = await res.json();
+      // API returns { data: { response, skillsUsed, ... } } format
+      return json.data ?? json;
     },
   });
 }
@@ -180,7 +182,9 @@ export function useSaveSession() {
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error("Failed to create session");
-        return res.json();
+        const json = await res.json();
+        // API returns { data: { id, ... } } format
+        return json.data ?? json;
       }
     },
     onSuccess: () => {

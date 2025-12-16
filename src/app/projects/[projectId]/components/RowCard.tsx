@@ -84,6 +84,12 @@ export default function RowCard({
 }: RowCardProps) {
   const [showResolveForm, setShowResolveForm] = useState(false);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+
+  // Lock by default when response exists and has been reviewed/approved
+  const hasResponse = Boolean(row.response);
+  const isReviewed = row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED";
+  const locked = hasResponse && !isEditing;
 
   const handleResolve = () => {
     onResolveFlag(row.id, resolutionNote || undefined);
@@ -164,7 +170,30 @@ export default function RowCard({
             </span>
           )}
         </div>
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Edit/Save toggle - only show when there's a response */}
+          {hasResponse && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(!isEditing)}
+              style={{
+                ...styles.button,
+                padding: "4px 10px",
+                fontSize: "0.8rem",
+                backgroundColor: isEditing ? "#22c55e" : "#f1f5f9",
+                color: isEditing ? "#fff" : "#64748b",
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              {isEditing ? (
+                <>✓ Done</>
+              ) : (
+                <>✏️ Edit</>
+              )}
+            </button>
+          )}
           {/* Flag / Need Help buttons - only show if no active flag and not resolved */}
           {row.response && (!row.reviewStatus || row.reviewStatus === "NONE") && !row.flaggedForReview && (
             <>
@@ -383,7 +412,15 @@ export default function RowCard({
       <textarea
         value={row.question}
         onChange={(event) => onQuestionEdit(row.id, event.target.value)}
-        style={{ ...styles.input, minHeight: "60px", resize: "vertical", fontSize: "0.9rem" }}
+        disabled={locked}
+        style={{
+          ...styles.input,
+          minHeight: "60px",
+          resize: "vertical",
+          fontSize: "0.9rem",
+          backgroundColor: locked ? "#f8fafc" : "#fff",
+          cursor: locked ? "not-allowed" : "text",
+        }}
       />
 
       {/* Response Section */}
@@ -409,12 +446,14 @@ export default function RowCard({
           <textarea
             value={row.response}
             onChange={(event) => onUpdateRow(row.id, { response: event.target.value })}
+            disabled={locked}
             style={{
               ...styles.input,
-              minHeight: "100px",
+              minHeight: "180px",
               fontSize: "0.9rem",
               resize: "vertical",
-              backgroundColor: "#fff",
+              backgroundColor: locked ? "#f8fafc" : "#fff",
+              cursor: locked ? "not-allowed" : "text",
               marginTop: "6px"
             }}
           />
@@ -434,7 +473,7 @@ export default function RowCard({
               .filter((s): s is Skill => typeof s === "object" && s !== null && "id" in s && "title" in s)
               .map(s => ({ id: s.id, title: s.title, type: "skill" as const }))
             }
-            renderClarifyButton={!row.conversationOpen ? () => (
+            renderClarifyButton={!row.conversationOpen && !locked ? () => (
               <button
                 type="button"
                 onClick={() => onUpdateRow(row.id, { conversationOpen: true })}

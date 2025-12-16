@@ -78,6 +78,7 @@ type ProjectHeaderProps = {
   onSendAllQueued: () => void;
   onDeleteProject: () => void;
   onEditCustomers: () => void;
+  onEditOwner: () => void;
 };
 
 export default function ProjectHeader({
@@ -92,6 +93,7 @@ export default function ProjectHeader({
   onSendAllQueued,
   onDeleteProject,
   onEditCustomers,
+  onEditOwner,
 }: ProjectHeaderProps) {
   const router = useRouter();
 
@@ -108,6 +110,26 @@ export default function ProjectHeader({
         <strong>Worksheet:</strong> {project.sheetName}
         <br />
         <strong>Created:</strong> {new Date(project.createdAt).toLocaleString()}
+        <br />
+        <strong>Owner:</strong>{" "}
+        {project.owner?.name || project.ownerName || (
+          <span style={{ color: "#94a3b8" }}>Not assigned</span>
+        )}
+        <button
+          type="button"
+          onClick={onEditOwner}
+          style={{
+            marginLeft: "8px",
+            padding: "2px 8px",
+            fontSize: "0.8rem",
+            backgroundColor: "#f1f5f9",
+            border: "1px solid #e2e8f0",
+            borderRadius: "4px",
+            cursor: "pointer",
+          }}
+        >
+          Change
+        </button>
         {project.reviewRequestedBy && (
           <>
             <br />

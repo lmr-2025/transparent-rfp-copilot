@@ -46,17 +46,15 @@ const styles = {
     fontWeight: 600,
   },
   messagesContainer: {
-    maxHeight: '400px',
-    overflowY: 'auto' as const,
     padding: '16px',
     display: 'flex',
     flexDirection: 'column' as const,
     gap: '12px',
   },
   message: {
-    padding: '10px 14px',
+    padding: '12px 16px',
     borderRadius: '8px',
-    maxWidth: '85%',
+    maxWidth: '100%',
   },
   userMessage: {
     alignSelf: 'flex-end' as const,
