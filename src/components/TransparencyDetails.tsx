@@ -190,6 +190,9 @@ export default function TransparencyDetails({
         </button>
       )}
 
+      {/* Clarify Button - visible at top level */}
+      {renderClarifyButton && renderClarifyButton()}
+
       {/* Expanded Details Section - full width below */}
       {expanded && hasExpandableContent && (
         <div
@@ -224,12 +227,11 @@ export default function TransparencyDetails({
             </div>
           )}
           {sources && (
-            <div style={{ marginBottom: renderClarifyButton ? "8px" : "0" }}>
+            <div>
               <strong style={{ color: "#1e40af" }}>Sources:</strong>{" "}
               <span style={{ whiteSpace: "pre-wrap" }}>{renderWithLinks(sources)}</span>
             </div>
           )}
-          {renderClarifyButton && renderClarifyButton()}
         </div>
       )}
     </div>
