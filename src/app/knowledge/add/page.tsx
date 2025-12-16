@@ -299,6 +299,9 @@ function AddKnowledgeContent() {
                 content: data.draft.content,
                 hasChanges: data.draft.hasChanges,
                 changeHighlights: data.draft.changeHighlights,
+                reasoning: data.draft.reasoning,
+                inference: data.draft.inference,
+                sources: data.draft.sources,
               },
               originalContent: existingSkill.content,
               originalTitle: existingSkill.title,
@@ -338,6 +341,9 @@ function AddKnowledgeContent() {
               title: draft.title || group.skillTitle,
               content: draft.content,
               hasChanges: true,
+              reasoning: draft.reasoning,
+              inference: draft.inference,
+              sources: draft.sources,
             },
           });
         }

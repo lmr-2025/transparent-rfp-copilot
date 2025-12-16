@@ -7,6 +7,10 @@ export type DraftContent = {
   content: string;
   hasChanges?: boolean;
   changeHighlights?: string[];
+  // Transparency fields
+  reasoning?: string;
+  inference?: string;
+  sources?: string;
 };
 
 // Document source info

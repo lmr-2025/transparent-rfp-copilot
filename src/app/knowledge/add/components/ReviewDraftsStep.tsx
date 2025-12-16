@@ -330,6 +330,54 @@ Be direct and helpful. If something was inferred rather than directly stated in 
                   )}
                 </div>
 
+                {/* Transparency Details */}
+                {(group.draft?.reasoning || group.draft?.inference || group.draft?.sources) && (
+                  <div style={{
+                    marginTop: "16px",
+                    padding: "12px",
+                    backgroundColor: "#eff6ff",
+                    border: "1px solid #93c5fd",
+                    borderRadius: "6px",
+                  }}>
+                    <div style={{ fontSize: "12px", fontWeight: 600, color: "#1e40af", marginBottom: "10px", textTransform: "uppercase" }}>
+                      Transparency Report
+                    </div>
+
+                    {group.draft.reasoning && (
+                      <div style={{ marginBottom: "10px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "4px" }}>Reasoning:</div>
+                        <div style={{ fontSize: "13px", color: "#1e3a5f", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
+                          {group.draft.reasoning}
+                        </div>
+                      </div>
+                    )}
+
+                    {group.draft.inference && (
+                      <div style={{ marginBottom: "10px" }}>
+                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "4px" }}>Inference:</div>
+                        <div style={{
+                          fontSize: "13px",
+                          color: group.draft.inference.toLowerCase() === "none" ? "#166534" : "#ca8a04",
+                          whiteSpace: "pre-wrap",
+                          lineHeight: "1.5",
+                          fontWeight: group.draft.inference.toLowerCase() === "none" ? 500 : 400,
+                        }}>
+                          {group.draft.inference}
+                        </div>
+                      </div>
+                    )}
+
+                    {group.draft.sources && (
+                      <div>
+                        <div style={{ fontSize: "11px", fontWeight: 600, color: "#64748b", marginBottom: "4px" }}>Sources:</div>
+                        <div style={{ fontSize: "13px", color: "#1e3a5f", whiteSpace: "pre-wrap", lineHeight: "1.5" }}>
+                          {group.draft.sources}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Action Buttons */}
                 <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
                   <button

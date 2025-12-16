@@ -31,6 +31,10 @@ type DraftUpdateResponse = {
   title: string;
   content: string; // Complete updated content (or original if no changes)
   changeHighlights: string[]; // Brief bullets about what changed
+  // Transparency fields
+  reasoning?: string; // What sources were used and how content was derived
+  inference?: string; // What was inferred vs directly stated - should be "None" for skills
+  sources?: string; // Which URLs/documents contributed to this content
 };
 
 export async function POST(request: NextRequest) {
@@ -169,7 +173,10 @@ OUTPUT (JSON only):
   "summary": "What new facts/sections were added" OR "Skill already covers all source content",
   "title": "Keep same unless topic scope genuinely changed",
   "content": "COMPLETE skill content including both original AND new information",
-  "changeHighlights": ["Added Snowflake integration details", "Added Teradata support info", ...] // Empty if no changes
+  "changeHighlights": ["Added Snowflake integration details", "Added Teradata support info", ...], // Empty if no changes
+  "reasoning": "Explain which parts of the content came from which source URL/document. Be specific about what information you extracted.",
+  "inference": "None" or "List any facts that were INFERRED rather than directly stated in the sources. Be honest - skills should have minimal inference.",
+  "sources": "List the specific source URLs and what information came from each"
 }`;
 
   const userPrompt = `EXISTING SKILL:
