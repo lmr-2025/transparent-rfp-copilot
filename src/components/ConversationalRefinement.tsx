@@ -19,6 +19,11 @@ interface OriginalMessage {
   content: string;
 }
 
+interface ClarifyMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 interface ConversationalRefinementProps {
   originalQuestion: string;
   currentResponse: string;
@@ -26,6 +31,8 @@ interface ConversationalRefinementProps {
   onClose: () => void;
   promptText: string;
   originalConversationHistory?: OriginalMessage[];
+  clarifyConversation?: ClarifyMessage[];
+  onConversationChange?: (messages: ClarifyMessage[]) => void;
 }
 
 const styles = {
@@ -126,14 +133,26 @@ export default function ConversationalRefinement({
   onClose,
   promptText,
   originalConversationHistory,
+  clarifyConversation,
+  onConversationChange,
 }: ConversationalRefinementProps) {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      role: 'assistant',
-      content: `I generated this response to your question: "${originalQuestion}"\n\n${currentResponse}\n\nHow would you like to refine it? You can ask me to make it shorter, explain my reasoning, add more detail, or anything else.`,
-      timestamp: new Date(),
-    },
-  ]);
+  // Initialize from saved conversation or create initial message
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (clarifyConversation && clarifyConversation.length > 0) {
+      return clarifyConversation.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+        timestamp: new Date(),
+      }));
+    }
+    return [
+      {
+        role: 'assistant',
+        content: `I generated this response to your question: "${originalQuestion}"\n\n${currentResponse}\n\nHow would you like to refine it? You can ask me to make it shorter, explain my reasoning, add more detail, or anything else.`,
+        timestamp: new Date(),
+      },
+    ];
+  });
   const [input, setInput] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [latestSuggestion, setLatestSuggestion] = useState<string | null>(null);
@@ -146,6 +165,17 @@ export default function ConversationalRefinement({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Auto-save conversation when messages change
+  useEffect(() => {
+    if (onConversationChange && messages.length > 0) {
+      const simplified = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+      onConversationChange(simplified);
+    }
+  }, [messages, onConversationChange]);
 
   const sendMessage = async () => {
     if (!input.trim() || isProcessing) return;

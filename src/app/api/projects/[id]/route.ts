@@ -24,6 +24,7 @@ interface RowInput {
   remarks?: string;
   usedSkills?: unknown;
   showRecommendation?: boolean;
+  clarifyConversation?: unknown;
 }
 
 // GET /api/projects/[id] - Get single project
@@ -175,6 +176,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           const usedSkills = row.usedSkills
             ? (row.usedSkills as Prisma.InputJsonValue)
             : Prisma.JsonNull;
+          const clarifyConversation = row.clarifyConversation
+            ? (row.clarifyConversation as Prisma.InputJsonValue)
+            : Prisma.JsonNull;
 
           await tx.bulkRow.upsert({
             where: {
@@ -193,6 +197,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
               remarks: row.remarks,
               usedSkills,
               showRecommendation: row.showRecommendation || false,
+              clarifyConversation,
             },
             create: {
               projectId: id,
@@ -209,6 +214,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
               remarks: row.remarks,
               usedSkills,
               showRecommendation: row.showRecommendation || false,
+              clarifyConversation,
             },
           });
         }

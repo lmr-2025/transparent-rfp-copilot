@@ -530,6 +530,8 @@ export default function RowCard({
             onClose={() => onUpdateRow(row.id, { conversationOpen: false })}
             promptText={promptText}
             originalConversationHistory={row.conversationHistory}
+            clarifyConversation={row.clarifyConversation}
+            onConversationChange={(messages) => onUpdateRow(row.id, { clarifyConversation: messages })}
           />
         </div>
       )}

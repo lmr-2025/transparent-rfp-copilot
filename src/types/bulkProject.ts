@@ -50,6 +50,7 @@ export type BulkRow = {
   conversationOpen?: boolean;
   selected?: boolean;
   detailsExpanded?: boolean; // Toggle for showing reasoning/inference/remarks/sources
+  clarifyConversation?: { role: 'user' | 'assistant'; content: string }[]; // Clarify conversation messages
 };
 
 // Simplified customer profile reference for projects

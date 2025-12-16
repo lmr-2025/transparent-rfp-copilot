@@ -123,6 +123,7 @@ model BulkRow {
   remarks              String?  @db.Text
   usedSkills           Json?    // Stored as JSON: Skill[]
   showRecommendation   Boolean  @default(false)
+  clarifyConversation  Json?    // Stored as JSON: { role: 'user' | 'assistant'; content: string }[]
 
   // Review flagging for individual questions
   flaggedForReview     Boolean  @default(false)
