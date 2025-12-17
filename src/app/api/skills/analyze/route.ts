@@ -64,6 +64,7 @@ type SkillGroup = {
   existingSkillId?: string;
   urls: string[];
   documentIds?: string[]; // Document IDs if source is documents
+  category?: string; // AI-suggested category for new skills
   reason: string;
 };
 
@@ -416,6 +417,9 @@ async function analyzeAndGroupSources(
   // Load base role/mission prompt from block system
   const basePrompt = await loadSystemPrompt("skill_analyze", "You are a knowledge management expert.");
 
+  // Get available categories for AI to suggest
+  const availableCategories = await getCategoryNamesFromDb();
+
   // Build system prompt with grouped-specific output format
   const systemPrompt = `${basePrompt}
 
@@ -427,6 +431,10 @@ RULES:
 3. Each source (URL or document) must appear in exactly one group
 4. A group can have 1 or many sources
 5. Sources can be mixed (URLs and documents in the same group if they cover the same topic)
+6. For new skills (action: "create"), suggest a category from the available list
+
+AVAILABLE CATEGORIES:
+${availableCategories.join(", ")}
 
 OUTPUT FORMAT:
 Return a JSON object:
@@ -435,7 +443,8 @@ Return a JSON object:
     {
       "action": "create" | "update_existing",
       "skillTitle": "Name of the skill",
-      "existingSkillId": "ID if updating existing skill",
+      "existingSkillId": "ID if updating existing skill (omit for create)",
+      "category": "Category name from available list (only for create action)",
       "urls": ["array of URLs in this group - only include if there are URLs"],
       "documentIds": ["array of document IDs in this group - only include if there are documents"],
       "reason": "Why these sources belong together and why this action"
@@ -448,7 +457,8 @@ GROUPING GUIDELINES:
 - Sources from the same topic/feature → same group
 - If a source clearly relates to an existing skill → update_existing
 - Only create new skills for genuinely new topics
-- Don't create empty arrays - only include "urls" if there are URLs, only include "documentIds" if there are documents`;
+- Don't create empty arrays - only include "urls" if there are URLs, only include "documentIds" if there are documents
+- Choose the most appropriate category for new skills based on content`;
 
   const userPrompt = `EXISTING SKILLS:
 ${skillsSummary}

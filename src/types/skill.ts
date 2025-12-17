@@ -8,22 +8,14 @@ export type SkillInformation = {
   sources?: string[]; // Deprecated - use sourceUrls instead
 };
 
-// Default categories - users can customize via the Categories page
+// Default categories - users can customize via Admin > Settings > Categories
+// Keep this list small - users should add domain-specific categories
 export const DEFAULT_SKILL_CATEGORIES = [
+  "Product & Features",
   "Security & Compliance",
-  "Data Platform",
-  "Integrations & APIs",
-  "Monitoring & Observability",
-  "Infrastructure",
-  "Authentication & Access",
-  "Product Features",
-  "Pricing & Licensing",
-  "Support & SLAs",
-  "Company & Culture",
-  "Privacy & Data Handling",
-  "Development & DevOps",
-  "Documentation & Training",
-  "Marketing & Positioning",
+  "Integrations",
+  "Pricing & Plans",
+  "Company",
   "Other",
 ] as const;
 

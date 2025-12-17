@@ -5,7 +5,8 @@ import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
-import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
+import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
+import { useAllCategories } from "@/hooks/use-knowledge-data";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 import {
@@ -83,6 +84,9 @@ function AddKnowledgeContent() {
 
   const { pendingCount, approvedCount, readyForReviewCount, reviewedCount } =
     useBulkImportCounts();
+
+  // Categories for skill assignment
+  const { data: categories = [] } = useAllCategories();
 
   const { prompt: promptForSkillName, PromptDialog } = usePrompt({
     title: "New Skill Name",
@@ -251,6 +255,7 @@ function AddKnowledgeContent() {
           existingSkillId?: string;
           urls?: string[];
           documentIds?: string[];
+          category?: string;
           reason?: string;
         }, index: number) => {
           const existingSkill = group.existingSkillId
@@ -269,6 +274,7 @@ function AddKnowledgeContent() {
             urls: group.urls || [],
             documentIds: group.documentIds,
             documents: groupDocs,
+            category: group.category, // AI-suggested category
             status: "pending" as const,
             reason: group.reason,
             originalContent: existingSkill?.content,
@@ -554,6 +560,7 @@ function AddKnowledgeContent() {
           const skillData = {
             title: group.draft!.title,
             content: group.draft!.content,
+            categories: group.category ? [group.category] : [],
             quickFacts: [] as { question: string; answer: string }[],
             edgeCases: [] as string[],
             sourceUrls,
@@ -706,6 +713,7 @@ function AddKnowledgeContent() {
       {workflowStep === "review_drafts" && (
         <ReviewDraftsStep
           skillGroups={skillGroups}
+          categories={categories}
           readyForReviewCount={readyForReviewCount}
           reviewedCount={reviewedCount}
           previewGroup={previewGroup}
@@ -716,6 +724,7 @@ function AddKnowledgeContent() {
           approveAllDrafts={approveAllDrafts}
           rejectDraft={rejectDraft}
           updateDraftField={updateDraftField}
+          updateGroupCategory={(groupId, category) => updateSkillGroup(groupId, { category })}
           onSaveReviewedDrafts={saveReviewedDrafts}
           onBack={() => setWorkflowStep("review_groups")}
           promptForContent={promptForContent}

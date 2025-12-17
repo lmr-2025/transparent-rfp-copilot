@@ -41,6 +41,9 @@ export default function ProjectMetadataCard({
         onChange={(event) => onOwnerIdChange(event.target.value)}
         style={styles.input}
       >
+        {users.length === 0 && (
+          <option value="">Loading users...</option>
+        )}
         {users.map((user) => (
           <option key={user.id} value={user.id}>
             {user.name || user.email || "Unknown user"}

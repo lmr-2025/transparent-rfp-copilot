@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { ArrowLeft, Eye, Edit3, MessageSquare, Send, Loader2, X } from "lucide-react";
+import { ArrowLeft, Eye, Edit3, MessageSquare, Send, Loader2, X, FolderOpen } from "lucide-react";
 import { diffLines, Change } from "diff";
 import { type SkillGroup } from "@/stores/bulk-import-store";
+import { type SkillCategoryItem } from "@/types/skill";
 import { styles, getGroupStatusStyle } from "./styles";
 import { parseApiData } from "@/lib/apiClient";
 
@@ -14,6 +15,7 @@ interface ClarifyMessage {
 
 type ReviewDraftsStepProps = {
   skillGroups: SkillGroup[];
+  categories: SkillCategoryItem[];
   readyForReviewCount: number;
   reviewedCount: number;
   previewGroup: SkillGroup | null;
@@ -24,6 +26,7 @@ type ReviewDraftsStepProps = {
   approveAllDrafts: () => void;
   rejectDraft: (id: string) => void;
   updateDraftField: (groupId: string, field: "title" | "content", value: string) => void;
+  updateGroupCategory: (groupId: string, category: string) => void;
   onSaveReviewedDrafts: () => void;
   onBack: () => void;
   promptForContent: (options: { defaultValue: string }) => Promise<string | null>;
@@ -31,6 +34,7 @@ type ReviewDraftsStepProps = {
 
 export default function ReviewDraftsStep({
   skillGroups,
+  categories,
   readyForReviewCount,
   reviewedCount,
   previewGroup,
@@ -41,6 +45,7 @@ export default function ReviewDraftsStep({
   approveAllDrafts,
   rejectDraft,
   updateDraftField,
+  updateGroupCategory,
   onSaveReviewedDrafts,
   onBack,
   promptForContent,
@@ -241,8 +246,32 @@ Be direct and helpful. If something was inferred rather than directly stated in 
                   </h4>
                 )}
 
-                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
-                  {group.urls.length} source URL{group.urls.length !== 1 ? "s" : ""}
+                <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px", display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                  <span>{group.urls.length} source URL{group.urls.length !== 1 ? "s" : ""}</span>
+                  {/* Category selector for new skills */}
+                  {group.type === "create" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <FolderOpen size={14} style={{ color: "#6366f1" }} />
+                      <select
+                        value={group.category || ""}
+                        onChange={(e) => updateGroupCategory(group.id, e.target.value)}
+                        style={{
+                          padding: "4px 8px",
+                          fontSize: "12px",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "4px",
+                          backgroundColor: "#fff",
+                          color: "#374151",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <option value="">Select category...</option>
+                        {categories.map((cat) => (
+                          <option key={cat.id} value={cat.name}>{cat.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
 
                 {/* Change highlights */}

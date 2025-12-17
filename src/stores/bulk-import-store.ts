@@ -29,6 +29,7 @@ export type SkillGroup = {
   urls: string[];
   documentIds?: string[]; // Document IDs in this group
   documents?: DocumentSource[]; // Full document data for generation
+  category?: string; // AI-suggested or user-selected category
   status:
     | "pending"
     | "approved"

@@ -34,7 +34,11 @@ export default function BulkUploadPage() {
   useEffect(() => {
     fetch("/api/users")
       .then((res) => res.json())
-      .then((data) => setUsers(data.users || []))
+      .then((json) => {
+        // API returns { data: { users: [...] } }
+        const userList = json.data?.users || json.users || [];
+        setUsers(userList);
+      })
       .catch(() => {});
   }, []);
 
