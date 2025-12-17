@@ -389,6 +389,7 @@ export const defaultBlocks: PromptBlock[] = [
         "",
         "SOURCE FIDELITY (CRITICAL - READ THIS FIRST):",
         "- ONLY include information directly found in the provided sources",
+        "- DO NOT make up, fabricate, or hallucinate information not in the sources",
         "- DO NOT infer technical details, metrics, or specifications not explicitly stated",
         "- When a source only says 'we have X', don't expand it into detailed implementation specifics",
         "- It's better to have accurate content than padded content",
