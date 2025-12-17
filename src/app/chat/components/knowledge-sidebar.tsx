@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BookOpen, FileText, Globe, Users, ChevronDown, ChevronUp, MessageSquare } from "lucide-react";
+import { useState, useEffect, useMemo } from "react";
+import { BookOpen, FileText, Globe, Users, ChevronDown, ChevronUp, MessageSquare, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useSelectionStore } from "@/stores/selection-store";
 import { useChatStore } from "@/stores/chat-store";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
@@ -12,6 +18,32 @@ import { KnowledgeSourceList } from "./knowledge-source-list";
 import type { Skill } from "@/types/skill";
 import type { ReferenceUrl } from "@/types/referenceUrl";
 import type { CustomerProfile } from "@/types/customerProfile";
+
+// Helper to extract a readable title from a URL path
+function getTitleFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    // Get the last meaningful segment of the path
+    const pathSegments = urlObj.pathname.split("/").filter(Boolean);
+    const lastSegment = pathSegments[pathSegments.length - 1] || "";
+
+    // Remove common file extensions
+    const withoutExt = lastSegment.replace(/\.(md|html|htm|pdf|txt)$/i, "");
+
+    // Convert kebab-case or snake_case to Title Case
+    if (withoutExt) {
+      return withoutExt
+        .replace(/[-_]/g, " ")
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    // Fallback to hostname if no meaningful path
+    return urlObj.hostname.replace(/^www\./, "");
+  } catch {
+    // If URL parsing fails, return the original URL
+    return url;
+  }
+}
 
 type InstructionPreset = {
   id: string;
@@ -120,9 +152,32 @@ export function KnowledgeSidebar({
   const orgPresets = presets.filter((p) => p.isShared && p.shareStatus === "APPROVED");
   const myPresets = presets.filter((p) => !p.isShared);
 
+  // Extract library URLs from selected skills
+  const libraryUrls = useMemo(() => {
+    const selectedSkillIds = Array.from(skillSelections.entries())
+      .filter(([, selected]) => selected)
+      .map(([id]) => id);
+
+    const urlsFromSkills: Array<{ url: string; title: string; skillTitle: string }> = [];
+
+    skills
+      .filter((skill) => selectedSkillIds.includes(skill.id))
+      .forEach((skill) => {
+        skill.sourceUrls?.forEach((sourceUrl) => {
+          urlsFromSkills.push({
+            url: sourceUrl.url,
+            title: sourceUrl.title || sourceUrl.url.split("/").pop() || sourceUrl.url,
+            skillTitle: skill.title,
+          });
+        });
+      });
+
+    return urlsFromSkills;
+  }, [skills, skillSelections]);
+
   if (isLoading) {
     return (
-      <div className="w-80 border-l border-border p-4 space-y-4">
+      <div className="h-full p-4 space-y-4">
         <div className="animate-pulse space-y-4">
           <div className="h-8 bg-muted rounded" />
           <div className="h-32 bg-muted rounded" />
@@ -133,7 +188,7 @@ export function KnowledgeSidebar({
   }
 
   return (
-    <div className="w-80 border-l border-border overflow-y-auto">
+    <div className="h-full overflow-y-auto">
       <div className="p-4 space-y-4">
         {/* Instructions Section */}
         <Card>
@@ -248,6 +303,42 @@ export function KnowledgeSidebar({
           emptyMessage="No skills available"
         />
 
+        {/* Library URLs - source URLs from selected skills */}
+        {libraryUrls.length > 0 && (
+          <Card>
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Link2 className="h-4 w-4" />
+                Library URLs
+                <span className="text-muted-foreground">
+                  ({libraryUrls.length})
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2 px-4 max-h-48 overflow-y-auto">
+              <div className="space-y-1">
+                {libraryUrls.map((item, idx) => (
+                  <TooltipProvider key={`${item.url}-${idx}`} delayDuration={300}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:bg-muted transition-colors">
+                          <Globe className="h-3 w-3 flex-shrink-0" />
+                          <span className="truncate">{item.title}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-xs">
+                        <p className="font-medium">{item.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1 break-all">{item.url}</p>
+                        <p className="text-xs text-primary mt-1">From: {item.skillTitle}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Documents */}
         <KnowledgeSourceList
           title="Documents"
@@ -264,7 +355,11 @@ export function KnowledgeSidebar({
         <KnowledgeSourceList
           title="URLs"
           icon={<Globe className="h-4 w-4" />}
-          items={urls.map((u) => ({ id: u.id, label: u.title || u.url }))}
+          items={urls.map((u) => ({
+            id: u.id,
+            label: getTitleFromUrl(u.url),
+            tooltip: u.url,
+          }))}
           selections={urlSelections}
           onToggle={toggleUrl}
           onSelectAll={selectAllUrls}

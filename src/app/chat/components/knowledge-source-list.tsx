@@ -3,12 +3,18 @@
 import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface KnowledgeSourceListProps {
   title: string;
   icon: React.ReactNode;
-  items: Array<{ id: string; label: string }>;
+  items: Array<{ id: string; label: string; tooltip?: string }>;
   selections: Map<string, boolean>;
   onToggle: (id: string) => void;
   onSelectAll: (ids: string[]) => void;
@@ -65,6 +71,7 @@ export function KnowledgeSourceList({
             <SelectableItem
               key={item.id}
               label={item.label}
+              tooltip={item.tooltip}
               selected={selections.get(item.id) || false}
               onClick={() => onToggle(item.id)}
             />
@@ -80,35 +87,48 @@ export function KnowledgeSourceList({
 
 interface SelectableItemProps {
   label: string;
+  tooltip?: string;
   selected: boolean;
   onClick: () => void;
 }
 
-function SelectableItem({ label, selected, onClick }: SelectableItemProps) {
+function SelectableItem({ label, tooltip, selected, onClick }: SelectableItemProps) {
   return (
-    <button
-      onClick={onClick}
-      aria-pressed={selected}
-      aria-label={`${label}${selected ? " (selected)" : ""}`}
-      className={cn(
-        "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
-        selected
-          ? "bg-primary/10 text-primary"
-          : "hover:bg-muted text-foreground"
-      )}
-    >
-      <div
-        aria-hidden="true"
-        className={cn(
-          "flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center",
-          selected
-            ? "bg-primary border-primary text-primary-foreground"
-            : "border-input"
-        )}
-      >
-        {selected && <Check className="h-3 w-3" />}
-      </div>
-      <span className="truncate">{label}</span>
-    </button>
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            onClick={onClick}
+            aria-pressed={selected}
+            aria-label={`${label}${selected ? " (selected)" : ""}`}
+            className={cn(
+              "w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-left transition-colors",
+              selected
+                ? "bg-primary/10 text-primary"
+                : "hover:bg-muted text-foreground"
+            )}
+          >
+            <div
+              aria-hidden="true"
+              className={cn(
+                "flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center",
+                selected
+                  ? "bg-primary border-primary text-primary-foreground"
+                  : "border-input"
+              )}
+            >
+              {selected && <Check className="h-3 w-3" />}
+            </div>
+            <span className="truncate">{label}</span>
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="left" className="max-w-xs">
+          <p className="text-sm font-medium">{label}</p>
+          {tooltip && (
+            <p className="text-xs text-muted-foreground mt-1 break-all">{tooltip}</p>
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmModal";
 import Link from "next/link";
@@ -13,8 +13,15 @@ import {
   defaultCompositions,
   buildPromptFromBlocks,
 } from "@/lib/promptBlocks";
+import { useResizablePanel } from "@/hooks/use-resizable-panel";
+import { ResizableDivider } from "@/components/ui/resizable-divider";
 import PromptBlocksEditor from "@/components/PromptBlocksEditor";
 import PromptPreviewPanel from "@/components/PromptPreviewPanel";
+
+// Preview panel resize constants
+const PREVIEW_MIN_WIDTH = 350;
+const PREVIEW_MAX_WIDTH = 700;
+const PREVIEW_DEFAULT_WIDTH = 480;
 
 export default function PromptBlocksPage() {
   const { data: session, status } = useSession();
@@ -32,6 +39,21 @@ export default function PromptBlocksPage() {
     message: "Reset all blocks and modifiers to defaults? This cannot be undone.",
     confirmLabel: "Reset",
     variant: "warning",
+  });
+
+  // Resizable preview panel
+  const {
+    panelWidth: previewWidth,
+    isDragging,
+    containerRef,
+    handleMouseDown,
+    minWidth: previewMinWidth,
+    maxWidth: previewMaxWidth,
+  } = useResizablePanel({
+    storageKey: "prompt-builder-preview-width",
+    defaultWidth: PREVIEW_DEFAULT_WIDTH,
+    minWidth: PREVIEW_MIN_WIDTH,
+    maxWidth: PREVIEW_MAX_WIDTH,
   });
 
   // Check if user has admin access
@@ -228,17 +250,20 @@ export default function PromptBlocksPage() {
       )}
 
       {/* Main Content - Two Column Layout */}
-      <div style={{
-        display: "flex",
-        flex: 1,
-        overflow: "hidden",
-      }}>
+      <div
+        ref={containerRef}
+        style={{
+          display: "flex",
+          flex: 1,
+          overflow: "hidden",
+        }}
+      >
         {/* Left Column - Editor */}
         <div style={{
           flex: 1,
+          minWidth: 0,
           overflowY: "auto",
           padding: "24px",
-          borderRight: "1px solid #e2e8f0",
         }}>
           <PromptBlocksEditor
             blocks={blocks}
@@ -251,14 +276,18 @@ export default function PromptBlocksPage() {
           />
         </div>
 
+        {/* Resizable Divider */}
+        <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+
         {/* Right Column - Preview */}
         <div style={{
-          width: "45%",
-          minWidth: "400px",
-          maxWidth: "600px",
+          width: `${previewWidth}px`,
+          minWidth: `${previewMinWidth}px`,
+          maxWidth: `${previewMaxWidth}px`,
           display: "flex",
           flexDirection: "column",
           backgroundColor: "#f8fafc",
+          flexShrink: 0,
         }}>
           <PromptPreviewPanel
             blocks={blocks}

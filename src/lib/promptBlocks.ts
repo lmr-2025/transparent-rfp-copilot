@@ -15,17 +15,18 @@
 
 // The contexts where prompts are used
 export type PromptContext =
-  | "questions"         // Answering questionnaire/assessment questions
-  | "skills"            // Building knowledge skills
-  | "analysis"          // Analyzing documents/libraries
-  | "chat"              // Knowledge chat
-  | "contracts"         // Contract analysis
-  | "skill_organize"    // Organizing/merging skills from sources
-  | "skill_analyze"     // Analyzing URLs/docs to decide skill actions (create/update)
-  | "skill_refresh"     // Refreshing a skill from its source URLs
-  | "skill_analyze_rfp" // Analyzing RFP Q&A to extract skill knowledge
-  | "customer_profile"  // Extracting customer profiles
-  | "prompt_optimize";  // Optimizing prompt sections
+  | "questions"            // Answering questionnaire/assessment questions
+  | "skills"               // Building knowledge skills
+  | "analysis"             // Analyzing documents/libraries
+  | "chat"                 // Knowledge chat
+  | "contracts"            // Contract analysis
+  | "skill_organize"       // Organizing/merging skills from sources
+  | "skill_analyze"        // Analyzing URLs/docs to decide skill actions (create/update)
+  | "skill_refresh"        // Refreshing a skill from its source URLs
+  | "skill_analyze_rfp"    // Analyzing RFP Q&A to extract skill knowledge
+  | "customer_profile"     // Extracting customer profiles
+  | "prompt_optimize"      // Optimizing prompt sections
+  | "instruction_builder"; // Building instruction presets for chat
 
 // Editability tiers for blocks and modifiers
 export type PromptTier = 1 | 2 | 3;
@@ -175,6 +176,26 @@ export const defaultBlocks: PromptBlock[] = [
         "Analyze prompts for redundancy, verbosity, and unclear instructions.",
         "Suggest specific improvements while preserving the original intent.",
         "Focus on making prompts more concise without losing important context.",
+      ].join("\n"),
+      instruction_builder: [
+        "You are a prompt engineering expert helping users create effective instruction presets for an AI assistant.",
+        "",
+        "Guide users through building a custom AI persona by asking about:",
+        "1. Role/persona - Who should the AI be?",
+        "2. Primary responsibilities - What should it do?",
+        "3. Knowledge domains - What should it know about?",
+        "4. Communication style - Tone, format, length preferences?",
+        "5. Boundaries - What should it NOT do?",
+        "",
+        "Be conversational and helpful. Ask one or two questions at a time.",
+        "When you have enough information, generate a polished instruction preset.",
+        "",
+        "CONTEXT: The instruction preset you create will be combined with the chat system prompt when users chat with The Oracle. The system prompt already handles:",
+        "- Source citation and confidence levels",
+        "- Output formatting with metadata sections",
+        "- Knowledge base integration",
+        "",
+        "Your instruction preset should focus on PERSONA and BEHAVIOR - how the AI should act, not technical output formatting.",
       ].join("\n"),
       skill_analyze: [
         "You are a knowledge management expert helping organize documentation into broad, comprehensive skills.",
@@ -417,6 +438,28 @@ export const defaultBlocks: PromptBlock[] = [
         "- Use broad titles: 'Security & Compliance', 'Monitoring & Observability', 'Data Integration'",
         "- Avoid narrow titles: 'Password Policy', 'Alert Thresholds', 'Webhook Setup'",
         "- Think: 'What chapter of the docs would this belong in?'",
+      ].join("\n"),
+      instruction_builder: [
+        "When you have gathered enough information about the user's desired AI persona, generate a polished instruction preset.",
+        "",
+        "Output the preset in this exact format:",
+        "",
+        "---PRESET_READY---",
+        "Name: [short descriptive name, 2-4 words]",
+        "Description: [1-2 sentence description of what this preset is for]",
+        "Content:",
+        "[full instruction preset content - professional, clear, actionable]",
+        "---END_PRESET---",
+        "",
+        "The Content section should:",
+        "- Define the AI's role and expertise area",
+        "- Specify tone and communication style",
+        "- Include any domain-specific knowledge expectations",
+        "- Set boundaries on what the AI should/shouldn't do",
+        "- Be 100-500 words (enough to be useful, not overwhelming)",
+        "",
+        "Continue the conversation naturally - don't just output the preset immediately.",
+        "Only output the preset block when you have enough context to create something useful.",
       ].join("\n"),
     },
   },
@@ -684,6 +727,12 @@ export const defaultCompositions: PromptComposition[] = [
   },
   {
     context: "skill_analyze_rfp",
+    blockIds: ["role_mission", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "instruction_builder",
     blockIds: ["role_mission", "output_format"],
     supportsModes: false,
     supportsDomains: false,

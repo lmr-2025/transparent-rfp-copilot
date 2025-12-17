@@ -56,7 +56,7 @@ const navItems: NavSection[] = [
     featureFlag: "chat",
     items: [
       { href: "/chat", label: "Chat" },
-      { href: "/chat/instruction-presets", label: "Instruction Presets", adminOnly: true },
+      { href: "/chat/instruction-presets", label: "Instructions", adminOnly: true },
     ],
   },
   {

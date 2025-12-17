@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { History, Plus, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
 import { useSelectionStore } from "@/stores/selection-store";
 import {
@@ -16,6 +17,7 @@ import {
   useSendMessage,
   useSaveSession,
 } from "@/hooks/use-chat-data";
+import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ChatInput } from "./components/chat-input";
 import { MessageList } from "./components/message-list";
 import { KnowledgeSidebar } from "./components/knowledge-sidebar";
@@ -25,6 +27,11 @@ import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseAnswerSections } from "@/lib/questionHelpers";
+
+// Sidebar resize constants
+const SIDEBAR_MIN_WIDTH = 280;
+const SIDEBAR_MAX_WIDTH = 500;
+const SIDEBAR_DEFAULT_WIDTH = 320;
 
 export default function ChatPageV2() {
   const { data: session } = useSession();
@@ -74,6 +81,21 @@ export default function ChatPageV2() {
 
   // Track if selections have been initialized to prevent infinite loops
   const selectionsInitialized = useRef(false);
+
+  // Resizable sidebar
+  const {
+    panelWidth: sidebarWidth,
+    isDragging,
+    containerRef,
+    handleMouseDown,
+    minWidth: sidebarMinWidth,
+    maxWidth: sidebarMaxWidth,
+  } = useResizablePanel({
+    storageKey: "chat-sidebar-width",
+    defaultWidth: SIDEBAR_DEFAULT_WIDTH,
+    minWidth: SIDEBAR_MIN_WIDTH,
+    maxWidth: SIDEBAR_MAX_WIDTH,
+  });
 
   // Initialize selections when data loads (only once)
   useEffect(() => {
@@ -364,9 +386,9 @@ ${keyFactsText}`;
                         getSelectedUrlIds().length + getSelectedCustomerIds().length;
 
   return (
-    <div className="flex h-[calc(100vh-0px)] bg-background">
+    <div ref={containerRef} className="flex h-[calc(100vh-0px)] bg-background">
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="relative flex items-center justify-between px-4 py-3 border-b border-border">
           <h1 className="text-lg font-semibold">Chat</h1>
@@ -453,14 +475,26 @@ ${keyFactsText}`;
         </div>
       </div>
 
+      {/* Resizable Divider */}
+      <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+
       {/* Knowledge sidebar */}
-      <KnowledgeSidebar
-        skills={skills}
-        documents={documents}
-        urls={urls}
-        customers={customers}
-        isLoading={isDataLoading}
-      />
+      <div
+        style={{
+          width: `${sidebarWidth}px`,
+          minWidth: `${sidebarMinWidth}px`,
+          maxWidth: `${sidebarMaxWidth}px`,
+        }}
+        className="flex-shrink-0"
+      >
+        <KnowledgeSidebar
+          skills={skills}
+          documents={documents}
+          urls={urls}
+          customers={customers}
+          isLoading={isDataLoading}
+        />
+      </div>
 
       {/* Transparency Modal */}
       {transparencyData && (

@@ -37,6 +37,7 @@ const keyToContext: Record<string, PromptContext> = {
   skill_analyze_rfp: "skill_analyze_rfp",
   customer_profile: "customer_profile",
   prompt_optimize: "prompt_optimize",
+  instruction_builder: "instruction_builder",
 };
 
 // Type for cached DB data

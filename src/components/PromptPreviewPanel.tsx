@@ -46,6 +46,7 @@ const contextLabels: Record<PromptContext, string> = {
   skill_analyze_rfp: "RFP Import",
   customer_profile: "Customers",
   prompt_optimize: "Optimize",
+  instruction_builder: "Instruction Builder",
 };
 
 const contextColors: Record<PromptContext, { bg: string; border: string; text: string }> = {
@@ -60,6 +61,7 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
   skill_analyze_rfp: { bg: "#fef9c3", border: "#fde047", text: "#a16207" },
   customer_profile: { bg: "#fef3c7", border: "#fcd34d", text: "#b45309" },
   prompt_optimize: { bg: "#f0f9ff", border: "#7dd3fc", text: "#0284c7" },
+  instruction_builder: { bg: "#fdf2f8", border: "#fbcfe8", text: "#db2777" },
 };
 
 export default function PromptPreviewPanel({
