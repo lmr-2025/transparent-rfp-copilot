@@ -1,5 +1,6 @@
 export { default as BrandingTab } from "./BrandingTab";
 export { default as IntegrationsTab } from "./IntegrationsTab";
+export { default as AuthGroupsTab } from "./AuthGroupsTab";
 export { default as LLMSpeedTab } from "./LLMSpeedTab";
 export { default as RateLimitsTab } from "./RateLimitsTab";
 export { default as CategoriesTab } from "./CategoriesTab";

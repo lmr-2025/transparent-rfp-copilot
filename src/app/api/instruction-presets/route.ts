@@ -12,7 +12,10 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
-    const isAdmin = session?.user?.role === "ADMIN";
+    const userCapabilities = session?.user?.capabilities || [];
+    const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+      userCapabilities.includes("ADMIN") ||
+      session?.user?.role === "ADMIN";
 
     // Check for admin-only query param to get pending approvals
     const { searchParams } = new URL(request.url);
@@ -68,7 +71,10 @@ export async function POST(request: NextRequest) {
       return errors.badRequest("Name and content are required");
     }
 
-    const isAdmin = session.user.role === "ADMIN";
+    const userCapabilities = session.user.capabilities || [];
+    const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+      userCapabilities.includes("ADMIN") ||
+      session.user.role === "ADMIN";
 
     // Determine share status based on request and user role
     let shareStatus: "PRIVATE" | "PENDING_APPROVAL" | "APPROVED" = "PRIVATE";

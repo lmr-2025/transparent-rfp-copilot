@@ -14,100 +14,98 @@ import type { QuestionLogEntry, QuestionLogStats, QuestionLogStatus } from "@/ap
 // - "locked": Only locked questions (project rows only)
 // - "resolved": Only flag-resolved questions
 // - "all": Everything including in-progress/pending
+// User filter:
+// - "userId": Filter by user ID who asked the question
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.trim() || "";
     const status = searchParams.get("status") || "answered"; // Default to answered
     const source = searchParams.get("source") || "all"; // project, questions, all
+    const userId = searchParams.get("userId")?.trim() || ""; // Filter by user who asked
     const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") || "50", 10)));
     const skip = (page - 1) * limit;
 
     // Build where clauses for BulkRow (project questions)
     const buildRowWhereClause = () => {
-      let baseWhere: Record<string, unknown> = {};
+      const conditions: Record<string, unknown>[] = [];
 
       // Status-based filtering
       if (status === "verified") {
-        baseWhere.reviewStatus = "APPROVED";
+        conditions.push({ reviewStatus: "APPROVED" });
       } else if (status === "corrected") {
-        baseWhere.reviewStatus = "CORRECTED";
+        conditions.push({ reviewStatus: "CORRECTED" });
       } else if (status === "locked") {
-        baseWhere.locked = true;
+        conditions.push({ locked: true });
       } else if (status === "resolved") {
-        baseWhere.flagResolved = true;
+        conditions.push({ flagResolved: true });
       } else if (status === "answered") {
         // All completed questions (has a non-empty response)
-        baseWhere.status = "COMPLETED";
-      } else {
-        // "all" - everything including pending/in-progress
-        // No status filter
+        conditions.push({ status: "COMPLETED" });
+      }
+      // "all" - no status filter
+
+      // Add user filter (by askedById only - new rows will have this populated)
+      if (userId) {
+        conditions.push({ askedById: userId });
       }
 
       // Add search filter
       if (search) {
-        baseWhere = {
-          ...baseWhere,
-          AND: [
-            {
-              OR: [
-                { question: { contains: search, mode: "insensitive" } },
-                { response: { contains: search, mode: "insensitive" } },
-              ],
-            },
+        conditions.push({
+          OR: [
+            { question: { contains: search, mode: "insensitive" } },
+            { response: { contains: search, mode: "insensitive" } },
           ],
-        };
+        });
       }
 
-      return baseWhere;
+      return conditions.length > 0 ? { AND: conditions } : {};
     };
 
     // Build where clauses for QuestionHistory
     const buildQuestionWhereClause = () => {
-      let baseWhere: Record<string, unknown> = {};
+      const conditions: Record<string, unknown>[] = [];
 
       // Status-based filtering
       if (status === "verified") {
-        baseWhere.reviewStatus = "APPROVED";
+        conditions.push({ reviewStatus: "APPROVED" });
       } else if (status === "corrected") {
-        baseWhere.reviewStatus = "CORRECTED";
+        conditions.push({ reviewStatus: "CORRECTED" });
       } else if (status === "locked") {
         // No locked for QuestionHistory - return nothing
         return { id: "impossible-match" };
       } else if (status === "resolved") {
-        baseWhere.flagResolved = true;
+        conditions.push({ flagResolved: true });
       } else if (status === "answered") {
         // All questions with responses (QuestionHistory entries always have responses)
-        baseWhere.response = { not: "" };
-      } else {
-        // "all" - everything
-        // No status filter
+        conditions.push({ response: { not: "" } });
+      }
+      // "all" - no status filter
+
+      // Add user filter
+      if (userId) {
+        conditions.push({ userId });
       }
 
       // Add search filter
       if (search) {
-        baseWhere = {
-          ...baseWhere,
-          AND: [
-            {
-              OR: [
-                { question: { contains: search, mode: "insensitive" } },
-                { response: { contains: search, mode: "insensitive" } },
-              ],
-            },
+        conditions.push({
+          OR: [
+            { question: { contains: search, mode: "insensitive" } },
+            { response: { contains: search, mode: "insensitive" } },
           ],
-        };
+        });
       }
 
-      return baseWhere;
+      return conditions.length > 0 ? { AND: conditions } : {};
     };
 
     const shouldFetchRows = source === "all" || source === "project";
     const shouldFetchQuestions = source === "all" || source === "questions";
 
     // Fetch from BulkRow (project questions)
-    // Note: BulkRow doesn't have updatedAt/createdAt, so we sort after fetching by reviewedAt/flagResolvedAt
     const rows = shouldFetchRows
       ? await prisma.bulkRow.findMany({
           where: buildRowWhereClause(),
@@ -117,6 +115,7 @@ export async function GET(request: NextRequest) {
                 id: true,
                 name: true,
                 customerName: true,
+                ownerId: true,
                 ownerName: true,
                 createdAt: true,
               },
@@ -191,12 +190,16 @@ export async function GET(request: NextRequest) {
       reasoning: row.reasoning || undefined,
       inference: row.inference || undefined,
       status: getStatus(row),
-      askedBy: row.project?.ownerName || undefined, // Project owner
-      askedByEmail: undefined,
+      // Who asked (prefer row-level user, fall back to project owner)
+      askedById: row.askedById || row.project?.ownerId || undefined,
+      askedBy: row.askedByName || row.project?.ownerName || undefined,
+      askedByEmail: row.askedByEmail || undefined,
+      // Who finalized
+      finalizedById: row.reviewedBy || row.flagResolvedBy || undefined,
       finalizedBy: row.reviewedBy || row.flagResolvedBy || undefined,
       finalizedByEmail: undefined,
       finalizedAt: getFinalizedAt(row),
-      createdAt: row.project?.createdAt?.toISOString() || getCreatedAt(row),
+      createdAt: row.createdAt?.toISOString() || row.project?.createdAt?.toISOString() || getCreatedAt(row),
       // Additional metadata
       reviewRequestedBy: row.reviewRequestedBy || undefined,
       reviewRequestedAt: row.reviewRequestedAt?.toISOString() || undefined,
@@ -221,8 +224,12 @@ export async function GET(request: NextRequest) {
       reasoning: q.reasoning || undefined,
       inference: q.inference || undefined,
       status: getStatus(q),
+      // Who asked
+      askedById: q.userId || undefined,
       askedBy: undefined,
       askedByEmail: q.userEmail || undefined,
+      // Who finalized
+      finalizedById: q.reviewedBy || q.flagResolvedBy || undefined,
       finalizedBy: q.reviewedBy || q.flagResolvedBy || undefined,
       finalizedByEmail: undefined,
       finalizedAt: getFinalizedAt(q),
@@ -283,9 +290,14 @@ export async function DELETE(request: NextRequest) {
     if (!session?.user) {
       return errors.unauthorized("Authentication required");
     }
-    const userRole = (session.user as { role?: string }).role;
-    if (userRole !== "ADMIN" && userRole !== "PROMPT_ADMIN") {
-      return errors.forbidden("Admin access required to delete questions");
+    const userCapabilities = session.user.capabilities || [];
+    const hasDeleteAccess = userCapabilities.includes("ADMIN") || userCapabilities.includes("VIEW_ORG_DATA");
+    if (!hasDeleteAccess) {
+      // Fall back to legacy role check
+      const userRole = (session.user as { role?: string }).role;
+      if (userRole !== "ADMIN" && userRole !== "PROMPT_ADMIN") {
+        return errors.forbidden("Admin access required to delete questions");
+      }
     }
 
     const { searchParams } = new URL(request.url);

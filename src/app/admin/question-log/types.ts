@@ -15,10 +15,12 @@ export type QuestionLogEntry = {
   reasoning?: string;
   inference?: string;
   status: QuestionLogStatus;
-  // Who asked/created
-  askedBy?: string;
+  // Who asked/created (for org-wide tracking)
+  askedById?: string; // User ID for filtering
+  askedBy?: string; // Display name
   askedByEmail?: string;
   // Who finalized (reviewed/resolved)
+  finalizedById?: string;
   finalizedBy?: string;
   finalizedByEmail?: string;
   // Timestamps

@@ -102,6 +102,10 @@ export async function POST(request: NextRequest) {
             remarks: row.remarks,
             usedSkills: row.usedSkills || undefined,
             showRecommendation: row.showRecommendation || false,
+            // Track who created this question (for org-wide reporting)
+            askedById: auth.session.user.id,
+            askedByName: auth.session.user.name,
+            askedByEmail: auth.session.user.email,
           })),
         },
       },

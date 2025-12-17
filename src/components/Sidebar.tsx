@@ -82,7 +82,13 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session, status } = useSession();
   const { branding } = useBranding();
-  const isAdmin = session?.user?.role === "ADMIN";
+
+  // Check for admin access using capabilities (with legacy fallback)
+  const userCapabilities = session?.user?.capabilities || [];
+  const isAdmin = userCapabilities.includes("ADMIN") ||
+    userCapabilities.includes("MANAGE_USERS") ||
+    userCapabilities.includes("VIEW_ORG_DATA") ||
+    session?.user?.role === "ADMIN";
 
   // Filter nav items based on user role and feature flags
   const visibleNavItems = navItems.filter((section) => {

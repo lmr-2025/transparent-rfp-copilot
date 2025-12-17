@@ -70,6 +70,7 @@ export const actionConfig: Record<AuditAction, { label: string; color: string }>
 export const TABS = [
   { id: "branding", label: "Branding" },
   { id: "integrations", label: "Integrations" },
+  { id: "auth-groups", label: "Auth Groups" },
   { id: "llm-speed", label: "LLM Speed" },
   { id: "rate-limits", label: "Rate Limits" },
   { id: "categories", label: "Categories" },

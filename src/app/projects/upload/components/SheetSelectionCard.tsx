@@ -131,8 +131,14 @@ export default function SheetSelectionCard({
                     borderRadius: "4px",
                     fontSize: "0.85rem",
                     fontWeight: 500,
-                    minWidth: "100px"
-                  }}>
+                    minWidth: "140px",
+                    maxWidth: "200px",
+                    whiteSpace: "nowrap",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis"
+                  }}
+                  title={sheet.name}
+                  >
                     {sheet.name}
                   </span>
                   <select
@@ -151,7 +157,7 @@ export default function SheetSelectionCard({
                       <option key={col} value={col}>{col}</option>
                     ))}
                   </select>
-                  <span style={{ color: "#64748b", fontSize: "0.8rem" }}>
+                  <span style={{ color: "#64748b", fontSize: "0.8rem", whiteSpace: "nowrap" }}>
                     {sheet.rows.length} rows
                   </span>
                 </div>

@@ -13,11 +13,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User roles
+// User roles (legacy - being replaced by capabilities)
 enum UserRole {
   USER
   ADMIN
   PROMPT_ADMIN  // Can edit all system prompts including sensitive ones
+}
+
+// User capabilities - granular permissions
+enum Capability {
+  ASK_QUESTIONS      // Quick questions, chat, view own history
+  CREATE_PROJECTS    // Create/manage bulk projects, upload documents
+  REVIEW_ANSWERS     // Verify, correct, flag/resolve answers
+  MANAGE_KNOWLEDGE   // Create/edit skills, documents, URLs
+  MANAGE_PROMPTS     // Edit system prompts (prompt builder)
+  VIEW_ORG_DATA      // See org-wide question log, accuracy metrics
+  MANAGE_USERS       // Assign capabilities, manage group mappings
+  ADMIN              // Full access, system settings, delete anything
 }
 
 // NextAuth.js models
@@ -27,7 +39,12 @@ model User {
   email            String?             @unique
   emailVerified    DateTime?
   image            String?
-  role             UserRole            @default(USER)
+  role             UserRole            @default(USER) // Legacy - kept for backwards compatibility
+  // Capabilities system
+  capabilities        Capability[]     @default([ASK_QUESTIONS]) // Computed from SSO groups + manual
+  manualCapabilities  Capability[]     @default([])              // Admin-granted overrides (persist across logins)
+  ssoGroups           String[]         @default([])              // Last known SSO groups from login
+  // Relations
   accounts         Account[]
   sessions         Session[]
   preferences      UserPreference?
@@ -98,6 +115,23 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+// SSO Group to Capabilities mapping
+// Maps identity provider groups to application capabilities
+model AuthGroupMapping {
+  id           String       @id @default(cuid())
+  provider     String       // "okta", "google", "azure", etc.
+  groupId      String       // Group identifier from SSO token (e.g., group ID or name)
+  groupName    String?      // Human-readable name for display
+  capabilities Capability[] // Capabilities granted by this group
+  isActive     Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([provider, groupId])
+  @@index([provider])
+  @@index([isActive])
+}
+
 model BulkProject {
   id             String   @id @default(uuid())
   name           String
@@ -135,6 +169,11 @@ model BulkRow {
   response             String   @db.Text @default("")
   status               RowStatus @default(PENDING)
   error                String?  @db.Text
+  createdAt            DateTime @default(now())
+  // Who asked/created this question (for org-wide tracking)
+  askedById            String?  // User ID
+  askedByName          String?  // Cached display name
+  askedByEmail         String?  // Cached email
   conversationHistory  Json?    // Stored as JSON: { role: string; content: string }[]
   confidence           String?
   sources              String?  @db.Text
@@ -183,6 +222,8 @@ model BulkRow {
   @@index([status])
   @@index([flaggedForReview])
   @@index([queuedForReview])
+  @@index([askedById])
+  @@index([createdAt])
 }
 
 enum ProjectStatus {

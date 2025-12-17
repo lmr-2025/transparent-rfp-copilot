@@ -14,7 +14,10 @@ export async function GET(
     const { id } = await params;
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
-    const isAdmin = session?.user?.role === "ADMIN";
+    const userCapabilities = session?.user?.capabilities || [];
+    const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+      userCapabilities.includes("ADMIN") ||
+      session?.user?.role === "ADMIN";
 
     const preset = await prisma.instructionPreset.findUnique({
       where: { id },
@@ -61,7 +64,10 @@ export async function PUT(
     }
 
     const isOwner = preset.createdBy === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
+    const userCapabilities = session.user.capabilities || [];
+    const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+      userCapabilities.includes("ADMIN") ||
+      session.user.role === "ADMIN";
 
     const data = await request.json();
     const {
@@ -197,7 +203,10 @@ export async function DELETE(
 
     // Check ownership: must be owner OR admin
     const isOwner = preset.createdBy === session.user.id;
-    const isAdmin = session.user.role === "ADMIN";
+    const userCapabilities = session.user.capabilities || [];
+    const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+      userCapabilities.includes("ADMIN") ||
+      session.user.role === "ADMIN";
     if (!isOwner && !isAdmin) {
       return errors.forbidden("Access denied");
     }

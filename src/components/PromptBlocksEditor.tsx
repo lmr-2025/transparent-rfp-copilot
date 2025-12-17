@@ -8,7 +8,7 @@ type PromptBlocksEditorProps = {
   modifiers: PromptModifier[];
   compositions: PromptComposition[];
   onBlockChange: (blockId: string, variants: Record<string, string>) => void;
-  onModifierChange: (modifierId: string, content: string) => void;
+  onModifierChange: (modifierId: string, name: string, content: string) => void;
   saving?: boolean;
   previewContext: PromptContext;
 };
@@ -354,7 +354,7 @@ export default function PromptBlocksEditor({
                     <TierWarning tier={mod.tier} />
                     <textarea
                       value={mod.content}
-                      onChange={(e) => onModifierChange(mod.id, e.target.value)}
+                      onChange={(e) => onModifierChange(mod.id, mod.name, e.target.value)}
                       disabled={saving}
                       style={{
                         width: "100%",
@@ -413,23 +413,62 @@ export default function PromptBlocksEditor({
                   </span>
                 </div>
                 {isExpanded && (
-                  <div style={{ padding: "12px" }}>
+                  <div style={{ padding: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
                     <TierWarning tier={mod.tier} />
-                    <textarea
-                      value={mod.content}
-                      onChange={(e) => onModifierChange(mod.id, e.target.value)}
-                      disabled={saving}
-                      style={{
-                        width: "100%",
-                        minHeight: "80px",
-                        padding: "10px",
-                        borderRadius: "6px",
-                        border: "1px solid #cbd5e1",
-                        fontFamily: "monospace",
-                        fontSize: "13px",
-                        resize: "vertical",
-                      }}
-                    />
+                    {/* Title field */}
+                    <div>
+                      <label style={{
+                        display: "block",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: "4px",
+                        textTransform: "uppercase",
+                      }}>
+                        Title
+                      </label>
+                      <input
+                        type="text"
+                        value={mod.name}
+                        onChange={(e) => onModifierChange(mod.id, e.target.value, mod.content)}
+                        disabled={saving}
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "13px",
+                        }}
+                      />
+                    </div>
+                    {/* Content field */}
+                    <div>
+                      <label style={{
+                        display: "block",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#64748b",
+                        marginBottom: "4px",
+                        textTransform: "uppercase",
+                      }}>
+                        Content
+                      </label>
+                      <textarea
+                        value={mod.content}
+                        onChange={(e) => onModifierChange(mod.id, mod.name, e.target.value)}
+                        disabled={saving}
+                        style={{
+                          width: "100%",
+                          minHeight: "80px",
+                          padding: "10px",
+                          borderRadius: "6px",
+                          border: "1px solid #cbd5e1",
+                          fontFamily: "monospace",
+                          fontSize: "13px",
+                          resize: "vertical",
+                        }}
+                      />
+                    </div>
                   </div>
                 )}
               </div>

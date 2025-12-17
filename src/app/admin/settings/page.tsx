@@ -11,6 +11,7 @@ import { parseApiData } from "@/lib/apiClient";
 import {
   BrandingTab,
   IntegrationsTab,
+  AuthGroupsTab,
   LLMSpeedTab,
   RateLimitsTab,
   CategoriesTab,
@@ -178,6 +179,7 @@ function AdminSettingsContent() {
           {activeTab === "integrations" && (
             <IntegrationsTab settings={settings} onSave={handleSaveIntegration} />
           )}
+          {activeTab === "auth-groups" && <AuthGroupsTab />}
           {activeTab === "llm-speed" && <LLMSpeedTab />}
           {activeTab === "rate-limits" && <RateLimitsTab />}
           {activeTab === "categories" && <CategoriesTab />}

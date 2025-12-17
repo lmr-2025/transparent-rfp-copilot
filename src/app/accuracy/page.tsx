@@ -141,7 +141,12 @@ function StatusIcon({ status }: { status: QuestionLogStatus }) {
 
 export default function AccuracyPage() {
   const { data: session } = useSession();
-  const isAdmin = (session?.user as { role?: string })?.role === "ADMIN" || (session?.user as { role?: string })?.role === "PROMPT_ADMIN";
+  // Check for org data access using capabilities (with legacy fallback)
+  const userCapabilities = session?.user?.capabilities || [];
+  const isAdmin = userCapabilities.includes("VIEW_ORG_DATA") ||
+    userCapabilities.includes("ADMIN") ||
+    (session?.user as { role?: string })?.role === "ADMIN" ||
+    (session?.user as { role?: string })?.role === "PROMPT_ADMIN";
 
   // Tab state
   const [activeTab, setActiveTab] = useState<ActiveTab>("accuracy");
@@ -162,6 +167,8 @@ export default function AccuracyPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<QuestionLogStatus | "all">("answered");
   const [selectedSource, setSelectedSource] = useState<QuestionLogSource | "all">("all");
+  const [selectedUserId, setSelectedUserId] = useState<string>(""); // User filter for org-wide tracking
+  const [users, setUsers] = useState<{ id: string; name: string | null; email: string | null }[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -193,6 +200,7 @@ export default function AccuracyPage() {
       if (searchQuery) params.set("search", searchQuery);
       if (selectedStatus !== "all") params.set("status", selectedStatus);
       if (selectedSource !== "all") params.set("source", selectedSource);
+      if (selectedUserId) params.set("userId", selectedUserId);
 
       const response = await fetch(`/api/question-log?${params.toString()}`);
       if (!response.ok) throw new Error("Failed to fetch question log");
@@ -206,11 +214,26 @@ export default function AccuracyPage() {
     } finally {
       setLogLoading(false);
     }
-  }, [logPagination.page, logPagination.limit, searchQuery, selectedStatus, selectedSource]);
+  }, [logPagination.page, logPagination.limit, searchQuery, selectedStatus, selectedSource, selectedUserId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch users for the filter dropdown
+  useEffect(() => {
+    if (activeTab === "question-log" && users.length === 0) {
+      fetch("/api/users")
+        .then((res) => res.json())
+        .then((result) => {
+          const data = result.data || result;
+          setUsers(data.users || []);
+        })
+        .catch(() => {
+          // Silent fail - users filter won't be populated
+        });
+    }
+  }, [activeTab, users.length]);
 
   // Fetch question log when switching to that tab or when filters change
   useEffect(() => {
@@ -234,10 +257,11 @@ export default function AccuracyPage() {
     setSearchQuery("");
     setSelectedStatus("answered");
     setSelectedSource("all");
+    setSelectedUserId("");
     setLogPagination((prev) => ({ ...prev, page: 1 }));
   };
 
-  const hasActiveFilters = searchQuery || selectedStatus !== "answered" || selectedSource !== "all";
+  const hasActiveFilters = searchQuery || selectedStatus !== "answered" || selectedSource !== "all" || selectedUserId;
 
   const handleDeleteEntry = async (entry: QuestionLogEntry) => {
     if (!confirm(`Delete this question?\n\n"${entry.question.slice(0, 100)}${entry.question.length > 100 ? "..." : ""}"\n\nThis action cannot be undone.`)) {
@@ -953,6 +977,21 @@ export default function AccuracyPage() {
                   <option value="all">All Sources</option>
                   <option value="project">Projects</option>
                   <option value="questions">Quick Questions</option>
+                </select>
+                <select
+                  value={selectedUserId}
+                  onChange={(e) => {
+                    setSelectedUserId(e.target.value);
+                    setLogPagination((p) => ({ ...p, page: 1 }));
+                  }}
+                  style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.875rem" }}
+                >
+                  <option value="">All Team Members</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.name || user.email || "Unknown User"}
+                    </option>
+                  ))}
                 </select>
                 {hasActiveFilters && (
                   <button onClick={clearFilters} style={{ padding: "6px 12px", color: "#64748b", fontSize: "0.875rem", background: "none", border: "none", cursor: "pointer" }}>

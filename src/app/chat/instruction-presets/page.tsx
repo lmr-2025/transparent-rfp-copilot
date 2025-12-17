@@ -21,8 +21,12 @@ function InstructionsContent() {
   const initialTab = (searchParams.get("tab") as TabId) || "presets";
   const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
-  const userRole = (session?.user as { role?: string })?.role;
-  const isAdmin = userRole === "ADMIN" || userRole === "PROMPT_ADMIN";
+  // Check for prompt management access using capabilities (with legacy fallback)
+  const userCapabilities = session?.user?.capabilities || [];
+  const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") ||
+    userCapabilities.includes("ADMIN") ||
+    (session?.user as { role?: string })?.role === "ADMIN" ||
+    (session?.user as { role?: string })?.role === "PROMPT_ADMIN";
 
   const handleTabChange = (tab: TabId) => {
     setActiveTab(tab);

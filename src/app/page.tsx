@@ -62,7 +62,12 @@ function Card({ href, title, description, accentColor, bgColor, featured }: Card
 export default function HomePage() {
   const { branding, isLoading } = useBranding();
   const { data: session } = useSession();
-  const isAdmin = session?.user?.role === "ADMIN" || session?.user?.role === "PROMPT_ADMIN";
+  // Check for admin access using capabilities (with legacy fallback)
+  const userCapabilities = session?.user?.capabilities || [];
+  const isAdmin = userCapabilities.includes("ADMIN") ||
+    userCapabilities.includes("MANAGE_PROMPTS") ||
+    session?.user?.role === "ADMIN" ||
+    session?.user?.role === "PROMPT_ADMIN";
 
   return (
     <div style={{

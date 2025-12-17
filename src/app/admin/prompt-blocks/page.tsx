@@ -57,9 +57,9 @@ export default function PromptBlocksPage() {
     maxWidth: PREVIEW_MAX_WIDTH,
   });
 
-  // Check if user has admin access
-  const userRole = (session?.user as { role?: string })?.role;
-  const isAdmin = userRole === "ADMIN" || userRole === "PROMPT_ADMIN";
+  // Check if user has prompt management access
+  const userCapabilities = session?.user?.capabilities || [];
+  const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") || userCapabilities.includes("ADMIN");
 
   // Load blocks from API
   useEffect(() => {
@@ -125,10 +125,10 @@ export default function PromptBlocksPage() {
     ));
   };
 
-  const handleModifierChange = (modifierId: string, content: string) => {
+  const handleModifierChange = (modifierId: string, name: string, content: string) => {
     setHasChanges(true);
     setModifiers(prev => prev.map(m =>
-      m.id === modifierId ? { ...m, content } : m
+      m.id === modifierId ? { ...m, name, content } : m
     ));
   };
 
