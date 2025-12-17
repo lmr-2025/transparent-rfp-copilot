@@ -1,18 +1,11 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, Eye, Zap } from "lucide-react";
-import { InlineLoader } from "@/components/ui/loading";
-import { InlineError } from "@/components/ui/status-display";
-import ReactMarkdown from "react-markdown";
+import { Sparkles, Zap } from "lucide-react";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
+import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
 import BuilderPreviewPanel, { PresetDraft } from "./BuilderPreviewPanel";
-
-type Message = {
-  role: "assistant" | "user";
-  content: string;
-};
 
 // Resizable panel constraints
 const MIN_PANEL_WIDTH = 300;
@@ -59,9 +52,7 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatSystemPrompt, setChatSystemPrompt] = useState<string>("");
-  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const [builderSystemPrompt, setBuilderSystemPrompt] = useState<string>("");
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Resizable panel
@@ -78,14 +69,6 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
     minWidth: MIN_PANEL_WIDTH,
     maxWidth: MAX_PANEL_WIDTH,
   });
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   // Fetch system prompts on mount for transparency
   useEffect(() => {
@@ -131,7 +114,6 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
   };
 
   const cleanResponseForDisplay = (response: string): string => {
-    // Remove the preset block from display, show a friendly message instead
     const cleaned = response.replace(/---PRESET_READY---[\s\S]*?---END_PRESET---/, "").trim();
     if (cleaned !== response) {
       return cleaned + "\n\nI've generated your instruction preset! You can see it in the preview panel on the right. Feel free to edit it there, then click \"Save as Preset\" when you're ready.";
@@ -193,13 +175,6 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
   const handleStartOver = () => {
     setMessages([INITIAL_MESSAGE]);
     setDraft({ name: "", description: "", content: "" });
@@ -244,8 +219,64 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
     }
   };
 
-  // Check if we should show templates (only on initial message)
-  const showTemplates = messages.length === 1 && messages[0] === INITIAL_MESSAGE;
+  // Starter template buttons
+  const templateButtons = (
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      {STARTER_TEMPLATES.map((template) => (
+        <button
+          key={template.id}
+          onClick={() => handleTemplateClick(template)}
+          style={{
+            padding: "12px 16px",
+            backgroundColor: "#fff",
+            border: "1px solid #e2e8f0",
+            borderRadius: "12px",
+            textAlign: "left",
+            cursor: "pointer",
+            transition: "all 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "#6366f1";
+            e.currentTarget.style.backgroundColor = "#f8fafc";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "#e2e8f0";
+            e.currentTarget.style.backgroundColor = "#fff";
+          }}
+        >
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: "4px",
+          }}>
+            <Sparkles size={14} style={{ color: "#6366f1" }} />
+            <span style={{ fontWeight: 500, fontSize: "14px", color: "#334155" }}>
+              {template.label}
+            </span>
+          </div>
+          <span style={{ fontSize: "12px", color: "#64748b" }}>
+            {template.description}
+          </span>
+        </button>
+      ))}
+      <button
+        onClick={() => inputRef.current?.focus()}
+        style={{
+          padding: "12px 16px",
+          backgroundColor: "#fff",
+          border: "1px dashed #cbd5e1",
+          borderRadius: "12px",
+          textAlign: "left",
+          cursor: "pointer",
+          color: "#64748b",
+          fontSize: "14px",
+        }}
+      >
+        Or describe your own...
+      </button>
+    </div>
+  );
 
   return (
     <div
@@ -257,243 +288,36 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
       }}
     >
       {/* Left Column - Chat */}
-      <div style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "#fff",
-      }}>
-        {/* Messages Area */}
-        <div style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "24px",
-        }}>
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              style={{
-                marginBottom: "16px",
-                display: "flex",
-                justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-              }}
-            >
-              <div style={{
-                maxWidth: "85%",
-                padding: "12px 16px",
-                borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                backgroundColor: msg.role === "user" ? "#6366f1" : "#f1f5f9",
-                color: msg.role === "user" ? "#fff" : "#334155",
-                fontSize: "14px",
-                lineHeight: "1.5",
-              }}>
-                {msg.role === "user" ? (
-                  <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
-                ) : (
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
-                      strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
-                      em: ({ children }) => <em>{children}</em>,
-                      ul: ({ children }) => <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ul>,
-                      ol: ({ children }) => <ol style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ol>,
-                      li: ({ children }) => <li style={{ marginBottom: "4px" }}>{children}</li>,
-                      code: ({ children }) => (
-                        <code style={{
-                          backgroundColor: "#e2e8f0",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          fontSize: "13px",
-                          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                        }}>
-                          {children}
-                        </code>
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Starter Templates */}
-          {showTemplates && (
-            <div style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "8px",
-              marginTop: "8px",
-              marginLeft: "8px",
-            }}>
-              {STARTER_TEMPLATES.map((template) => (
-                <button
-                  key={template.id}
-                  onClick={() => handleTemplateClick(template)}
-                  style={{
-                    padding: "12px 16px",
-                    backgroundColor: "#fff",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "12px",
-                    textAlign: "left",
-                    cursor: "pointer",
-                    transition: "all 0.15s",
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = "#6366f1";
-                    e.currentTarget.style.backgroundColor = "#f8fafc";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = "#e2e8f0";
-                    e.currentTarget.style.backgroundColor = "#fff";
-                  }}
-                >
-                  <div style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    marginBottom: "4px",
-                  }}>
-                    <Sparkles size={14} style={{ color: "#6366f1" }} />
-                    <span style={{ fontWeight: 500, fontSize: "14px", color: "#334155" }}>
-                      {template.label}
-                    </span>
-                  </div>
-                  <span style={{ fontSize: "12px", color: "#64748b" }}>
-                    {template.description}
-                  </span>
-                </button>
-              ))}
-              <button
-                onClick={() => inputRef.current?.focus()}
-                style={{
-                  padding: "12px 16px",
-                  backgroundColor: "#fff",
-                  border: "1px dashed #cbd5e1",
-                  borderRadius: "12px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  color: "#64748b",
-                  fontSize: "14px",
-                }}
-              >
-                Or describe your own...
-              </button>
-            </div>
-          )}
-
-          {/* Loading indicator */}
-          {isLoading && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 16px",
-              color: "#64748b",
-              fontSize: "14px",
-            }}>
-              <InlineLoader size="sm" />
-              Thinking...
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Error Display */}
-        {error && (
-          <div style={{ padding: "12px 24px" }}>
-            <InlineError message={error} onDismiss={() => setError(null)} />
-          </div>
-        )}
-
-        {/* Input Area */}
-        <div style={{
-          padding: "16px 24px",
-          borderTop: "1px solid #e2e8f0",
-          backgroundColor: "#fff",
-        }}>
-          {/* Controls Row */}
+      <ConversationalPanel
+        messages={messages}
+        input={input}
+        onInputChange={setInput}
+        onSend={handleSend}
+        isLoading={isLoading}
+        loadingText="Thinking..."
+        placeholder="Describe the assistant you want to create..."
+        error={error}
+        onErrorDismiss={() => setError(null)}
+        postInitialContent={templateButtons}
+        showPostInitialOnFirstOnly={true}
+        systemPrompt={builderSystemPrompt}
+        systemPromptTitle="Builder System Prompt"
+        inputBackgroundColor="#fff"
+        textareaRows={2}
+        autoResizeTextarea={false}
+        inputControlsRight={
           <div style={{
             display: "flex",
-            justifyContent: "space-between",
             alignItems: "center",
-            marginBottom: "12px",
+            gap: "6px",
+            fontSize: "12px",
+            color: "#64748b",
           }}>
-            <button
-              onClick={() => setShowSystemPromptModal(true)}
-              disabled={!builderSystemPrompt}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                padding: "6px 12px",
-                backgroundColor: "#fff",
-                border: "1px solid #e2e8f0",
-                borderRadius: "6px",
-                fontSize: "13px",
-                color: builderSystemPrompt ? "#475569" : "#94a3b8",
-                cursor: builderSystemPrompt ? "pointer" : "not-allowed",
-              }}
-            >
-              <Eye size={14} />
-              Preview System Prompt
-            </button>
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              fontSize: "12px",
-              color: "#64748b",
-            }}>
-              <Zap size={14} style={{ color: "#8b5cf6" }} />
-              Quality
-            </div>
+            <Zap size={14} style={{ color: "#8b5cf6" }} />
+            Quality
           </div>
-          <div style={{
-            display: "flex",
-            gap: "12px",
-            alignItems: "flex-end",
-          }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Describe the assistant you want to create..."
-              rows={2}
-              style={{
-                flex: 1,
-                padding: "12px 16px",
-                border: "1px solid #e2e8f0",
-                borderRadius: "12px",
-                fontSize: "14px",
-                resize: "none",
-                outline: "none",
-                fontFamily: "inherit",
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              style={{
-                padding: "12px",
-                backgroundColor: input.trim() && !isLoading ? "#6366f1" : "#e2e8f0",
-                color: input.trim() && !isLoading ? "#fff" : "#94a3b8",
-                border: "none",
-                borderRadius: "12px",
-                cursor: input.trim() && !isLoading ? "pointer" : "not-allowed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {isLoading ? <InlineLoader size="md" /> : <Send size={20} />}
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Resizable Divider */}
       <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
@@ -517,112 +341,6 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
           chatSystemPrompt={chatSystemPrompt}
         />
       </div>
-
-      {/* System Prompt Modal */}
-      {showSystemPromptModal && builderSystemPrompt && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0, 0, 0, 0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-          }}
-          onClick={() => setShowSystemPromptModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: "12px",
-              width: "90%",
-              maxWidth: "700px",
-              maxHeight: "80vh",
-              display: "flex",
-              flexDirection: "column",
-              boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div style={{
-              padding: "16px 20px",
-              borderBottom: "1px solid #e2e8f0",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "#334155" }}>
-                Builder System Prompt
-              </h3>
-              <button
-                onClick={() => setShowSystemPromptModal(false)}
-                style={{
-                  padding: "4px 8px",
-                  backgroundColor: "transparent",
-                  border: "none",
-                  fontSize: "20px",
-                  color: "#64748b",
-                  cursor: "pointer",
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <div style={{
-              padding: "20px",
-              overflowY: "auto",
-              flex: 1,
-            }}>
-              <p style={{
-                margin: "0 0 12px 0",
-                fontSize: "13px",
-                color: "#64748b",
-              }}>
-                This is the system prompt guiding the AI as it helps you build instruction presets.
-                You can edit this prompt in Admin → Settings → Prompts.
-              </p>
-              <pre style={{
-                margin: 0,
-                padding: "16px",
-                backgroundColor: "#f8fafc",
-                border: "1px solid #e2e8f0",
-                borderRadius: "8px",
-                fontSize: "12px",
-                lineHeight: "1.6",
-                color: "#334155",
-                whiteSpace: "pre-wrap",
-                wordBreak: "break-word",
-                fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-              }}>
-                {builderSystemPrompt}
-              </pre>
-            </div>
-            <div style={{
-              padding: "12px 20px",
-              borderTop: "1px solid #e2e8f0",
-              display: "flex",
-              justifyContent: "flex-end",
-            }}>
-              <button
-                onClick={() => setShowSystemPromptModal(false)}
-                style={{
-                  padding: "8px 16px",
-                  backgroundColor: "#6366f1",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                  fontWeight: 500,
-                  cursor: "pointer",
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

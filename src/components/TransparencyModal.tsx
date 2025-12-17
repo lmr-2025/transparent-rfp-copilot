@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ModalContainer } from "@/components/ui/modal";
 
 export type TransparencyConfig = {
   label: string;
@@ -54,36 +55,21 @@ export default function TransparencyModal({
   headerColor = "gray",
 }: TransparencyModalProps) {
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="transparency-modal-title"
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
+    <ModalContainer
+      isOpen={true}
+      onClose={onClose}
+      width="large"
+      padding={false}
+      contentStyle={{
+        maxHeight: "90vh",
+        overflow: "hidden",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: "20px",
+        flexDirection: "column",
+        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
       }}
-      onClick={onClose}
+      overlayStyle={{ padding: "20px" }}
+      ariaLabelledBy="transparency-modal-title"
     >
-      <div
-        style={{
-          backgroundColor: "#fff",
-          borderRadius: "12px",
-          width: "100%",
-          maxWidth: "900px",
-          maxHeight: "90vh",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-        }}
-        onClick={e => e.stopPropagation()}
-      >
         {/* Header */}
         <div
           style={{
@@ -229,7 +215,6 @@ export default function TransparencyModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalContainer>
   );
 }

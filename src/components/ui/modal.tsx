@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, ReactNode } from "react";
+import { useEffect, useCallback, ReactNode, CSSProperties } from "react";
 
 /**
  * Shared modal styles for inline-styled modals
@@ -29,6 +29,16 @@ export const modalStyles = {
   },
   modalExtraWide: {
     maxWidth: "800px",
+  },
+  // Additional preset widths for larger modals
+  modalLarge: {
+    maxWidth: "900px",
+  },
+  modalXLarge: {
+    maxWidth: "1000px",
+  },
+  modalFull: {
+    maxWidth: "1100px",
   },
   title: {
     fontSize: "18px",
@@ -98,7 +108,14 @@ type ModalContainerProps = {
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
-  width?: "default" | "wide" | "extra-wide";
+  /** Preset width options or custom max-width value (e.g., "900px") */
+  width?: "default" | "wide" | "extra-wide" | "large" | "xlarge" | "full" | string;
+  /** Override modal content styles (merged with defaults) */
+  contentStyle?: CSSProperties;
+  /** Override overlay styles (merged with defaults) */
+  overlayStyle?: CSSProperties;
+  /** Whether to apply default padding (default: true) */
+  padding?: boolean;
   ariaLabelledBy?: string;
 };
 
@@ -107,6 +124,9 @@ export function ModalContainer({
   onClose,
   children,
   width = "default",
+  contentStyle,
+  overlayStyle,
+  padding = true,
   ariaLabelledBy = "modal-title",
 }: ModalContainerProps) {
   // Handle escape key
@@ -133,15 +153,22 @@ export function ModalContainer({
 
   if (!isOpen) return null;
 
-  const widthStyle = width === "wide"
-    ? modalStyles.modalWide
-    : width === "extra-wide"
-    ? modalStyles.modalExtraWide
-    : {};
+  // Resolve width to a style object
+  const widthStyle = (() => {
+    switch (width) {
+      case "default": return {};
+      case "wide": return modalStyles.modalWide;
+      case "extra-wide": return modalStyles.modalExtraWide;
+      case "large": return modalStyles.modalLarge;
+      case "xlarge": return modalStyles.modalXLarge;
+      case "full": return modalStyles.modalFull;
+      default: return { maxWidth: width }; // Custom width string
+    }
+  })();
 
   return (
     <div
-      style={modalStyles.overlay}
+      style={{ ...modalStyles.overlay, ...overlayStyle }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -149,7 +176,12 @@ export function ModalContainer({
       aria-modal="true"
       aria-labelledby={ariaLabelledBy}
     >
-      <div style={{ ...modalStyles.modal, ...widthStyle }}>
+      <div style={{
+        ...modalStyles.modal,
+        ...widthStyle,
+        ...(padding ? {} : { padding: 0 }),
+        ...contentStyle,
+      }}>
         {children}
       </div>
     </div>

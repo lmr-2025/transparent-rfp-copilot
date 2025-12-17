@@ -318,35 +318,33 @@ export default function PresetsTab() {
       )}
 
       {/* Edit Modal */}
-      {editingPreset && (
-        <EditPresetModal
-          preset={editingPreset}
-          editName={editName}
-          editDescription={editDescription}
-          editContent={editContent}
-          onSetEditName={setEditName}
-          onSetEditDescription={setEditDescription}
-          onSetEditContent={setEditContent}
-          onSave={handleSaveEdit}
-          onClose={() => setEditingPreset(null)}
-          actionInProgress={actionInProgress}
-        />
-      )}
+      <EditPresetModal
+        isOpen={!!editingPreset}
+        preset={editingPreset!}
+        editName={editName}
+        editDescription={editDescription}
+        editContent={editContent}
+        onSetEditName={setEditName}
+        onSetEditDescription={setEditDescription}
+        onSetEditContent={setEditContent}
+        onSave={handleSaveEdit}
+        onClose={() => setEditingPreset(null)}
+        actionInProgress={actionInProgress}
+      />
 
       {/* Create Modal */}
-      {showCreate && (
-        <CreatePresetModal
-          newName={newName}
-          newDescription={newDescription}
-          newContent={newContent}
-          onSetNewName={setNewName}
-          onSetNewDescription={setNewDescription}
-          onSetNewContent={setNewContent}
-          onCreate={handleCreate}
-          onClose={() => setShowCreate(false)}
-          actionInProgress={actionInProgress}
-        />
-      )}
+      <CreatePresetModal
+        isOpen={showCreate}
+        newName={newName}
+        newDescription={newDescription}
+        newContent={newContent}
+        onSetNewName={setNewName}
+        onSetNewDescription={setNewDescription}
+        onSetNewContent={setNewContent}
+        onCreate={handleCreate}
+        onClose={() => setShowCreate(false)}
+        actionInProgress={actionInProgress}
+      />
     </div>
   );
 }

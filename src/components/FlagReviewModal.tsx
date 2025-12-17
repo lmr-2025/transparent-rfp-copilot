@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import { ModalContainer } from "@/components/ui/modal";
 
 interface User {
   id: string;
@@ -32,23 +33,6 @@ interface FlagReviewModalProps {
 }
 
 const styles = {
-  overlay: {
-    position: "fixed" as const,
-    inset: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 1000,
-  },
-  modal: {
-    backgroundColor: "#fff",
-    borderRadius: "12px",
-    padding: "24px",
-    maxWidth: "520px",
-    width: "90%",
-    boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
-  },
   title: {
     fontSize: "18px",
     fontWeight: 600,
@@ -218,27 +202,6 @@ export default function FlagReviewModal({
     }
   }, [isOpen, initialAction]);
 
-  // Handle escape key
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onCancel();
-      }
-    },
-    [onCancel]
-  );
-
-  useEffect(() => {
-    if (isOpen) {
-      document.addEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      document.body.style.overflow = "";
-    };
-  }, [isOpen, handleKeyDown]);
-
   const handleSubmit = (sendTiming: SendTiming) => {
     const selectedUser = users.find((u) => u.id === selectedUserId);
     onSubmit({
@@ -252,20 +215,14 @@ export default function FlagReviewModal({
     });
   };
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      style={styles.overlay}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="flag-review-modal-title"
+    <ModalContainer
+      isOpen={isOpen}
+      onClose={onCancel}
+      width="520px"
+      ariaLabelledBy="flag-review-modal-title"
     >
-      <div style={styles.modal}>
-        <h2 id="flag-review-modal-title" style={styles.title}>
+      <h2 id="flag-review-modal-title" style={styles.title}>
           Flag or Request Review
         </h2>
         <p style={styles.subtitle}>
@@ -371,8 +328,7 @@ export default function FlagReviewModal({
             {action === "flag" ? "Flag Now" : "Send Now"}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalContainer>
   );
 }
 

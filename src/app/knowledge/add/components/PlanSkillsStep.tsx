@@ -1,19 +1,16 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Send, Eye, SkipForward, AlertTriangle } from "lucide-react";
-import { InlineLoader } from "@/components/ui/loading";
-import { InlineError } from "@/components/ui/status-display";
-import ReactMarkdown from "react-markdown";
+import { SkipForward, AlertTriangle } from "lucide-react";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { Button } from "@/components/ui/button";
+import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
 import {
   useBulkImportStore,
   PlanningMessage,
   SkillPlan,
   SkillPlanItem,
-  PlanningMode,
 } from "@/stores/bulk-import-store";
 import PlanPreviewPanel from "./PlanPreviewPanel";
 
@@ -55,9 +52,6 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
-  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const hasInitializedRef = useRef(false);
 
   // Resizable panel
@@ -72,14 +66,6 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
     minWidth: MIN_PANEL_WIDTH,
     maxWidth: MAX_PANEL_WIDTH,
   });
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [planningMessages]);
 
   // Parse URLs from input
   const urls = urlInput
@@ -248,7 +234,6 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
 
     hasInitializedRef.current = true;
 
-    // Call API to get an intelligent initial analysis of the sources
     const initializeConversation = async () => {
       setIsLoading(true);
       try {
@@ -277,7 +262,7 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
           setSystemPrompt(prompt);
         }
 
-        // Check if response contains a plan (unlikely on first message, but handle it)
+        // Check if response contains a plan
         const extractedPlan = parseSkillPlan(response);
         if (extractedPlan) {
           setSkillPlan(extractedPlan);
@@ -303,7 +288,6 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
             content: `I'll help you create a skill about "${planningMode.topic}". What sources do you have, or would you like me to suggest what to cover?`,
           });
         } else {
-          const sourceCount = urls.length + uploadedDocuments.length;
           const urlText = urls.length > 0 ? `${urls.length} URL${urls.length > 1 ? "s" : ""}` : "";
           const docText = uploadedDocuments.length > 0 ? `${uploadedDocuments.length} document${uploadedDocuments.length > 1 ? "s" : ""}` : "";
           const sourceList = [urlText, docText].filter(Boolean).join(" and ");
@@ -375,20 +359,89 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  const handleAcceptPlan = () => {
-    approveSkillPlan();
-  };
-
   const handleSkip = () => {
     skipPlanning();
   };
+
+  // Convert PlanningMessage[] to Message[] for the ConversationalPanel
+  const messages: Message[] = planningMessages;
+
+  // Header component
+  const header = (
+    <div style={{
+      padding: "16px 24px",
+      borderBottom: "1px solid #e2e8f0",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+    }}>
+      <div>
+        <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#1e293b", margin: 0 }}>
+          {planningMode.type === "merge" ? "Merge Skills" :
+           planningMode.type === "split" ? "Split Skill" :
+           planningMode.type === "gap" ? "Create New Skill" :
+           "Plan Your Skills"}
+        </h3>
+        <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
+          {planningMode.type === "merge" ? "Combine multiple skills into one" :
+           planningMode.type === "split" ? "Divide a skill into focused pieces" :
+           planningMode.type === "gap" ? "Fill a gap in your knowledge library" :
+           "Discuss how to organize your sources before generating"}
+        </p>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleSkip}
+      >
+        <SkipForward className="h-4 w-4 mr-1" />
+        Skip Planning
+      </Button>
+    </div>
+  );
+
+  // Duplicate URL warning
+  const headerExtras = duplicateUrlInfo.hasDuplicates ? (
+    <div style={{
+      padding: "12px 24px",
+      backgroundColor: duplicateUrlInfo.allAreDuplicates ? "#fef3c7" : "#fefce8",
+      borderBottom: "1px solid #fde68a",
+      display: "flex",
+      alignItems: "flex-start",
+      gap: "12px",
+    }}>
+      <AlertTriangle size={18} style={{ color: "#d97706", flexShrink: 0, marginTop: "2px" }} />
+      <div style={{ flex: 1 }}>
+        <p style={{ fontSize: "13px", color: "#92400e", margin: 0, fontWeight: 500 }}>
+          {duplicateUrlInfo.allAreDuplicates
+            ? "All URLs already exist in your skill library"
+            : `${duplicateUrlInfo.duplicates.length} of ${urls.length} URLs already exist in skills`}
+        </p>
+        <p style={{ fontSize: "12px", color: "#a16207", margin: "4px 0 0 0" }}>
+          {duplicateUrlInfo.duplicates.slice(0, 2).map(d => (
+            <span key={d.url}>
+              {d.url.length > 40 ? d.url.slice(0, 40) + "..." : d.url} → <strong>{d.skills[0]}</strong>
+              <br />
+            </span>
+          ))}
+          {duplicateUrlInfo.duplicates.length > 2 && (
+            <span>...and {duplicateUrlInfo.duplicates.length - 2} more</span>
+          )}
+        </p>
+        {duplicateUrlInfo.allAreDuplicates && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSkip}
+            style={{ marginTop: "8px", backgroundColor: "#fff" }}
+          >
+            <SkipForward className="h-3 w-3 mr-1" />
+            Skip to refresh existing skills
+          </Button>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <div
@@ -401,243 +454,21 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
       }}
     >
       {/* Left Column - Chat */}
-      <div style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        backgroundColor: "#fff",
-        minWidth: 0,
-      }}>
-        {/* Header */}
-        <div style={{
-          padding: "16px 24px",
-          borderBottom: "1px solid #e2e8f0",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}>
-          <div>
-            <h3 style={{ fontSize: "16px", fontWeight: 600, color: "#1e293b", margin: 0 }}>
-              {planningMode.type === "merge" ? "Merge Skills" :
-               planningMode.type === "split" ? "Split Skill" :
-               planningMode.type === "gap" ? "Create New Skill" :
-               "Plan Your Skills"}
-            </h3>
-            <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
-              {planningMode.type === "merge" ? "Combine multiple skills into one" :
-               planningMode.type === "split" ? "Divide a skill into focused pieces" :
-               planningMode.type === "gap" ? "Fill a gap in your knowledge library" :
-               "Discuss how to organize your sources before generating"}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "8px" }}>
-            {systemPrompt && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSystemPromptModal(true)}
-                className="text-muted-foreground"
-              >
-                <Eye className="h-4 w-4 mr-1" />
-                View Prompt
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSkip}
-            >
-              <SkipForward className="h-4 w-4 mr-1" />
-              Skip Planning
-            </Button>
-          </div>
-        </div>
-
-        {/* Duplicate URL Warning */}
-        {duplicateUrlInfo.hasDuplicates && (
-          <div style={{
-            padding: "12px 24px",
-            backgroundColor: duplicateUrlInfo.allAreDuplicates ? "#fef3c7" : "#fefce8",
-            borderBottom: "1px solid #fde68a",
-            display: "flex",
-            alignItems: "flex-start",
-            gap: "12px",
-          }}>
-            <AlertTriangle size={18} style={{ color: "#d97706", flexShrink: 0, marginTop: "2px" }} />
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: "13px", color: "#92400e", margin: 0, fontWeight: 500 }}>
-                {duplicateUrlInfo.allAreDuplicates
-                  ? "All URLs already exist in your skill library"
-                  : `${duplicateUrlInfo.duplicates.length} of ${urls.length} URLs already exist in skills`}
-              </p>
-              <p style={{ fontSize: "12px", color: "#a16207", margin: "4px 0 0 0" }}>
-                {duplicateUrlInfo.duplicates.slice(0, 2).map(d => (
-                  <span key={d.url}>
-                    {d.url.length > 40 ? d.url.slice(0, 40) + "..." : d.url} → <strong>{d.skills[0]}</strong>
-                    <br />
-                  </span>
-                ))}
-                {duplicateUrlInfo.duplicates.length > 2 && (
-                  <span>...and {duplicateUrlInfo.duplicates.length - 2} more</span>
-                )}
-              </p>
-              {duplicateUrlInfo.allAreDuplicates && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleSkip}
-                  style={{ marginTop: "8px", backgroundColor: "#fff" }}
-                >
-                  <SkipForward className="h-3 w-3 mr-1" />
-                  Skip to refresh existing skills
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Messages Area */}
-        <div style={{
-          flex: 1,
-          overflowY: "auto",
-          padding: "24px",
-        }}>
-          {planningMessages.map((msg, idx) => (
-            <div
-              key={idx}
-              style={{
-                marginBottom: "16px",
-                display: "flex",
-                justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-              }}
-            >
-              <div style={{
-                maxWidth: "85%",
-                padding: "12px 16px",
-                borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                backgroundColor: msg.role === "user" ? "#6366f1" : "#f1f5f9",
-                color: msg.role === "user" ? "#fff" : "#334155",
-                fontSize: "14px",
-                lineHeight: "1.5",
-              }}>
-                {msg.role === "user" ? (
-                  <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
-                ) : (
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
-                      strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
-                      ul: ({ children }) => <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ul>,
-                      ol: ({ children }) => <ol style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ol>,
-                      li: ({ children }) => <li style={{ marginBottom: "4px" }}>{children}</li>,
-                      code: ({ children }) => (
-                        <code style={{
-                          backgroundColor: "#e2e8f0",
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          fontSize: "13px",
-                          fontFamily: "ui-monospace, monospace",
-                        }}>
-                          {children}
-                        </code>
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Loading indicator */}
-          {isLoading && (
-            <div style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "12px 16px",
-              color: "#64748b",
-              fontSize: "14px",
-            }}>
-              <InlineLoader size="sm" />
-              Thinking...
-            </div>
-          )}
-
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Error display */}
-        {error && (
-          <div style={{ padding: "12px 24px" }}>
-            <InlineError message={error} onDismiss={() => setError(null)} />
-          </div>
-        )}
-
-        {/* Input Area */}
-        <div style={{
-          padding: "16px 24px",
-          borderTop: "1px solid #e2e8f0",
-          backgroundColor: "#fafafa",
-        }}>
-          <div style={{
-            display: "flex",
-            gap: "12px",
-            alignItems: "flex-end",
-          }}>
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Discuss how to organize your skills..."
-              disabled={isLoading}
-              rows={1}
-              style={{
-                flex: 1,
-                padding: "12px 16px",
-                fontSize: "14px",
-                border: "1px solid #e2e8f0",
-                borderRadius: "12px",
-                resize: "none",
-                outline: "none",
-                fontFamily: "inherit",
-                minHeight: "44px",
-                maxHeight: "120px",
-              }}
-              onInput={(e) => {
-                const target = e.target as HTMLTextAreaElement;
-                target.style.height = "44px";
-                target.style.height = Math.min(target.scrollHeight, 120) + "px";
-              }}
-            />
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading}
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "12px",
-                border: "none",
-                backgroundColor: input.trim() && !isLoading ? "#6366f1" : "#e2e8f0",
-                color: input.trim() && !isLoading ? "#fff" : "#94a3b8",
-                cursor: input.trim() && !isLoading ? "pointer" : "not-allowed",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.15s",
-              }}
-            >
-              {isLoading ? (
-                <InlineLoader size="sm" />
-              ) : (
-                <Send size={18} />
-              )}
-            </button>
-          </div>
-        </div>
-      </div>
+      <ConversationalPanel
+        messages={messages}
+        input={input}
+        onInputChange={setInput}
+        onSend={handleSend}
+        isLoading={isLoading}
+        loadingText="Thinking..."
+        placeholder="Discuss how to organize your skills..."
+        error={error}
+        onErrorDismiss={() => setError(null)}
+        header={header}
+        headerExtras={headerExtras}
+        systemPrompt={systemPrompt}
+        systemPromptTitle="Planning System Prompt"
+      />
 
       {/* Resizable Divider */}
       <ResizableDivider
@@ -658,59 +489,10 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
           plan={skillPlan}
           sourceCount={urls.length + uploadedDocuments.length}
           existingSkillCount={existingSkills.length}
-          onAccept={handleAcceptPlan}
+          onAccept={approveSkillPlan}
           onSkip={handleSkip}
         />
       </div>
-
-      {/* System Prompt Modal */}
-      {showSystemPromptModal && systemPrompt && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-          }}
-          onClick={() => setShowSystemPromptModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: "12px",
-              maxWidth: "700px",
-              maxHeight: "80vh",
-              overflow: "auto",
-              padding: "24px",
-              margin: "20px",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: 600 }}>
-              Planning System Prompt
-            </h3>
-            <pre style={{
-              fontSize: "13px",
-              backgroundColor: "#f1f5f9",
-              padding: "16px",
-              borderRadius: "8px",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              margin: 0,
-            }}>
-              {systemPrompt}
-            </pre>
-            <div style={{ marginTop: "16px", textAlign: "right" }}>
-              <Button onClick={() => setShowSystemPromptModal(false)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

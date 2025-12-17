@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ModalContainer } from "@/components/ui/modal";
 
 export type PromptSection = {
   id: string;
@@ -36,8 +37,6 @@ export default function PromptBuilderModal({
 }: PromptBuilderModalProps) {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
 
-  if (!isOpen) return null;
-
   const toggleSection = (id: string) => {
     setExpandedSections((prev) => {
       const next = new Set(prev);
@@ -59,35 +58,21 @@ export default function PromptBuilderModal({
   };
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="prompt-builder-modal-title"
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
+    <ModalContainer
+      isOpen={isOpen}
+      onClose={onClose}
+      width="full"
+      padding={false}
+      contentStyle={{
+        borderRadius: "16px",
+        maxHeight: "90vh",
+        overflow: "hidden",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: "20px",
+        flexDirection: "column",
       }}
-      onClick={onClose}
+      overlayStyle={{ padding: "20px" }}
+      ariaLabelledBy="prompt-builder-modal-title"
     >
-      <div
-        style={{
-          backgroundColor: "#fff",
-          borderRadius: "16px",
-          width: "100%",
-          maxWidth: "1100px",
-          maxHeight: "90vh",
-          overflow: "hidden",
-          display: "flex",
-          flexDirection: "column",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div style={{
           padding: "20px 24px",
@@ -357,7 +342,6 @@ export default function PromptBuilderModal({
             ))}
           </div>
         </div>
-      </div>
-    </div>
+    </ModalContainer>
   );
 }

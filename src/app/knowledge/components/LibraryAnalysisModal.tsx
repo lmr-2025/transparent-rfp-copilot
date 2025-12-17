@@ -2,22 +2,16 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Send, Eye, X, AlertTriangle, Merge, Split, Tag, Lightbulb, ArrowRight } from "lucide-react";
-import { InlineLoader } from "@/components/ui/loading";
-import { InlineError } from "@/components/ui/status-display";
-import ReactMarkdown from "react-markdown";
+import { X, AlertTriangle, Merge, Split, Tag, Lightbulb, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ModalContainer } from "@/components/ui/modal";
+import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
 import { Skill } from "@/types/skill";
 
 type LibraryAnalysisModalProps = {
   skills: Skill[];
   isOpen: boolean;
   onClose: () => void;
-};
-
-type Message = {
-  role: "user" | "assistant";
-  content: string;
 };
 
 type Recommendation = {
@@ -56,9 +50,7 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
-  const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
   const [analysis, setAnalysis] = useState<AnalysisState>({ healthScore: null, recommendations: [] });
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasInitializedRef = useRef(false);
 
   // Find skill IDs from titles
@@ -86,19 +78,13 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
         }
         break;
       case "gap":
-        // Extract topic from title or description
         const topic = rec.title.replace(/^(Add|Create|Missing:?)\s*/i, "").trim();
         router.push(`/knowledge/add?mode=gap&topic=${encodeURIComponent(topic)}`);
         onClose();
         break;
       case "rename":
       case "quality":
-        // For rename/quality, we could open the skill editor directly
-        // For now, just navigate to the skill if we have one
-        if (skillIds.length >= 1) {
-          // Could link to skill detail page if it exists
-          // For now, just close and let user handle manually
-        }
+        // For rename/quality, could open the skill editor directly
         break;
     }
   };
@@ -112,7 +98,7 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
       case "split":
         return skillIds.length >= 1;
       case "gap":
-        return true; // Gap always can create new
+        return true;
       default:
         return false;
     }
@@ -128,14 +114,6 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
   // Build skill summaries for the API
   const buildSkillSummaries = useMemo(() => {
     return skills.map(skill => ({
@@ -146,15 +124,6 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
       contentPreview: skill.content.slice(0, 500) + (skill.content.length > 500 ? "..." : ""),
     }));
   }, [skills]);
-
-  // Parse recommendations from response
-  const parseRecommendations = (response: string): Recommendation[] => {
-    const recMatch = response.match(/---RECOMMENDATIONS---\s*([\s\S]*?)---END_RECOMMENDATIONS---/);
-    if (!recMatch) return [];
-
-    // Simple parsing - in practice, the API should return structured data
-    return [];
-  };
 
   // Initialize conversation when modal opens
   useEffect(() => {
@@ -267,209 +236,59 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
-  };
-
-  if (!isOpen) return null;
+  // Header for the ConversationalPanel
+  const header = (
+    <div style={{
+      padding: "16px 24px",
+      borderBottom: "1px solid #e2e8f0",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+    }}>
+      <div>
+        <h3 id="library-analysis-modal-title" style={{ fontSize: "18px", fontWeight: 600, color: "#1e293b", margin: 0 }}>
+          Library Analysis
+        </h3>
+        <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
+          {skills.length} skills in your library
+        </p>
+      </div>
+      <Button variant="ghost" size="sm" onClick={onClose}>
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0,0,0,0.5)",
+    <ModalContainer
+      isOpen={isOpen}
+      onClose={onClose}
+      width="xlarge"
+      padding={false}
+      contentStyle={{
+        borderRadius: "16px",
+        width: "90vw",
+        height: "80vh",
         display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 50,
+        overflow: "hidden",
       }}
-      onClick={onClose}
+      ariaLabelledBy="library-analysis-modal-title"
     >
-      <div
-        style={{
-          backgroundColor: "#fff",
-          borderRadius: "16px",
-          width: "90vw",
-          maxWidth: "1000px",
-          height: "80vh",
-          display: "flex",
-          overflow: "hidden",
-        }}
-        onClick={e => e.stopPropagation()}
-      >
         {/* Left Column - Chat */}
-        <div style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          minWidth: 0,
-        }}>
-          {/* Header */}
-          <div style={{
-            padding: "16px 24px",
-            borderBottom: "1px solid #e2e8f0",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}>
-            <div>
-              <h3 style={{ fontSize: "18px", fontWeight: 600, color: "#1e293b", margin: 0 }}>
-                Library Analysis
-              </h3>
-              <p style={{ fontSize: "13px", color: "#64748b", margin: "4px 0 0 0" }}>
-                {skills.length} skills in your library
-              </p>
-            </div>
-            <div style={{ display: "flex", gap: "8px" }}>
-              {systemPrompt && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowSystemPromptModal(true)}
-                >
-                  <Eye className="h-4 w-4 mr-1" />
-                  View Prompt
-                </Button>
-              )}
-              <Button variant="ghost" size="sm" onClick={onClose}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Messages Area */}
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "24px",
-          }}>
-            {messages.map((msg, idx) => (
-              <div
-                key={idx}
-                style={{
-                  marginBottom: "16px",
-                  display: "flex",
-                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
-                }}
-              >
-                <div style={{
-                  maxWidth: "85%",
-                  padding: "12px 16px",
-                  borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                  backgroundColor: msg.role === "user" ? "#6366f1" : "#f1f5f9",
-                  color: msg.role === "user" ? "#fff" : "#334155",
-                  fontSize: "14px",
-                  lineHeight: "1.5",
-                }}>
-                  {msg.role === "user" ? (
-                    <span style={{ whiteSpace: "pre-wrap" }}>{msg.content}</span>
-                  ) : (
-                    <ReactMarkdown
-                      components={{
-                        p: ({ children }) => <p style={{ margin: "0 0 8px 0" }}>{children}</p>,
-                        strong: ({ children }) => <strong style={{ fontWeight: 600 }}>{children}</strong>,
-                        ul: ({ children }) => <ul style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ul>,
-                        ol: ({ children }) => <ol style={{ margin: "8px 0", paddingLeft: "20px" }}>{children}</ol>,
-                        li: ({ children }) => <li style={{ marginBottom: "4px" }}>{children}</li>,
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                  )}
-                </div>
-              </div>
-            ))}
-
-            {isLoading && (
-              <div style={{
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                padding: "12px 16px",
-                color: "#64748b",
-                fontSize: "14px",
-              }}>
-                <InlineLoader size="sm" />
-                Analyzing...
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Error display */}
-          {error && (
-            <div style={{ padding: "12px 24px" }}>
-              <InlineError message={error} onDismiss={() => setError(null)} />
-            </div>
-          )}
-
-          {/* Input Area */}
-          <div style={{
-            padding: "16px 24px",
-            borderTop: "1px solid #e2e8f0",
-            backgroundColor: "#fafafa",
-          }}>
-            <div style={{
-              display: "flex",
-              gap: "12px",
-              alignItems: "flex-end",
-            }}>
-              <textarea
-                value={input}
-                onChange={e => setInput(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask about your library..."
-                disabled={isLoading}
-                rows={1}
-                style={{
-                  flex: 1,
-                  padding: "12px 16px",
-                  fontSize: "14px",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "12px",
-                  resize: "none",
-                  outline: "none",
-                  fontFamily: "inherit",
-                  minHeight: "44px",
-                  maxHeight: "120px",
-                }}
-                onInput={e => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = "44px";
-                  target.style.height = Math.min(target.scrollHeight, 120) + "px";
-                }}
-              />
-              <button
-                onClick={handleSend}
-                disabled={!input.trim() || isLoading}
-                style={{
-                  width: "44px",
-                  height: "44px",
-                  borderRadius: "12px",
-                  border: "none",
-                  backgroundColor: input.trim() && !isLoading ? "#6366f1" : "#e2e8f0",
-                  color: input.trim() && !isLoading ? "#fff" : "#94a3b8",
-                  cursor: input.trim() && !isLoading ? "pointer" : "not-allowed",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.15s",
-                }}
-              >
-                {isLoading ? (
-                  <InlineLoader size="sm" />
-                ) : (
-                  <Send size={18} />
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConversationalPanel
+          messages={messages}
+          input={input}
+          onInputChange={setInput}
+          onSend={handleSend}
+          isLoading={isLoading}
+          loadingText="Analyzing..."
+          placeholder="Ask about your library..."
+          error={error}
+          onErrorDismiss={() => setError(null)}
+          header={header}
+          systemPrompt={systemPrompt}
+          systemPromptTitle="Analysis System Prompt"
+        />
 
         {/* Right Column - Analysis Summary */}
         <div style={{
@@ -589,56 +408,6 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
             )}
           </div>
         </div>
-      </div>
-
-      {/* System Prompt Modal */}
-      {showSystemPromptModal && systemPrompt && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 60,
-          }}
-          onClick={() => setShowSystemPromptModal(false)}
-        >
-          <div
-            style={{
-              backgroundColor: "#fff",
-              borderRadius: "12px",
-              maxWidth: "700px",
-              maxHeight: "80vh",
-              overflow: "auto",
-              padding: "24px",
-              margin: "20px",
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "18px", fontWeight: 600 }}>
-              Analysis System Prompt
-            </h3>
-            <pre style={{
-              fontSize: "13px",
-              backgroundColor: "#f1f5f9",
-              padding: "16px",
-              borderRadius: "8px",
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-              margin: 0,
-            }}>
-              {systemPrompt}
-            </pre>
-            <div style={{ marginTop: "16px", textAlign: "right" }}>
-              <Button onClick={() => setShowSystemPromptModal(false)}>
-                Close
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
+    </ModalContainer>
   );
 }
