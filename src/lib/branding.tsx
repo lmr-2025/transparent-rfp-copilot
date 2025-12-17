@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { parseApiData } from "./apiClient";
 
 export type BrandingSettings = {
   appName: string;
@@ -37,7 +38,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       const res = await fetch("/api/branding");
       if (res.ok) {
         const json = await res.json();
-        const data = json.data ?? json;
+        const data = parseApiData<{ branding?: BrandingSettings }>(json);
         if (data.branding) {
           setBranding(data.branding);
         }

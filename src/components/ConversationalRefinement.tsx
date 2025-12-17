@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, CheckCircle, X, Lightbulb } from 'lucide-react';
+import { Send, CheckCircle, X, Lightbulb } from 'lucide-react';
+import { InlineLoader } from '@/components/ui/loading';
+import { parseApiData } from '@/lib/apiClient';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -190,9 +192,8 @@ export default function ConversationalRefinement({
           onAutoFlagged();
         }
       }
-    } catch (error) {
+    } catch {
       // Silent failure - don't block the conversation
-      console.warn('Failed to log clarify usage:', error);
     }
   };
 
@@ -272,9 +273,8 @@ If the user asks you to generate a new/updated response, format it the same way 
       }
 
       const json = await response.json();
-      // Handle both old format ({ content: [...] }) and new format ({ data: { content: [...] } })
-      const content = json.data?.content ?? json.content;
-      const assistantContent = (content as ContentBlock[])
+      const content = parseApiData<ContentBlock[]>(json, 'content');
+      const assistantContent = (content || [])
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
         .join('\n');
@@ -390,9 +390,8 @@ Focus on concrete, actionable suggestions for what the user could provide to imp
       }
 
       const json = await response.json();
-      // Handle both old format ({ content: [...] }) and new format ({ data: { content: [...] } })
-      const content = json.data?.content ?? json.content;
-      const assistantContent = (content as ContentBlock[])
+      const content = parseApiData<ContentBlock[]>(json, 'content');
+      const assistantContent = (content || [])
         .filter((block) => block.type === 'text')
         .map((block) => block.text ?? '')
         .join('\n');
@@ -480,7 +479,7 @@ Focus on concrete, actionable suggestions for what the user could provide to imp
               gap: '8px',
             }}
           >
-            <Loader2 className="animate-spin" size={16} />
+            <InlineLoader size="sm" />
             <span>Thinking...</span>
           </div>
         )}
@@ -523,7 +522,7 @@ Focus on concrete, actionable suggestions for what the user could provide to imp
             cursor: isProcessing || !input.trim() ? 'not-allowed' : 'pointer',
           }}
         >
-          {isProcessing ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+          {isProcessing ? <InlineLoader size="sm" /> : <Send size={16} />}
           Send
         </button>
       </div>

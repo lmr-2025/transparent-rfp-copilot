@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { ContractReview, ContractFinding, AlignmentRating, FindingCategory } from "@/types/contractReview";
+import { parseApiData } from "@/lib/apiClient";
+import { InlineError } from "@/components/ui/status-display";
 
 const styles = {
   container: {
@@ -120,7 +122,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         throw new Error("Failed to fetch contract");
       }
       const json = await response.json();
-      const data = json.data ?? json;
+      const data = parseApiData<ContractReview>(json);
       setContract(data);
       setNotes(data.notes || "");
     } catch (err) {
@@ -210,9 +212,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
         <Link href="/contracts/library" style={styles.backLink}>
           ← Back to Library
         </Link>
-        <div style={{ ...styles.card, backgroundColor: "#fee2e2", borderColor: "#fecaca" }}>
-          <p style={{ color: "#b91c1c", margin: 0 }}>{error || "Contract not found"}</p>
-        </div>
+        <InlineError message={error || "Contract not found"} />
       </div>
     );
   }

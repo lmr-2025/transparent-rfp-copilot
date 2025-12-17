@@ -1,4 +1,5 @@
 import { SkillCategoryItem, DEFAULT_SKILL_CATEGORIES } from "@/types/skill";
+import { parseApiData, getApiErrorMessage } from "./apiClient";
 
 export const CATEGORIES_STORAGE_KEY = "transparent-trust-skill-categories";
 
@@ -65,10 +66,9 @@ export async function loadCategoriesFromApi(): Promise<SkillCategoryItem[]> {
     const response = await fetch("/api/skill-categories");
     if (!response.ok) throw new Error("API fetch failed");
     const result = await response.json();
-    // Handle both { data: { categories: [...] } } and direct array formats
-    const data = result.data?.categories ?? result.categories ?? result;
+    const data = parseApiData<{ id: string; name: string; description?: string; color?: string; createdAt: string }[]>(result, "categories");
     const categories = Array.isArray(data) ? data : [];
-    cachedCategories = categories.map((cat: { id: string; name: string; description?: string; color?: string; createdAt: string }) => ({
+    cachedCategories = categories.map((cat) => ({
       id: cat.id,
       name: cat.name,
       description: cat.description,
@@ -101,12 +101,11 @@ export async function addCategory(name: string, description?: string): Promise<S
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Failed to create category" }));
-    throw new Error(error.error || "Failed to create category");
+    throw new Error(getApiErrorMessage(error, "Failed to create category"));
   }
 
   const result = await response.json();
-  // Handle both { data: { category: {...} } } and direct object formats
-  const created = result.data?.category ?? result.category ?? result;
+  const created = parseApiData<{ id: string; name: string; description?: string; color?: string; createdAt: string }>(result, "category");
   const newCategory: SkillCategoryItem = {
     id: created.id,
     name: created.name,
@@ -136,7 +135,7 @@ export async function updateCategory(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Failed to update category" }));
-    throw new Error(error.error || "Failed to update category");
+    throw new Error(getApiErrorMessage(error, "Failed to update category"));
   }
 
   // Update local cache after successful API call
@@ -155,7 +154,7 @@ export async function deleteCategory(id: string): Promise<void> {
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: "Failed to delete category" }));
-    throw new Error(error.error || "Failed to delete category");
+    throw new Error(getApiErrorMessage(error, "Failed to delete category"));
   }
 
   // Update local cache after successful API call

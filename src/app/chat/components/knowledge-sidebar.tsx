@@ -15,6 +15,7 @@ import { useSelectionStore } from "@/stores/selection-store";
 import { useChatStore } from "@/stores/chat-store";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { KnowledgeSourceList } from "./knowledge-source-list";
+import { parseApiData } from "@/lib/apiClient";
 import type { Skill } from "@/types/skill";
 import type { ReferenceUrl } from "@/types/referenceUrl";
 import type { CustomerProfile } from "@/types/customerProfile";
@@ -84,10 +85,10 @@ export function KnowledgeSidebar({
         const res = await fetch("/api/instruction-presets");
         if (res.ok) {
           const json = await res.json();
-          const data = json.data ?? json;
+          const data = parseApiData<{ presets: InstructionPreset[] }>(json);
           setPresets(data.presets || []);
           // Auto-select default preset if no instructions are set
-          const defaultPreset = (data.presets || []).find((p: InstructionPreset) => p.isDefault);
+          const defaultPreset = (data.presets || []).find(p => p.isDefault);
           if (defaultPreset && !userInstructions) {
             setSelectedPresetId(defaultPreset.id);
             setUserInstructions(defaultPreset.content);

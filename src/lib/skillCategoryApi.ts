@@ -1,4 +1,5 @@
 import { SkillCategoryItem } from "@/types/skill";
+import { parseApiData } from "./apiClient";
 
 // Map DB model to frontend type
 type DbSkillCategory = {
@@ -27,8 +28,7 @@ export async function fetchAllCategories(): Promise<SkillCategoryItem[]> {
     throw new Error("Failed to fetch skill categories");
   }
   const result = await response.json();
-  // Handle both { data: { categories: [...] } } and direct array formats
-  const data = result.data?.categories ?? result.categories ?? result;
+  const data = parseApiData<DbSkillCategory[]>(result, "categories");
   return (Array.isArray(data) ? data : []).map(mapToFrontend);
 }
 
@@ -46,8 +46,7 @@ export async function createCategory(
     throw new Error("Failed to create skill category");
   }
   const result = await response.json();
-  // Handle both { data: { category: {...} } } and direct object formats
-  const data = (result.data?.category ?? result.category ?? result) as DbSkillCategory;
+  const data = parseApiData<DbSkillCategory>(result, "category");
   return mapToFrontend(data);
 }
 
@@ -64,8 +63,7 @@ export async function updateCategory(
     throw new Error("Failed to update skill category");
   }
   const result = await response.json();
-  // Handle both { data: { category: {...} } } and direct object formats
-  const data = (result.data?.category ?? result.category ?? result) as DbSkillCategory;
+  const data = parseApiData<DbSkillCategory>(result, "category");
   return mapToFrontend(data);
 }
 
@@ -90,8 +88,7 @@ export async function reorderCategories(
     throw new Error("Failed to reorder skill categories");
   }
   const result = await response.json();
-  // Handle both { data: { categories: [...] } } and direct array formats
-  const data = result.data?.categories ?? result.categories ?? result;
+  const data = parseApiData<DbSkillCategory[]>(result, "categories");
   return (Array.isArray(data) ? data : []).map(mapToFrontend);
 }
 

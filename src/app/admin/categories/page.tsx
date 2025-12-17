@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Edit2, FolderOpen, GripVertical, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit2, FolderOpen, GripVertical } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
 import { SkillCategoryItem } from "@/types/skill";
 import {
@@ -182,17 +184,8 @@ export default function CategoriesPage() {
           <h3 style={{ marginBottom: "16px", fontWeight: 600 }}>Add Category</h3>
 
           {error && (
-            <div
-              style={{
-                padding: "10px 12px",
-                backgroundColor: "#fef2f2",
-                color: "#dc2626",
-                borderRadius: "6px",
-                marginBottom: "16px",
-                fontSize: "0.9rem",
-              }}
-            >
-              {error}
+            <div style={{ marginBottom: "16px" }}>
+              <InlineError message={error} onDismiss={() => setError(null)} />
             </div>
           )}
 
@@ -251,7 +244,7 @@ export default function CategoriesPage() {
                 fontWeight: 600,
               }}
             >
-              {isSaving && <Loader2 size={16} className="animate-spin" />}
+              {isSaving && <InlineLoader size="sm" />}
               {isSaving ? "Adding..." : "Add Category"}
             </button>
             <button
@@ -286,7 +279,9 @@ export default function CategoriesPage() {
             color: "#64748b",
           }}
         >
-          <Loader2 size={32} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
+            <InlineLoader size="lg" />
+          </div>
           <p>Loading categories...</p>
         </div>
       ) : categories.length === 0 ? (
@@ -402,7 +397,7 @@ export default function CategoriesPage() {
                         fontWeight: 500,
                       }}
                     >
-                      {isSaving && <Loader2 size={14} className="animate-spin" />}
+                      {isSaving && <InlineLoader size="sm" />}
                       {isSaving ? "Saving..." : "Save"}
                     </button>
                     <button
@@ -463,7 +458,7 @@ export default function CategoriesPage() {
                     }}
                     title="Delete category"
                   >
-                    {deletingId === cat.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                    {deletingId === cat.id ? <InlineLoader size="sm" /> : <Trash2 size={16} />}
                   </button>
                 </>
               )}

@@ -1,4 +1,5 @@
 import { ReferenceUrl } from "@/types/referenceUrl";
+import { parseApiData } from "./apiClient";
 
 export interface FetchedUrlContent {
   url: string;
@@ -25,7 +26,7 @@ export async function fetchUrlContent(url: string): Promise<string> {
     }
 
     const json = await response.json();
-    const data = json.data ?? json;
+    const data = parseApiData<{ content?: string }>(json);
     return data.content || "";
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to fetch URL";

@@ -292,10 +292,68 @@ async function analyzeAndGroupSources(
 ): Promise<GroupedAnalyzeResponse> {
   const anthropic = getAnthropicClient();
 
-  // Fetch content from all URLs in parallel (with limits)
+  // Pre-check: identify URLs that already exist in skills
+  const normalizeUrl = (url: string) => url.toLowerCase().replace(/\/+$/, "");
+  const existingUrlMap = new Map<string, { skillId: string; skillTitle: string }>();
+
+  for (const skill of existingSkills) {
+    if (!skill.sourceUrls) continue;
+    for (const url of skill.sourceUrls) {
+      existingUrlMap.set(normalizeUrl(url), { skillId: skill.id, skillTitle: skill.title });
+    }
+  }
+
+  // Separate URLs into new vs already-in-skills
+  const newUrls: string[] = [];
+  const duplicateUrlsBySkill = new Map<string, { skillId: string; skillTitle: string; urls: string[] }>();
+
+  for (const url of sourceUrls) {
+    const normalized = normalizeUrl(url);
+    const existingSkill = existingUrlMap.get(normalized);
+    if (existingSkill) {
+      const key = existingSkill.skillId;
+      if (!duplicateUrlsBySkill.has(key)) {
+        duplicateUrlsBySkill.set(key, { ...existingSkill, urls: [] });
+      }
+      duplicateUrlsBySkill.get(key)!.urls.push(url);
+    } else {
+      newUrls.push(url);
+    }
+  }
+
+  // If ALL URLs are duplicates and no documents, create update groups directly without LLM
+  if (newUrls.length === 0 && sourceDocuments.length === 0 && duplicateUrlsBySkill.size > 0) {
+    const skillGroups: SkillGroup[] = Array.from(duplicateUrlsBySkill.values()).map(dup => ({
+      action: "update_existing" as const,
+      skillTitle: dup.skillTitle,
+      existingSkillId: dup.skillId,
+      urls: dup.urls,
+      reason: `These URLs are already sources for "${dup.skillTitle}". Refreshing the skill with latest content.`,
+    }));
+
+    return {
+      skillGroups,
+      summary: `All ${sourceUrls.length} URL(s) already exist in your skill library. Grouped for refresh.`,
+    };
+  }
+
+  // Pre-build update groups for duplicate URLs (no LLM needed for these)
+  const preBuiltGroups: SkillGroup[] = Array.from(duplicateUrlsBySkill.values()).map(dup => ({
+    action: "update_existing" as const,
+    skillTitle: dup.skillTitle,
+    existingSkillId: dup.skillId,
+    urls: dup.urls,
+    reason: `These URLs are already sources for "${dup.skillTitle}". Refreshing with latest content.`,
+  }));
+
+  // If no new URLs and no documents, we already returned above
+  // Otherwise, we need to analyze the new URLs and/or documents with the LLM
+
+  // Fetch content from NEW URLs only (duplicates don't need content analysis)
   const urlContents: { type: "url"; url: string; content: string }[] = [];
-  if (sourceUrls.length > 0) {
-    const fetchPromises = sourceUrls.slice(0, 20).map(async (url): Promise<{ type: "url"; url: string; content: string }> => {
+  const urlsToFetch = newUrls.length > 0 ? newUrls : sourceUrls; // Fall back to all if somehow empty
+  if (urlsToFetch.length > 0) {
+    const fetchPromises = urlsToFetch.slice(0, 20).map(async (url): Promise<{ type: "url"; url: string; content: string }> => {
       try {
         const ssrfCheck = await validateUrlForSSRF(url);
         if (!ssrfCheck.valid) return { type: "url", url, content: "[Could not fetch content]" };
@@ -433,23 +491,40 @@ Return ONLY the JSON object.`;
     throw new Error("LLM response missing skillGroups array");
   }
 
-  // Ensure all sources are accounted for
+  // Ensure all NEW sources are accounted for (duplicates are handled separately)
   const groupedUrls = new Set(parsed.skillGroups.flatMap(g => g.urls || []));
   const groupedDocIds = new Set(parsed.skillGroups.flatMap(g => g.documentIds || []));
 
-  const missingUrls = sourceUrls.filter(url => !groupedUrls.has(url));
+  // Only check for missing NEW URLs (duplicates are in preBuiltGroups)
+  const missingNewUrls = newUrls.filter(url => !groupedUrls.has(url));
   const missingDocIds = sourceDocuments.filter(doc => !groupedDocIds.has(doc.id)).map(d => d.id);
 
-  if (missingUrls.length > 0 || missingDocIds.length > 0) {
+  if (missingNewUrls.length > 0 || missingDocIds.length > 0) {
     // Add missing sources to a "Miscellaneous" group
     parsed.skillGroups.push({
       action: "create",
       skillTitle: "Miscellaneous Documentation",
-      urls: missingUrls.length > 0 ? missingUrls : [],
+      urls: missingNewUrls.length > 0 ? missingNewUrls : [],
       documentIds: missingDocIds.length > 0 ? missingDocIds : undefined,
       reason: "Sources that couldn't be categorized into other groups",
     });
   }
 
-  return parsed;
+  // Merge pre-built groups (for duplicate URLs) with LLM-generated groups
+  const allGroups = [...preBuiltGroups, ...parsed.skillGroups];
+
+  // Update summary to reflect both
+  const duplicateCount = Array.from(duplicateUrlsBySkill.values()).reduce((sum, d) => sum + d.urls.length, 0);
+  const summaryParts: string[] = [];
+  if (duplicateCount > 0) {
+    summaryParts.push(`${duplicateCount} URL(s) matched existing skills (auto-grouped for refresh)`);
+  }
+  if (parsed.summary) {
+    summaryParts.push(parsed.summary);
+  }
+
+  return {
+    skillGroups: allGroups,
+    summary: summaryParts.join(". ") || parsed.summary,
+  };
 }

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { Skill } from "@/types/skill";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
+import { parseApiData } from "@/lib/apiClient";
 
 import {
   ColumnMappingStep,
@@ -133,7 +134,7 @@ export default function ImportRFPPage() {
       }
 
       const json = await response.json();
-      const result: AnalysisResult = json.data ?? json;
+      const result = parseApiData<AnalysisResult>(json);
       setAnalysisResult(result);
       setSelectedSuggestions(new Set(result.suggestions.map((_, i) => i)));
     } catch (error) {

@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine, MessageSquare, Send } from "lucide-react";
 import { toast } from "sonner";
-import { getApiErrorMessage } from "@/lib/utils";
+import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { createSkillViaApi } from "@/lib/skillStorage";
 import { type DocumentSource } from "@/stores/bulk-import-store";
 import { styles } from "./styles";
@@ -79,8 +79,7 @@ export default function SourceInputStep({
           throw new Error(getApiErrorMessage(json, `Failed to upload ${file.name}`));
         }
 
-        const data = json.data ?? json;
-        const doc = data.document;
+        const doc = parseApiData<{ id: string; title: string; filename: string; content: string }>(json, "document");
         addUploadedDocument({
           id: doc.id,
           title: doc.title,
@@ -178,8 +177,8 @@ When suggesting updated content, format it clearly so they can copy it.`;
       if (!response.ok) throw new Error('Failed to get response');
 
       const json = await response.json();
-      const content = json.data?.content ?? json.content;
-      const assistantContent = (content as { type: string; text?: string }[])
+      const content = parseApiData<{ type: string; text?: string }[]>(json, "content");
+      const assistantContent = (content || [])
         .filter(block => block.type === 'text')
         .map(block => block.text ?? '')
         .join('\n');

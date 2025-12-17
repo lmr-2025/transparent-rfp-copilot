@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Upload, Trash2, FileText, File, Loader2, X, ChevronDown, LayoutTemplate } from "lucide-react";
+import { Upload, Trash2, FileText, File, X, ChevronDown, LayoutTemplate } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
-import { getApiErrorMessage } from "@/lib/utils";
+import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { DocumentActionDialog } from "../components/document-action-dialog";
 
 interface CategoryItem {
@@ -65,8 +67,7 @@ export default function DocumentsPage() {
       const response = await fetch("/api/documents");
       if (response.ok) {
         const json = await response.json();
-        // API returns { data: { documents: [...] } } format
-        const data = json.data?.documents ?? json.documents ?? [];
+        const data = parseApiData<DocumentMeta[]>(json, "documents");
         setDocuments(Array.isArray(data) ? data : []);
       }
     } catch {
@@ -122,7 +123,7 @@ export default function DocumentsPage() {
         throw new Error(getApiErrorMessage(json, "Failed to upload document"));
       }
 
-      const data = json.data ?? json;
+      const data = parseApiData<{ document: DocumentMeta }>(json);
       setDocuments([data.document, ...documents]);
       resetForm();
 
@@ -262,17 +263,8 @@ export default function DocumentsPage() {
           <h3 style={{ marginBottom: "16px", fontWeight: 600 }}>Upload Document</h3>
 
           {uploadError && (
-            <div
-              style={{
-                padding: "10px 12px",
-                backgroundColor: "#fef2f2",
-                color: "#dc2626",
-                borderRadius: "6px",
-                marginBottom: "16px",
-                fontSize: "0.9rem",
-              }}
-            >
-              {uploadError}
+            <div style={{ marginBottom: "16px" }}>
+              <InlineError message={uploadError} onDismiss={() => setUploadError(null)} />
             </div>
           )}
 
@@ -506,7 +498,7 @@ export default function DocumentsPage() {
             >
               {isUploading ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" />
+                  <InlineLoader size="sm" />
                   Uploading...
                 </>
               ) : (
@@ -538,7 +530,9 @@ export default function DocumentsPage() {
       {/* Document List */}
       {isLoading ? (
         <div style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-          <Loader2 size={32} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+          <div style={{ display: "flex", justifyContent: "center", marginBottom: "12px" }}>
+            <InlineLoader size="lg" />
+          </div>
           <p>Loading documents...</p>
         </div>
       ) : documents.length === 0 ? (

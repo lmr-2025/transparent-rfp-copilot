@@ -8,6 +8,7 @@ import {
   deleteProfile,
 } from "@/lib/customerProfileApi";
 import { CustomerProfile, CustomerProfileKeyFact } from "@/types/customerProfile";
+import { InlineError } from "@/components/ui/status-display";
 
 const styles = {
   container: {
@@ -271,22 +272,8 @@ export default function CustomerProfileLibraryPage() {
       </p>
 
       {error && (
-        <div
-          style={{
-            backgroundColor: "#fee2e2",
-            color: "#b91c1c",
-            padding: "10px 12px",
-            borderRadius: "6px",
-            marginBottom: "16px",
-          }}
-        >
-          {error}
-          <button
-            onClick={() => setError(null)}
-            style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}
-          >
-            ✕
-          </button>
+        <div style={{ marginBottom: "16px" }}>
+          <InlineError message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 

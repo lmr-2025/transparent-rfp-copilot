@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Send, Loader2 } from "lucide-react";
+import { Send } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SpeedToggle } from "@/components/speed-toggle";
@@ -78,7 +79,7 @@ export function ChatInput({
           aria-label={isLoading ? "Sending message" : "Send message"}
         >
           {isLoading ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
+            <InlineLoader size="md" />
           ) : (
             <Send className="h-5 w-5" />
           )}

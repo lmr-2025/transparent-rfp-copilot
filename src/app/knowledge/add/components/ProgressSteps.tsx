@@ -7,15 +7,16 @@ type ProgressStepsProps = {
   workflowStep: WorkflowStep;
 };
 
-const STEPS = ["Add Sources", "Group Sources", "Generate Content", "Review & Approve", "Done"];
+const STEPS = ["Add Sources", "Plan", "Group Sources", "Generate Content", "Review & Approve", "Done"];
 const STEP_MAP: Record<WorkflowStep, number> = {
   input: 0,
-  analyzing: 1,
-  review_groups: 1,
-  generating: 2,
-  review_drafts: 3,
-  saving: 3,
-  done: 4,
+  planning: 1,
+  analyzing: 2,
+  review_groups: 2,
+  generating: 3,
+  review_drafts: 4,
+  saving: 4,
+  done: 5,
 };
 
 export default function ProgressSteps({ workflowStep }: ProgressStepsProps) {
@@ -46,7 +47,7 @@ export default function ProgressSteps({ workflowStep }: ProgressStepsProps) {
             <span style={{ fontSize: "13px", color: isActive ? "#2563eb" : "#64748b", fontWeight: isActive ? 600 : 400 }}>
               {step}
             </span>
-            {idx < 4 && <div style={{ width: "24px", height: "2px", backgroundColor: isComplete ? "#22c55e" : "#e2e8f0" }} />}
+            {idx < STEPS.length - 1 && <div style={{ width: "24px", height: "2px", backgroundColor: isComplete ? "#22c55e" : "#e2e8f0" }} />}
           </div>
         );
       })}

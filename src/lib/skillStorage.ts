@@ -1,5 +1,5 @@
 import { Skill, SourceUrl, SkillOwner, SkillHistoryEntry } from "@/types/skill";
-import { getApiErrorMessage } from "@/lib/utils";
+import { parseApiData, getApiErrorMessage } from "./apiClient";
 
 export const SKILLS_STORAGE_KEY = "grc-minion-skills";
 
@@ -192,9 +192,8 @@ export async function loadSkillsFromApi(): Promise<Skill[]> {
     const response = await fetch("/api/skills");
     if (!response.ok) throw new Error("API fetch failed");
     const json = await response.json();
-    // Handle both old format (array) and new format ({ data: { skills: [...] } })
-    const data = json.data?.skills ?? json;
-    cachedSkills = (data as Partial<Skill>[]).map(normalizeSkill);
+    const data = parseApiData<Partial<Skill>[]>(json, "skills");
+    cachedSkills = (Array.isArray(data) ? data : []).map(normalizeSkill);
     apiLoaded = true;
     // Update localStorage cache
     saveToLocalStorage(cachedSkills);
@@ -225,8 +224,7 @@ export async function createSkillViaApi(
   });
   if (!response.ok) throw new Error("Failed to create skill");
   const json = await response.json();
-  // Handle both old format (skill object) and new format ({ data: { skill: {...} } })
-  const created = json.data?.skill ?? json;
+  const created = parseApiData<Partial<Skill>>(json, "skill");
   const normalized = normalizeSkill(created);
   cachedSkills = [normalized, ...cachedSkills];
   saveToLocalStorage(cachedSkills);
@@ -248,8 +246,7 @@ export async function updateSkillViaApi(
     throw new Error(getApiErrorMessage(errorData, "Failed to update skill"));
   }
   const json = await response.json();
-  // Handle both old format (skill object) and new format ({ data: { skill: {...} } })
-  const updated = json.data?.skill ?? json;
+  const updated = parseApiData<Partial<Skill>>(json, "skill");
   const normalized = normalizeSkill(updated);
   cachedSkills = cachedSkills.map((s) => (s.id === id ? normalized : s));
   saveToLocalStorage(cachedSkills);

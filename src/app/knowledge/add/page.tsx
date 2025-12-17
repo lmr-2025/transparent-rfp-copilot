@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
-import { getApiErrorMessage } from "@/lib/utils";
+import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
@@ -13,6 +13,7 @@ import {
   useBulkImportCounts,
   type SkillGroup,
   type DocumentSource,
+  type PlanningMode,
 } from "@/stores/bulk-import-store";
 import {
   ProgressSteps,
@@ -26,10 +27,17 @@ import {
   ProcessingIndicator,
   styles,
 } from "./components";
+import PlanSkillsStep from "./components/PlanSkillsStep";
 
 function AddKnowledgeContent() {
   const searchParams = useSearchParams();
   const docIdParam = searchParams.get("docId");
+
+  // Mode params from library analysis recommendations
+  const modeParam = searchParams.get("mode");
+  const skillsParam = searchParams.get("skills"); // comma-separated skill IDs for merge
+  const skillParam = searchParams.get("skill"); // single skill ID for split
+  const topicParam = searchParams.get("topic"); // topic for gap
 
   // Local state for skills (fetched from API)
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
@@ -67,6 +75,10 @@ function AddKnowledgeContent() {
     moveUrl,
     createNewGroupFromUrl,
     reset,
+    skillPlan,
+    planningMode,
+    setPlanningMode,
+    clearPlanningMessages,
   } = useBulkImportStore();
 
   const { pendingCount, approvedCount, readyForReviewCount, reviewedCount } =
@@ -107,6 +119,37 @@ function AddKnowledgeContent() {
     loadSkillsFromApi().then(setSkills).catch(() => toast.error("Failed to load skills"));
   }, []);
 
+  // Handle mode from URL params (from library analysis recommendations)
+  const modeInitializedRef = useRef(false);
+  useEffect(() => {
+    if (modeInitializedRef.current) return;
+    if (!modeParam) return;
+    if (skills.length === 0) return; // Wait for skills to load
+
+    modeInitializedRef.current = true;
+
+    let mode: PlanningMode = { type: "normal" };
+
+    if (modeParam === "merge" && skillsParam) {
+      const skillIds = skillsParam.split(",").filter(Boolean);
+      if (skillIds.length >= 2) {
+        mode = { type: "merge", skillIds };
+      }
+    } else if (modeParam === "split" && skillParam) {
+      mode = { type: "split", skillId: skillParam };
+    } else if (modeParam === "gap" && topicParam) {
+      mode = { type: "gap", topic: topicParam };
+    }
+
+    if (mode.type !== "normal") {
+      // Reset any previous state and set the mode
+      clearPlanningMessages();
+      setPlanningMode(mode);
+      // Skip directly to planning step
+      setWorkflowStep("planning");
+    }
+  }, [modeParam, skillsParam, skillParam, topicParam, skills.length, setPlanningMode, setWorkflowStep, clearPlanningMessages]);
+
   // Load document if docId is provided (coming from document action dialog)
   useEffect(() => {
     if (!docIdParam) return;
@@ -118,7 +161,7 @@ function AddKnowledgeContent() {
           throw new Error("Failed to load document");
         }
         const json = await response.json();
-        const doc = json.data?.document ?? json.document;
+        const doc = parseApiData<{ id: string; title: string; filename: string; content: string }>(json, "document");
         if (!doc) {
           throw new Error("Document not found");
         }
@@ -192,8 +235,14 @@ function AddKnowledgeContent() {
       }
 
       const json = await response.json();
-      // API response is wrapped as { data: { skillGroups: [...] } }
-      const data = json.data ?? json;
+      const data = parseApiData<{ skillGroups?: Array<{
+        action: string;
+        skillTitle: string;
+        existingSkillId?: string;
+        urls?: string[];
+        documentIds?: string[];
+        reason?: string;
+      }> }>(json);
 
       if (data.skillGroups && Array.isArray(data.skillGroups)) {
         const groups: SkillGroup[] = data.skillGroups.map((group: {
@@ -248,10 +297,25 @@ function AddKnowledgeContent() {
       return;
     }
 
-    setUrlInput("");
-    clearUploadedDocuments();
-    analyzeAndGroupSources(urls, documents);
+    // Go to planning step - don't clear inputs yet since PlanSkillsStep needs them
+    setWorkflowStep("planning");
   };
+
+  // Called when planning is done (either approved or skipped)
+  // The store handles the workflow transition and we watch for it
+  useEffect(() => {
+    if (workflowStep === "analyzing" && skillGroups.length === 0) {
+      // Transitioning from planning to analyzing
+      const urls = parseUrls(urlInput);
+      const documents = uploadedDocuments;
+
+      // Clear inputs now that we're moving to analysis
+      setUrlInput("");
+      clearUploadedDocuments();
+
+      analyzeAndGroupSources(urls, documents);
+    }
+  }, [workflowStep]);
 
   // Step 2: Generate drafts for approved groups
   const generateDrafts = async () => {
@@ -289,7 +353,15 @@ function AddKnowledgeContent() {
           }
 
           const json = await response.json();
-          const data = json.data ?? json;
+          const data = parseApiData<{ draftMode?: boolean; draft?: {
+            title?: string;
+            content: string;
+            hasChanges?: boolean;
+            changeHighlights?: string[];
+            reasoning?: string;
+            inference?: string;
+            sources?: string;
+          } }>(json);
 
           if (data.draftMode && data.draft) {
             updateSkillGroup(group.id, {
@@ -332,7 +404,13 @@ function AddKnowledgeContent() {
           }
 
           const json2 = await response.json();
-          const data2 = json2.data ?? json2;
+          const data2 = parseApiData<{ draft: {
+            title?: string;
+            content: string;
+            reasoning?: string;
+            inference?: string;
+            sources?: string;
+          } }>(json2);
           const draft = data2.draft;
 
           updateSkillGroup(group.id, {
@@ -575,6 +653,20 @@ function AddKnowledgeContent() {
           onStartAnalysis={handleStartAnalysis}
           parsedUrls={parsedUrls}
         />
+      )}
+
+      {/* Step 2: Plan Skills (conversational planning) */}
+      {workflowStep === "planning" && (
+        <div style={{ ...styles.card, padding: 0, overflow: "hidden", height: "calc(100vh - 280px)", minHeight: "500px" }}>
+          <PlanSkillsStep
+            existingSkills={skills.map(s => ({
+              id: s.id,
+              title: s.title,
+              content: s.content,
+              sourceUrls: s.sourceUrls?.map(u => u.url) || [],
+            }))}
+          />
+        </div>
       )}
 
       {/* Analyzing */}

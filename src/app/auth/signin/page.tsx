@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import Link from "next/link";
+import { InlineError } from "@/components/ui/status-display";
 
 const styles = {
   container: {
@@ -48,15 +49,7 @@ const styles = {
     cursor: "pointer",
     transition: "all 0.2s",
   },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    padding: "12px",
-    borderRadius: "8px",
-    marginBottom: "24px",
-    fontSize: "14px",
-  },
-};
+  };
 
 function SignInContent() {
   const searchParams = useSearchParams();
@@ -79,13 +72,15 @@ function SignInContent() {
         <p style={styles.subtitle}>Sign in to continue</p>
 
         {error && (
-          <div style={styles.error}>
-            {error === "OAuthAccountNotLinked"
-              ? "This email is already associated with another account."
-              : error === "CredentialsSignin"
-              ? "Invalid credentials."
-              : "An error occurred during sign in."}
-          </div>
+          <InlineError
+            message={
+              error === "OAuthAccountNotLinked"
+                ? "This email is already associated with another account."
+                : error === "CredentialsSignin"
+                ? "Invalid credentials."
+                : "An error occurred during sign in."
+            }
+          />
         )}
 
         {/* Dev Login - only shown in development */}

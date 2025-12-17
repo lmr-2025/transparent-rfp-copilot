@@ -3,7 +3,9 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Search, Loader2, Filter, CheckSquare, Trash2, FileText, Globe } from "lucide-react";
+import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import LibraryAnalysisModal from "./components/LibraryAnalysisModal";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +55,7 @@ function KnowledgeLibraryContent() {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [showAnalysisModal, setShowAnalysisModal] = useState(false);
 
   // React Query data
   const { data: skills = [], isLoading: skillsLoading } = useAllSkills();
@@ -392,6 +395,15 @@ function KnowledgeLibraryContent() {
             <>
               <Button
                 variant="outline"
+                onClick={() => setShowAnalysisModal(true)}
+                disabled={skills.length < 2}
+                title={skills.length < 2 ? "Need at least 2 skills to analyze" : "Analyze your library"}
+              >
+                <BarChart3 className="h-4 w-4 mr-2" />
+                Analyze
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setSelectionMode(true)}
                 disabled={sortedItems.length === 0}
               >
@@ -419,7 +431,7 @@ function KnowledgeLibraryContent() {
                 disabled={selectedIds.size === 0 || isBulkDeleting}
               >
                 {isBulkDeleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  <InlineLoader size="sm" className="mr-2" />
                 ) : (
                   <Trash2 className="h-4 w-4 mr-2" />
                 )}
@@ -493,7 +505,7 @@ function KnowledgeLibraryContent() {
       {isLoading ? (
         <Card>
           <CardContent className="py-12 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <InlineLoader size="lg" className="text-muted-foreground" />
           </CardContent>
         </Card>
       ) : sortedItems.length === 0 ? (
@@ -563,6 +575,13 @@ function KnowledgeLibraryContent() {
           {selectedCategory !== "all" && ` in "${selectedCategory}"`}
         </div>
       )}
+
+      {/* Library Analysis Modal */}
+      <LibraryAnalysisModal
+        skills={skills}
+        isOpen={showAnalysisModal}
+        onClose={() => setShowAnalysisModal(false)}
+      />
     </div>
   );
 }
@@ -574,7 +593,7 @@ export default function KnowledgeLibraryPage() {
         <div className="max-w-5xl mx-auto p-6">
           <Card>
             <CardContent className="py-12 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <InlineLoader size="lg" className="text-muted-foreground" />
             </CardContent>
           </Card>
         </div>

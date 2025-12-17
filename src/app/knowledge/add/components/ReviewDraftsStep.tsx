@@ -5,6 +5,7 @@ import { ArrowLeft, Eye, Edit3, MessageSquare, Send, Loader2, X } from "lucide-r
 import { diffLines, Change } from "diff";
 import { type SkillGroup } from "@/stores/bulk-import-store";
 import { styles, getGroupStatusStyle } from "./styles";
+import { parseApiData } from "@/lib/apiClient";
 
 interface ClarifyMessage {
   role: 'user' | 'assistant';
@@ -97,8 +98,8 @@ Be direct and helpful. If something was inferred rather than directly stated in 
       if (!response.ok) throw new Error('Failed to get response');
 
       const json = await response.json();
-      const content = json.data?.content ?? json.content;
-      const assistantContent = (content as { type: string; text?: string }[])
+      const content = parseApiData<{ type: string; text?: string }[]>(json, "content");
+      const assistantContent = (content || [])
         .filter(block => block.type === 'text')
         .map(block => block.text ?? '')
         .join('\n');

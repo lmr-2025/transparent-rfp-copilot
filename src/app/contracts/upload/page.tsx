@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { parseApiData } from "@/lib/apiClient";
+import { InlineError, InlineSuccess } from "@/components/ui/status-display";
 
 // The analysis prompt shown to the AI - keeping this visible for transparency
 const ANALYSIS_PROMPT = `You are a security and compliance expert reviewing customer contracts. Your task is to analyze security-related clauses and assess whether the organization can meet the requirements based on their documented capabilities.
@@ -123,23 +125,7 @@ const styles = {
     cursor: "pointer",
     fontSize: "14px",
   },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-  success: {
-    backgroundColor: "#dcfce7",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-  modal: {
+    modal: {
     position: "fixed" as const,
     inset: 0,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
@@ -248,7 +234,7 @@ export default function ContractUploadPage() {
       }
 
       const json = await response.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ id: string; contract?: { id: string } }>(json);
       setUploadedId(data.contract?.id || data.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
@@ -303,7 +289,7 @@ export default function ContractUploadPage() {
         Get alignment ratings and suggested responses for negotiations.
       </p>
 
-      {error && <div style={styles.error}>{error}</div>}
+      {error && <InlineError message={error} onDismiss={() => setError(null)} />}
 
       {!uploadedId ? (
         <>
@@ -420,9 +406,7 @@ export default function ContractUploadPage() {
         </>
       ) : (
         <div style={styles.card}>
-          <div style={styles.success}>
-            Contract uploaded successfully! Ready for analysis.
-          </div>
+          <InlineSuccess message="Contract uploaded successfully! Ready for analysis." />
 
           <h3 style={{ marginTop: 0, marginBottom: "16px" }}>
             {name || file?.name}

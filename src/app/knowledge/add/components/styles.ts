@@ -1,3 +1,5 @@
+import { statusInlineStyles } from "@/components/ui/status-display";
+
 export const styles = {
   container: {
     maxWidth: "1200px",
@@ -12,22 +14,9 @@ export const styles = {
     marginBottom: "20px",
     backgroundColor: "#fff",
   },
-  error: {
-    backgroundColor: "#fee2e2",
-    color: "#b91c1c",
-    border: "1px solid #fecaca",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
-  success: {
-    backgroundColor: "#dcfce7",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-    borderRadius: "6px",
-    padding: "12px",
-    marginBottom: "16px",
-  },
+  // Use shared status styles for consistency
+  error: statusInlineStyles.error,
+  success: statusInlineStyles.success,
 };
 
 export type SkillGroupStatus = "pending" | "approved" | "rejected" | "generating" | "saving" | "ready_for_review" | "reviewed" | "done" | "error";

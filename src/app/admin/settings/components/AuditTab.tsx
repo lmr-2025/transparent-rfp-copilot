@@ -8,10 +8,11 @@ import {
   ChevronRight,
   Clock,
   RefreshCw,
-  Loader2,
   X,
   AlertCircle,
 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 import { AuditLogEntry, AuditEntityType, AuditAction, Pagination } from "./types";
 import { entityTypeConfig, actionConfig } from "./constants";
 import { formatDate, formatFullDate, formatValue } from "./utils";
@@ -155,16 +156,17 @@ export default function AuditTab() {
 
       {/* Error */}
       {error && (
-        <div className="p-3 bg-red-50 text-red-600 rounded-lg mb-4 flex items-center gap-2">
-          <AlertCircle size={16} />
-          {error}
+        <div className="mb-4">
+          <InlineError message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 
       {/* Loading */}
       {isLoading && entries.length === 0 && (
         <div className="text-center py-8 text-gray-500">
-          <Loader2 size={24} className="animate-spin mx-auto mb-2 text-blue-500" />
+          <div className="flex justify-center mb-2">
+            <InlineLoader size="lg" className="text-blue-500" />
+          </div>
           Loading audit log...
         </div>
       )}

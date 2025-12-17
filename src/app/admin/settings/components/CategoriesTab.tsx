@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2, Edit2, FolderOpen, GripVertical, Loader2 } from "lucide-react";
+import { Plus, Trash2, Edit2, FolderOpen, GripVertical } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
 import { SkillCategoryItem } from "@/types/skill";
 import {
@@ -143,7 +145,9 @@ export default function CategoriesTab() {
         <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 mb-4">
           <h4 className="font-medium mb-3">Add Category</h4>
           {error && (
-            <div className="p-2 bg-red-50 text-red-600 rounded text-sm mb-3">{error}</div>
+            <div className="mb-3">
+              <InlineError message={error} onDismiss={() => setError(null)} />
+            </div>
           )}
           <input
             type="text"
@@ -178,7 +182,9 @@ export default function CategoriesTab() {
 
       {isLoadingCategories ? (
         <div className="p-8 text-center">
-          <Loader2 size={24} className="animate-spin mx-auto text-gray-400 mb-2" />
+          <div className="flex justify-center mb-2">
+            <InlineLoader size="lg" className="text-gray-400" />
+          </div>
           <p className="text-gray-500 text-sm">Loading categories...</p>
         </div>
       ) : categories.length === 0 ? (
@@ -205,7 +211,7 @@ export default function CategoriesTab() {
 
               {editingId === cat.id ? (
                 <div className="flex-1">
-                  {error && <div className="p-2 bg-red-50 text-red-600 rounded text-sm mb-2">{error}</div>}
+                  {error && <div className="mb-2"><InlineError message={error} onDismiss={() => setError(null)} /></div>}
                   <input
                     type="text"
                     value={newName}

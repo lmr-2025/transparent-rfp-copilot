@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Globe, Code, Loader2, User, ExternalLink, History, UserCog, CheckSquare, Square, RefreshCw, Tag, FolderOpen, Wand2, Link2, Pencil, Check, X } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Globe, Code, User, ExternalLink, History, UserCog, CheckSquare, Square, RefreshCw, Tag, FolderOpen, Wand2, Link2, Pencil, Check, X } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -193,7 +194,7 @@ export function KnowledgeItemCard({
                       disabled={isSavingTitle}
                       className="h-7 w-7 p-0 text-green-600 hover:text-green-700"
                     >
-                      {isSavingTitle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                      {isSavingTitle ? <InlineLoader size="sm" /> : <Check className="h-4 w-4" />}
                     </Button>
                     <Button
                       variant="ghost"
@@ -286,7 +287,7 @@ export function KnowledgeItemCard({
                 title="Refresh from source URLs"
               >
                 {isRefreshing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <InlineLoader size="sm" />
                 ) : (
                   <RefreshCw className="h-4 w-4" />
                 )}
@@ -351,7 +352,7 @@ export function KnowledgeItemCard({
                 aria-label={isDeleting ? "Deleting item" : "Delete item"}
               >
                 {isDeleting ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <InlineLoader size="sm" />
                 ) : (
                   <Trash2 className="h-4 w-4" />
                 )}

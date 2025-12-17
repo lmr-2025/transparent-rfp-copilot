@@ -25,6 +25,8 @@ import { CustomerProfile } from "@/types/customerProfile";
 import { features } from "@/lib/featureFlags";
 import UserSelector, { SelectableUser } from "@/components/UserSelector";
 import { SpeedToggle } from "@/components/speed-toggle";
+import { parseApiData } from "@/lib/apiClient";
+import { InlineError } from "@/components/ui/status-display";
 
 import {
   RowCard,
@@ -190,7 +192,7 @@ export default function BulkResponsesPage() {
     fetch("/api/reference-urls")
       .then(res => res.json())
       .then(json => {
-        const data = json.data ?? json.urls ?? json;
+        const data = parseApiData<ReferenceUrl[]>(json);
         setReferenceUrls(Array.isArray(data) ? data : []);
       })
       .catch(() => toast.error("Failed to load reference URLs"));
@@ -278,7 +280,7 @@ export default function BulkResponsesPage() {
       const settingsRes = await fetch("/api/app-settings/rate-limits");
       if (settingsRes.ok) {
         const settingsJson = await settingsRes.json();
-        const settings = settingsJson.data?.settings ?? settingsJson.settings ?? settingsJson;
+        const settings = parseApiData<typeof rateLimitSettings>(settingsJson, "settings");
         rateLimitSettings = {
           batchSize: settings.batchSize || 5,
           batchDelayMs: settings.batchDelayMs || 15000,
@@ -287,7 +289,7 @@ export default function BulkResponsesPage() {
         };
       }
     } catch {
-      console.warn("Failed to load rate limit settings, using defaults");
+      // Use defaults on failure
     }
 
     const total = project.rows.length;
@@ -303,17 +305,17 @@ export default function BulkResponsesPage() {
           fetched
             .filter((f) => !f.error && f.content.trim().length > 0)
             .forEach((f) => fallbackItems.push({ title: f.title, url: f.url, content: f.content }));
-        } catch (e) {
-          console.warn("Failed to fetch reference URLs:", e);
+        } catch {
+          // Continue without reference URLs
         }
       }
       try {
         const docsResponse = await fetch("/api/documents/content");
         if (docsResponse.ok) {
           const docsJson = await docsResponse.json();
-          const docsData = docsJson.data ?? docsJson;
+          const docsData = parseApiData<{ documents: { title: string; filename: string; content: string }[] }>(docsJson);
           if (docsData.documents && Array.isArray(docsData.documents)) {
-            docsData.documents.forEach((doc: { title: string; filename: string; content: string }) => {
+            docsData.documents.forEach((doc) => {
               if (doc.content?.trim()) {
                 fallbackItems.push({
                   title: doc.title,
@@ -324,8 +326,8 @@ export default function BulkResponsesPage() {
             });
           }
         }
-      } catch (e) {
-        console.warn("Failed to fetch documents for fallback:", e);
+      } catch {
+        // Continue without documents
       }
       if (fallbackItems.length > 0) {
         fallbackContent = fallbackItems;
@@ -395,8 +397,7 @@ export default function BulkResponsesPage() {
           });
 
           const json = await response.json().catch(() => null);
-          // Handle wrapped API response: { data: { answers, usedFallback } }
-          data = json?.data ?? json;
+          data = json ? parseApiData<{ answers?: BatchAnswer[]; usedFallback?: boolean; error?: string }>(json) : null;
 
           if (response.status === 429 || (data?.error && data.error.includes("rate_limit"))) {
             retries++;
@@ -518,11 +519,11 @@ export default function BulkResponsesPage() {
           toast.success("Review requested! A notification has been sent.");
         } else {
           toast.success("Review requested!");
-          console.warn("Slack notification failed:", await slackResponse.text());
+          // Slack notification failed silently - review was still saved
         }
-      } catch (slackError) {
+      } catch {
         toast.success("Review requested!");
-        console.warn("Slack notification failed:", slackError);
+        // Slack notification failed silently - review was still saved
       }
     } catch {
       toast.error("Failed to request review. Please try again.");
@@ -853,7 +854,7 @@ export default function BulkResponsesPage() {
       if (!response.ok) throw new Error("Failed to save customer profiles");
 
       const json = await response.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ project: BulkProject }>(json);
       setProject(data.project);
       setShowCustomerSelector(false);
     } catch {
@@ -880,7 +881,7 @@ export default function BulkResponsesPage() {
       if (!response.ok) throw new Error("Failed to update owner");
 
       const json = await response.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ project: BulkProject }>(json);
       setProject(data.project);
       setShowOwnerSelector(false);
       toast.success(`Owner changed to ${user.name || user.email}`);
@@ -913,7 +914,7 @@ export default function BulkResponsesPage() {
         Generate answers, review them, and challenge questionable responses to improve future skills.
       </p>
 
-      {errorMessage && <div style={{ ...styles.card, backgroundColor: "#fee2e2" }}>{errorMessage}</div>}
+      {errorMessage && <InlineError message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
 
       <SkillUpdateBanner skills={availableSkills} />
 

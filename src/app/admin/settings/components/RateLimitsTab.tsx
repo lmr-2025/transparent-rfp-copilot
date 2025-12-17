@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { RateLimitSettingItem } from "./types";
 
@@ -70,7 +70,9 @@ export default function RateLimitsTab() {
   if (loading) {
     return (
       <div className="text-center py-8 text-gray-500">
-        <Loader2 size={24} className="animate-spin mx-auto mb-2" />
+        <div className="flex justify-center mb-2">
+          <InlineLoader size="lg" />
+        </div>
         Loading rate limit settings...
       </div>
     );

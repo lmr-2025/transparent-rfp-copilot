@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import * as XLSX from "xlsx";
 import { BulkProject } from "@/types/bulkProject";
 import { createProject } from "@/lib/projectApi";
+import { InlineError, InlineSuccess } from "@/components/ui/status-display";
 
 import {
   ProjectMetadataCard,
@@ -359,10 +360,8 @@ export default function BulkUploadPage() {
         and keep progress between sessions.
       </p>
 
-      {errorMessage && <div style={{ ...styles.card, backgroundColor: "#fee2e2" }}>{errorMessage}</div>}
-      {successMessage && (
-        <div style={{ ...styles.card, backgroundColor: "#dcfce7", color: "#166534" }}>{successMessage}</div>
-      )}
+      {errorMessage && <InlineError message={errorMessage} onDismiss={() => setErrorMessage(null)} />}
+      {successMessage && <InlineSuccess message={successMessage} onDismiss={() => setSuccessMessage(null)} />}
 
       <ProjectMetadataCard
         projectName={projectName}

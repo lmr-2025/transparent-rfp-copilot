@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Loader2, Sparkles, Eye, Zap } from "lucide-react";
+import { Send, Sparkles, Eye, Zap } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 import ReactMarkdown from "react-markdown";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
@@ -391,7 +393,7 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
               color: "#64748b",
               fontSize: "14px",
             }}>
-              <Loader2 size={16} className="animate-spin" />
+              <InlineLoader size="sm" />
               Thinking...
             </div>
           )}
@@ -401,14 +403,8 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
 
         {/* Error Display */}
         {error && (
-          <div style={{
-            padding: "12px 24px",
-            backgroundColor: "#fef2f2",
-            borderTop: "1px solid #fecaca",
-            color: "#dc2626",
-            fontSize: "13px",
-          }}>
-            {error}
+          <div style={{ padding: "12px 24px" }}>
+            <InlineError message={error} onDismiss={() => setError(null)} />
           </div>
         )}
 
@@ -493,7 +489,7 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
                 justifyContent: "center",
               }}
             >
-              {isLoading ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+              {isLoading ? <InlineLoader size="md" /> : <Send size={20} />}
             </button>
           </div>
         </div>

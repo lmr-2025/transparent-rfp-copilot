@@ -4,7 +4,8 @@ import { useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -115,7 +116,7 @@ function ProjectsListContent() {
       {isLoading ? (
         <Card>
           <CardContent className="py-12 flex items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <InlineLoader size="lg" className="text-muted-foreground" />
           </CardContent>
         </Card>
       ) : projects.length === 0 ? (
@@ -214,7 +215,7 @@ export default function ProjectsListPage() {
         <div className="max-w-5xl mx-auto p-6">
           <Card>
             <CardContent className="py-12 flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              <InlineLoader size="lg" className="text-muted-foreground" />
             </CardContent>
           </Card>
         </div>

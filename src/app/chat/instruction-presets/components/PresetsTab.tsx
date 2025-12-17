@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useConfirm } from "@/components/ConfirmModal";
+import { parseApiData } from "@/lib/apiClient";
+import { InlineError } from "@/components/ui/status-display";
 import {
   PresetCard,
   EditPresetModal,
@@ -49,7 +51,7 @@ export default function PresetsTab() {
       const res = await fetch("/api/instruction-presets?pending=true");
       if (!res.ok) throw new Error("Failed to load presets");
       const json = await res.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ presets: InstructionPreset[] }>(json);
       setPresets(data.presets || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load presets");
@@ -219,21 +221,8 @@ export default function PresetsTab() {
       </div>
 
       {error && (
-        <div style={{
-          padding: "12px 16px",
-          backgroundColor: "#fee2e2",
-          color: "#dc2626",
-          borderRadius: "8px",
-          marginBottom: "16px",
-          fontSize: "14px",
-        }}>
-          {error}
-          <button
-            onClick={() => setError(null)}
-            style={{ marginLeft: "12px", background: "none", border: "none", cursor: "pointer" }}
-          >
-            Dismiss
-          </button>
+        <div style={{ marginBottom: "16px" }}>
+          <InlineError message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 

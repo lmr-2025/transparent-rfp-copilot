@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -109,7 +109,7 @@ export function ProjectsTable({
                         className="bg-green-600 hover:bg-green-700"
                       >
                         {isApproving ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <InlineLoader size="sm" />
                         ) : (
                           "Approve"
                         )}

@@ -49,12 +49,27 @@ export type SkillGroup = {
 
 export type WorkflowStep =
   | "input"
+  | "planning"       // NEW: Conversational planning step
   | "analyzing"
   | "review_groups"
   | "generating"
   | "review_drafts"
   | "saving"
   | "done";
+
+// Skill plan from the planning conversation
+export type SkillPlanItem = {
+  name: string;
+  sources: string[];
+  scope: string;
+  questions: string[];
+  mergeWith?: string;
+};
+
+export type SkillPlan = {
+  skills: SkillPlanItem[];
+  approved: boolean;
+};
 
 export type ProcessedResult = {
   created: number;
@@ -74,6 +89,19 @@ export type SnippetDraft = {
 
 export type BuildType = "skill" | "snippet";
 
+// Planning mode - triggered from library analysis recommendations
+export type PlanningMode =
+  | { type: "normal" }  // Standard add knowledge flow
+  | { type: "merge"; skillIds: string[] }  // Merge existing skills
+  | { type: "split"; skillId: string }  // Split a skill into multiple
+  | { type: "gap"; topic: string };  // Fill a gap with new skill
+
+// Planning conversation message
+export type PlanningMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 interface BulkImportState {
   // Workflow
   workflowStep: WorkflowStep;
@@ -86,6 +114,11 @@ interface BulkImportState {
   snippetDraft: SnippetDraft | null;
   processedResult: ProcessedResult | null;
   errorMessage: string | null;
+
+  // Planning step data
+  planningMessages: PlanningMessage[];
+  skillPlan: SkillPlan | null;
+  planningMode: PlanningMode;
 
   // UI State
   expandedGroups: Set<string>;
@@ -109,6 +142,14 @@ interface BulkImportState {
   setSnippetDraft: (draft: SnippetDraft | null) => void;
   setProcessedResult: (result: ProcessedResult | null) => void;
   setErrorMessage: (message: string | null) => void;
+
+  // Actions - Planning
+  addPlanningMessage: (message: PlanningMessage) => void;
+  clearPlanningMessages: () => void;
+  setSkillPlan: (plan: SkillPlan | null) => void;
+  setPlanningMode: (mode: PlanningMode) => void;
+  approveSkillPlan: () => void;
+  skipPlanning: () => void;
 
   // Actions - UI
   setExpandedGroups: (groups: Set<string>) => void;
@@ -150,6 +191,9 @@ const initialState = {
   snippetDraft: null as SnippetDraft | null,
   processedResult: null as ProcessedResult | null,
   errorMessage: null as string | null,
+  planningMessages: [] as PlanningMessage[],
+  skillPlan: null as SkillPlan | null,
+  planningMode: { type: "normal" } as PlanningMode,
   expandedGroups: new Set<string>(),
   previewGroup: null as SkillGroup | null,
   editingDraft: null as { groupId: string; field: "title" | "content" } | null,
@@ -183,6 +227,21 @@ export const useBulkImportStore = create<BulkImportState>((set, get) => ({
   setSnippetDraft: (snippetDraft) => set({ snippetDraft }),
   setProcessedResult: (processedResult) => set({ processedResult }),
   setErrorMessage: (errorMessage) => set({ errorMessage }),
+
+  // Planning actions
+  addPlanningMessage: (message) =>
+    set((state) => ({
+      planningMessages: [...state.planningMessages, message],
+    })),
+  clearPlanningMessages: () => set({ planningMessages: [], skillPlan: null }),
+  setSkillPlan: (skillPlan) => set({ skillPlan }),
+  setPlanningMode: (planningMode) => set({ planningMode }),
+  approveSkillPlan: () =>
+    set((state) => ({
+      skillPlan: state.skillPlan ? { ...state.skillPlan, approved: true } : null,
+      workflowStep: "analyzing",
+    })),
+  skipPlanning: () => set({ workflowStep: "analyzing", skillPlan: null }),
 
   // UI actions
   setExpandedGroups: (expandedGroups) => set({ expandedGroups }),

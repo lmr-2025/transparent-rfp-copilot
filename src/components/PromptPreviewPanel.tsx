@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { parseApiData } from "@/lib/apiClient";
 import { PromptBlock, PromptModifier, PromptContext, PromptComposition } from "@/lib/promptBlocks";
 
 // Types for optimization suggestions
@@ -44,6 +45,7 @@ const contextLabels: Record<PromptContext, string> = {
   skill_analyze: "URL Analysis",
   skill_refresh: "Refresh",
   skill_analyze_rfp: "RFP Import",
+  skill_planning: "Skill Planning",
   customer_profile: "Customers",
   prompt_optimize: "Optimize",
   instruction_builder: "Instruction Builder",
@@ -59,6 +61,7 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
   skill_analyze: { bg: "#f0fdfa", border: "#99f6e4", text: "#0d9488" },
   skill_refresh: { bg: "#fdf4ff", border: "#f5d0fe", text: "#a855f7" },
   skill_analyze_rfp: { bg: "#fef9c3", border: "#fde047", text: "#a16207" },
+  skill_planning: { bg: "#e0f2fe", border: "#7dd3fc", text: "#0369a1" },
   customer_profile: { bg: "#fef3c7", border: "#fcd34d", text: "#b45309" },
   prompt_optimize: { bg: "#f0f9ff", border: "#7dd3fc", text: "#0284c7" },
   instruction_builder: { bg: "#fdf2f8", border: "#fbcfe8", text: "#db2777" },
@@ -162,7 +165,7 @@ export default function PromptPreviewPanel({
       }
 
       const json = await response.json();
-      const result: OptimizeResponse = json.data ?? json;
+      const result = parseApiData<OptimizeResponse>(json);
       setOptimizeResult(result);
       setSelectedSuggestions(new Set(result.suggestions.map((_, i) => i)));
     } catch (error) {

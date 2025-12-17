@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Clock, Loader2, AlertCircle } from "lucide-react";
+import { Clock, AlertCircle } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 
 import {
   SearchFilterBar,
@@ -144,21 +146,8 @@ export default function AuditLogPage() {
 
       {/* Error State */}
       {error && (
-        <div
-          style={{
-            backgroundColor: "#fef2f2",
-            border: "1px solid #fecaca",
-            borderRadius: "8px",
-            padding: "16px",
-            marginBottom: "20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "12px",
-            color: "#dc2626",
-          }}
-        >
-          <AlertCircle size={20} />
-          <span>{error}</span>
+        <div style={{ marginBottom: "20px" }}>
+          <InlineError message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 
@@ -174,7 +163,9 @@ export default function AuditLogPage() {
             color: "#64748b",
           }}
         >
-          <Loader2 size={40} className="animate-spin" style={{ color: "#0ea5e9", marginBottom: "16px" }} />
+          <div style={{ marginBottom: "16px" }}>
+            <InlineLoader size="lg" className="text-sky-500" />
+          </div>
           <p>Loading audit log...</p>
         </div>
       )}

@@ -1,22 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2, MessageSquare, Loader2 } from "lucide-react";
+import { Trash2, MessageSquare, Download } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/ConfirmModal";
-
-export interface ChatSessionItem {
-  id: string;
-  createdAt: string;
-  updatedAt: string;
-  messages?: { role: string; content: string; timestamp?: string }[];
-  skillsUsed?: { id: string; title: string }[];
-  documentsUsed?: { id: string; title: string }[];
-  customersUsed?: { id: string; name: string }[];
-  urlsUsed?: { id: string; title: string }[];
-}
+import { exportChatSession, exportChatHistory, type ChatSession } from "@/lib/exportUtils";
+import { ChatSessionItem } from "@/hooks/use-chat-data";
 
 interface ChatHistoryPanelProps {
   sessions: ChatSessionItem[];
@@ -50,6 +42,37 @@ export function ChatHistoryPanel({
       onDeleteSession(id);
       setDeletingId(null);
     }
+  };
+
+  const handleExportSession = (session: ChatSessionItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const exportSession: ChatSession = {
+      id: session.id,
+      title: getSessionPreview(session),
+      messages: session.messages || [],
+      skillsUsed: session.skillsUsed,
+      documentsUsed: session.documentsUsed,
+      customersUsed: session.customersUsed,
+      urlsUsed: session.urlsUsed,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    };
+    exportChatSession(exportSession, { format: "markdown" });
+  };
+
+  const handleExportAll = () => {
+    const exportSessions: ChatSession[] = sessions.map((session) => ({
+      id: session.id,
+      title: getSessionPreview(session),
+      messages: session.messages || [],
+      skillsUsed: session.skillsUsed,
+      documentsUsed: session.documentsUsed,
+      customersUsed: session.customersUsed,
+      urlsUsed: session.urlsUsed,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    }));
+    exportChatHistory(exportSessions, { format: "xlsx" });
   };
 
   const formatDate = (dateString: string) => {
@@ -87,7 +110,7 @@ export function ChatHistoryPanel({
     return (
       <Card className="absolute top-full left-0 right-0 z-50 mt-2 shadow-lg">
         <CardContent className="py-8 flex items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <InlineLoader size="md" className="text-muted-foreground" />
         </CardContent>
       </Card>
     );
@@ -99,9 +122,22 @@ export function ChatHistoryPanel({
         <CardHeader className="py-3 px-4 border-b border-border">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">Chat History</CardTitle>
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              Close
-            </Button>
+            <div className="flex items-center gap-1">
+              {sessions.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleExportAll}
+                  title="Export all chat history"
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Export All
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={onClose}>
+                Close
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0 max-h-64 overflow-y-auto">
@@ -132,19 +168,30 @@ export function ChatHistoryPanel({
                       </div>
                     </div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                    onClick={(e) => handleDelete(session.id, e)}
-                    disabled={deletingId === session.id}
-                  >
-                    {deletingId === session.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Trash2 className="h-4 w-4" />
-                    )}
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-primary"
+                      onClick={(e) => handleExportSession(session, e)}
+                      title="Export this chat"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      onClick={(e) => handleDelete(session.id, e)}
+                      disabled={deletingId === session.id}
+                    >
+                      {deletingId === session.id ? (
+                        <InlineLoader size="sm" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
                 </button>
               ))}
             </div>

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Zap, Gauge, Loader2, RotateCcw, Info } from "lucide-react";
+import { Zap, Gauge, RotateCcw, Info } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { LLM_SPEED_DEFAULTS, type LLMFeature, type ModelSpeed } from "@/lib/config";
+import { parseApiData } from "@/lib/apiClient";
 
 // Friendly labels for each LLM feature
 const FEATURE_LABELS: Record<LLMFeature, { label: string; description: string }> = {
@@ -18,10 +20,6 @@ const FEATURE_LABELS: Record<LLMFeature, { label: string; description: string }>
   "questions-batch": {
     label: "Bulk Questions (RFP)",
     description: "Processing multiple RFP questions at once"
-  },
-  "call-assist": {
-    label: "Call Assist",
-    description: "Live call assistance (speed critical)"
   },
   "skills-suggest": {
     label: "Skill Generation",
@@ -73,7 +71,7 @@ const FEATURE_LABELS: Record<LLMFeature, { label: string; description: string }>
 const FEATURE_GROUPS = [
   {
     name: "Chat & Questions",
-    features: ["chat", "questions", "questions-batch", "call-assist"] as LLMFeature[],
+    features: ["chat", "questions", "questions-batch"] as LLMFeature[],
   },
   {
     name: "Knowledge Management",
@@ -108,11 +106,11 @@ export default function LLMSpeedTab() {
       const res = await fetch("/api/user/preferences");
       if (res.ok) {
         const json = await res.json();
-        const data = json.data ?? json;
+        const data = parseApiData<{ preferences?: { llmSpeedOverrides?: Record<string, ModelSpeed> } }>(json);
         setUserOverrides(data.preferences?.llmSpeedOverrides || {});
       }
-    } catch (error) {
-      console.error("Failed to fetch preferences:", error);
+    } catch {
+      // Continue with empty overrides on failure
     } finally {
       setLoading(false);
     }
@@ -172,7 +170,7 @@ export default function LLMSpeedTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <InlineLoader size="md" className="text-gray-400" />
         <span className="ml-2 text-gray-500">Loading preferences...</span>
       </div>
     );
@@ -204,7 +202,7 @@ export default function LLMSpeedTab() {
           >
             {saving ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <InlineLoader size="sm" />
                 Saving...
               </>
             ) : (

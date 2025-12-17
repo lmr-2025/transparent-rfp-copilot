@@ -7,6 +7,7 @@ import { ReferenceUrl } from "@/types/referenceUrl";
 import { CustomerProfile } from "@/types/customerProfile";
 import { ContextSnippet } from "@/types/contextSnippet";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
+import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 
 // Define types locally to avoid Turbopack export issues with `export type`
 export interface SkillOwner {
@@ -78,8 +79,7 @@ export function useAllDocuments() {
       const res = await fetch("/api/documents");
       if (!res.ok) throw new Error("Failed to fetch documents");
       const json = await res.json();
-      // API returns { data: { documents: [...] } } format
-      const data = json.data?.documents ?? json.documents ?? [];
+      const data = parseApiData<KnowledgeDocument[]>(json, "documents");
       return Array.isArray(data) ? data : [];
     },
     staleTime: STALE_TIMES.documents,
@@ -94,8 +94,7 @@ export function useAllReferenceUrls() {
       const res = await fetch("/api/reference-urls");
       if (!res.ok) throw new Error("Failed to fetch URLs");
       const json = await res.json();
-      // API returns { data: [...] } format
-      const data = json.data ?? json;
+      const data = parseApiData<ReferenceUrl[]>(json);
       return Array.isArray(data) ? data : [];
     },
     staleTime: STALE_TIMES.urls,
@@ -119,8 +118,7 @@ export function useAllSnippets() {
       const res = await fetch("/api/context-snippets");
       if (!res.ok) throw new Error("Failed to fetch snippets");
       const json = await res.json();
-      // API returns { data: [...] } format
-      const data = json.data ?? json.snippets ?? json;
+      const data = parseApiData<ContextSnippet[]>(json, "snippets");
       return Array.isArray(data) ? data : [];
     },
     staleTime: STALE_TIMES.snippets,
@@ -144,8 +142,7 @@ export function useAllUsers() {
       const res = await fetch("/api/users");
       if (!res.ok) throw new Error("Failed to fetch users");
       const json = await res.json();
-      // API returns { data: { users: [...] } } format
-      const data = json.data?.users ?? json.users ?? [];
+      const data = parseApiData<AppUser[]>(json, "users");
       return Array.isArray(data) ? data : [];
     },
     staleTime: STALE_TIMES.users,

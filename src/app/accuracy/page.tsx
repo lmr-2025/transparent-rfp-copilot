@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Clock,
   RefreshCw,
-  Loader2,
   X,
   AlertCircle,
   MessageSquare,
@@ -21,7 +20,11 @@ import {
   Lock,
   Flag,
   Trash2,
+  Download,
 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
+import { exportQuestionLog } from "@/lib/exportUtils";
 import type {
   QuestionLogEntry,
   QuestionLogStats,
@@ -357,16 +360,8 @@ export default function AccuracyPage() {
           )}
 
           {error && (
-            <div
-              style={{
-                padding: "16px",
-                background: "#fef2f2",
-                color: "#dc2626",
-                borderRadius: "8px",
-                marginBottom: "24px",
-              }}
-            >
-              {error}
+            <div style={{ marginBottom: "24px" }}>
+              <InlineError message={error} onDismiss={() => setError(null)} />
             </div>
           )}
 
@@ -907,6 +902,26 @@ export default function AccuracyPage() {
                 <RefreshCw size={14} className={logLoading ? "animate-spin" : ""} />
                 Refresh
               </button>
+              <button
+                onClick={() => exportQuestionLog(logEntries, { format: "xlsx" })}
+                disabled={logEntries.length === 0}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "6px 12px",
+                  background: logEntries.length === 0 ? "#f1f5f9" : "#0ea5e9",
+                  border: "none",
+                  borderRadius: "6px",
+                  fontSize: "0.875rem",
+                  color: logEntries.length === 0 ? "#94a3b8" : "white",
+                  cursor: logEntries.length === 0 ? "not-allowed" : "pointer",
+                }}
+                title="Export current results to Excel"
+              >
+                <Download size={14} />
+                Export
+              </button>
             </div>
 
             {showFilters && (
@@ -959,7 +974,9 @@ export default function AccuracyPage() {
           {/* Loading */}
           {logLoading && logEntries.length === 0 && (
             <div style={{ textAlign: "center", padding: "32px", color: "#64748b" }}>
-              <Loader2 size={24} className="animate-spin" style={{ margin: "0 auto 8px", color: "#0ea5e9" }} />
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: "8px" }}>
+                <InlineLoader size="lg" className="text-sky-500" />
+              </div>
               Loading question log...
             </div>
           )}
@@ -1229,7 +1246,7 @@ export default function AccuracyPage() {
                               title="Delete this question (cannot be undone)"
                             >
                               {deletingId === entry.id ? (
-                                <Loader2 size={14} className="animate-spin" />
+                                <InlineLoader size="sm" />
                               ) : (
                                 <Trash2 size={14} />
                               )}

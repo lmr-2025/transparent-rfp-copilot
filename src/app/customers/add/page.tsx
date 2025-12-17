@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { createProfile } from "@/lib/customerProfileApi";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
+import { parseApiData } from "@/lib/apiClient";
 import {
   CustomerProfileDraft,
   CustomerProfileKeyFact,
@@ -90,7 +91,7 @@ export default function CustomerProfileBuilderPage() {
         throw new Error(data.error || "Failed to search Salesforce");
       }
       const json = await response.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ results: SalesforceSearchResult[] }>(json);
       setSfSearchResults(data.results || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Salesforce search failed");
@@ -111,7 +112,7 @@ export default function CustomerProfileBuilderPage() {
         throw new Error(data.error || "Failed to fetch Salesforce account");
       }
       const json2 = await response.json();
-      const data = json2.data ?? json2;
+      const data = parseApiData<{ enrichment: SalesforceEnrichment }>(json2);
       setSfEnrichment(data.enrichment);
       setSfSearchResults([]);
       setSfSearchQuery("");
@@ -175,15 +176,15 @@ export default function CustomerProfileBuilderPage() {
         }
 
         const json3 = await response.json();
-        const data = json3.data ?? json3;
+        const data = parseApiData<{ document: { id: string } }>(json3);
 
         const contentResponse = await fetch(`/api/documents/${data.document.id}`);
         if (contentResponse.ok) {
           const contentJson = await contentResponse.json();
-          const contentData = contentJson.data ?? contentJson;
+          const contentData = parseApiData<{ content: string }>(contentJson, "document");
           newDocs.push({
             name: file.name,
-            content: contentData.document.content,
+            content: contentData.content,
             size: file.size,
           });
 
@@ -248,7 +249,7 @@ export default function CustomerProfileBuilderPage() {
       }
 
       const json4 = await response.json();
-      const data = (json4.data ?? json4) as AnalysisResult;
+      const data = parseApiData<AnalysisResult>(json4);
       setAnalysisResult(data);
       setSourceUrls(urls);
       if (data.transparency) {
@@ -288,7 +289,7 @@ export default function CustomerProfileBuilderPage() {
       }
 
       const json5 = await response.json();
-      const data = json5.data ?? json5;
+      const data = parseApiData<{ draft: CustomerProfileDraft; transparency?: TransparencyData }>(json5);
       setDraft(data.draft);
       setAnalysisResult(null);
       if (data.transparency) {

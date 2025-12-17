@@ -1,4 +1,5 @@
 import { BulkProject, BulkRow } from "@/types/bulkProject";
+import { parseApiData } from "./apiClient";
 
 /**
  * API client for project CRUD operations
@@ -53,11 +54,8 @@ export async function fetchAllProjects(): Promise<BulkProject[]> {
     throw new Error("Failed to fetch projects");
   }
   const json = await response.json();
-  // Handle both old format ({ projects: [...] }) and new format ({ data: { projects: [...] } })
-  const projects = json.data?.projects ?? json.projects ?? [];
-
-  // Transform database format to frontend format
-  return projects.map(transformProjectFromDb);
+  const projects = parseApiData<DbProject[]>(json, "projects");
+  return (Array.isArray(projects) ? projects : []).map(transformProjectFromDb);
 }
 
 export async function fetchProject(id: string): Promise<BulkProject | null> {
@@ -69,8 +67,7 @@ export async function fetchProject(id: string): Promise<BulkProject | null> {
     throw new Error("Failed to fetch project");
   }
   const json = await response.json();
-  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
-  const project = json.data?.project ?? json.project;
+  const project = parseApiData<DbProject>(json, "project");
   return transformProjectFromDb(project);
 }
 
@@ -85,8 +82,7 @@ export async function createProject(project: BulkProject): Promise<BulkProject> 
     throw new Error("Failed to create project");
   }
   const json = await response.json();
-  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
-  const created = json.data?.project ?? json.project;
+  const created = parseApiData<DbProject>(json, "project");
   return transformProjectFromDb(created);
 }
 
@@ -101,8 +97,7 @@ export async function updateProject(project: BulkProject): Promise<BulkProject> 
     throw new Error("Failed to update project");
   }
   const json = await response.json();
-  // Handle both old format ({ project: {...} }) and new format ({ data: { project: {...} } })
-  const updated = json.data?.project ?? json.project;
+  const updated = parseApiData<DbProject>(json, "project");
   return transformProjectFromDb(updated);
 }
 

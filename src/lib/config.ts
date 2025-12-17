@@ -2,7 +2,7 @@
 
 // Claude models for LLM calls
 // Sonnet: Best quality, slower (~10-30s) - use for complex analysis, RFP answering
-// Haiku: Fast and cheap (~2-5s) - use for quick Q&A, call assist, simple tasks
+// Haiku: Fast and cheap (~2-5s) - use for quick Q&A, simple tasks
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || "claude-sonnet-4-20250514";
 export const CLAUDE_MODEL_FAST = process.env.CLAUDE_MODEL_FAST || "claude-3-5-haiku-20241022";
 
@@ -18,7 +18,6 @@ export type LLMFeature =
   | "chat"              // Knowledge chat / The Oracle
   | "questions"         // Quick questions on home page
   | "questions-batch"   // Bulk RFP question processing
-  | "call-assist"       // Live call assistance (future)
   | "skills-suggest"    // Skill generation/update
   | "skills-analyze"    // Analyze URLs for skill routing
   | "skills-analyze-rfp"    // Analyze RFP for skill suggestions
@@ -32,12 +31,10 @@ export type LLMFeature =
   | "documents-template"; // Generate document templates
 
 // System defaults for LLM speed per feature
-// All default to "quality" except call-assist which needs speed
 export const LLM_SPEED_DEFAULTS: Record<LLMFeature, ModelSpeed> = {
   "chat": "quality",
   "questions": "quality",
   "questions-batch": "quality",
-  "call-assist": "fast",  // Speed critical for live calls
   "skills-suggest": "quality",
   "skills-analyze": "quality",
   "skills-analyze-rfp": "quality",

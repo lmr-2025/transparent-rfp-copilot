@@ -18,6 +18,7 @@ import LoadingSpinner from "@/components/LoadingSpinner";
 import DomainSelector, { Domain } from "@/components/DomainSelector";
 import { useFlagReview } from "@/components/FlagReviewModal";
 import { SpeedToggle } from "@/components/speed-toggle";
+import { parseApiData } from "@/lib/apiClient";
 
 import {
   QuestionHistoryPanel,
@@ -80,7 +81,7 @@ function QuestionsPageContent() {
       const response = await fetch("/api/question-history?limit=20");
       if (response.ok) {
         const json = await response.json();
-        const data = json.data ?? json;
+        const data = parseApiData<{ history: QuestionHistoryItem[] }>(json);
         setQuestionHistory(data.history || []);
       }
     } catch {
@@ -118,7 +119,7 @@ function QuestionsPageContent() {
         }),
       });
       const json = await res.json();
-      const data = json.data ?? json;
+      const data = parseApiData<{ entry?: { id: string }; id?: string }>(json);
       // Refresh history after saving
       fetchHistory();
       return data.entry?.id || data.id || null;
@@ -180,7 +181,7 @@ function QuestionsPageContent() {
       const response = await fetch(`/api/question-history/${id}`);
       if (response.ok) {
         const json = await response.json();
-        const data = json.data ?? json;
+        const data = parseApiData<{ question: QuestionHistoryItem }>(json);
         if (data.question) {
           const item = data.question;
           setQuestionText(item.question);
@@ -291,7 +292,7 @@ function QuestionsPageContent() {
         }),
       });
       const json = await response.json().catch(() => null);
-      const data = json?.data ?? json;
+      const data = json ? parseApiData<{ answer: string; error?: string }>(json) : null;
       if (!response.ok || !data?.answer) {
         throw new Error(json?.error || data?.error || "Failed to generate response.");
       }

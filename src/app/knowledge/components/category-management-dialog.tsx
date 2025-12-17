@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { X, Plus, Check, Loader2, Tag } from "lucide-react";
+import { X, Plus, Check, Tag } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -129,7 +130,7 @@ export function CategoryManagementDialog({
           <div className="max-h-48 overflow-y-auto border rounded-md">
             {categoriesLoading ? (
               <div className="py-4 flex items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <InlineLoader size="md" className="text-muted-foreground" />
               </div>
             ) : filteredCategories.length === 0 ? (
               <div className="py-4 text-center text-sm text-muted-foreground">
@@ -179,7 +180,7 @@ export function CategoryManagementDialog({
           <Button onClick={handleSave} disabled={isSaving}>
             {isSaving ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                <InlineLoader size="sm" className="mr-2" />
                 Saving...
               </>
             ) : (

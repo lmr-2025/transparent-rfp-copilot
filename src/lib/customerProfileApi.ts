@@ -7,12 +7,13 @@ import {
   CustomerProfileOwner,
   CustomerProfileHistoryEntry,
 } from "@/types/customerProfile";
+import { createApiClient } from "./apiClient";
 
 /**
  * API client for customer profile CRUD operations (The Rolodex)
  */
 
-// Type for database profile format
+// Type for database profile format (before transformation)
 interface DbCustomerProfile {
   id: string;
   name: string;
@@ -32,108 +33,66 @@ interface DbCustomerProfile {
   history?: CustomerProfileHistoryEntry[] | null;
 }
 
+/**
+ * Transform database profile format to frontend CustomerProfile type
+ */
+function transformProfileFromDb(item: unknown): CustomerProfile {
+  const p = item as DbCustomerProfile;
+  return {
+    id: p.id,
+    name: p.name,
+    industry: p.industry ?? undefined,
+    website: p.website ?? undefined,
+    overview: p.overview,
+    products: p.products ?? undefined,
+    challenges: p.challenges ?? undefined,
+    keyFacts: p.keyFacts ?? [],
+    sourceUrls: p.sourceUrls ?? [],
+    isActive: p.isActive,
+    createdAt: p.createdAt,
+    updatedAt: p.updatedAt,
+    lastRefreshedAt: p.lastRefreshedAt ?? undefined,
+    createdBy: p.createdBy ?? undefined,
+    owners: p.owners ?? undefined,
+    history: p.history ?? undefined,
+  };
+}
+
+// Create the base API client with transformation
+const profileClient = createApiClient<CustomerProfile, CustomerProfileCreate, CustomerProfileUpdate>({
+  baseUrl: "/api/customers",
+  singularKey: "profile",
+  pluralKey: "profiles",
+  transform: transformProfileFromDb,
+});
+
+// Re-export with specific function names for backward compatibility
+
 export async function fetchAllProfiles(): Promise<CustomerProfile[]> {
-  const response = await fetch("/api/customers");
-  if (!response.ok) {
-    throw new Error("Failed to fetch customer profiles");
-  }
-  const result = await response.json();
-  // Handle both { data: { profiles: [...] } } and { profiles: [...] } formats
-  const data = result.data || result;
-  return (data.profiles || []).map(transformProfileFromDb);
+  return profileClient.fetchAll();
 }
 
 export async function fetchActiveProfiles(): Promise<CustomerProfile[]> {
-  const response = await fetch("/api/customers?active=true");
-  if (!response.ok) {
-    throw new Error("Failed to fetch active customer profiles");
-  }
-  const result = await response.json();
-  // Handle both { data: { profiles: [...] } } and { profiles: [...] } formats
-  const data = result.data || result;
-  return (data.profiles || []).map(transformProfileFromDb);
+  return profileClient.fetchAll({ active: "true" });
 }
 
 export async function fetchProfile(id: string): Promise<CustomerProfile | null> {
-  const response = await fetch(`/api/customers/${id}`);
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    throw new Error("Failed to fetch customer profile");
-  }
-  const result = await response.json();
-  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
-  const data = result.data || result;
-  return data.profile ? transformProfileFromDb(data.profile) : null;
+  return profileClient.fetch(id);
 }
 
 export async function createProfile(
   profile: CustomerProfileCreate
 ): Promise<CustomerProfile> {
-  const response = await fetch("/api/customers", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(profile),
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || error.error || "Failed to create customer profile");
-  }
-  const result = await response.json();
-  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
-  const data = result.data || result;
-  return transformProfileFromDb(data.profile);
+  return profileClient.create(profile);
 }
 
 export async function updateProfile(
   id: string,
   updates: CustomerProfileUpdate
 ): Promise<CustomerProfile> {
-  const response = await fetch(`/api/customers/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(updates),
-  });
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || error.error || "Failed to update customer profile");
-  }
-  const result = await response.json();
-  // Handle both { data: { profile: {...} } } and { profile: {...} } formats
-  const data = result.data || result;
-  return transformProfileFromDb(data.profile);
+  return profileClient.update(id, updates);
 }
 
 export async function deleteProfile(id: string): Promise<void> {
-  const response = await fetch(`/api/customers/${id}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to delete customer profile");
-  }
-}
-
-/**
- * Transform database profile format to frontend CustomerProfile type
- */
-function transformProfileFromDb(dbProfile: DbCustomerProfile): CustomerProfile {
-  return {
-    id: dbProfile.id,
-    name: dbProfile.name,
-    industry: dbProfile.industry ?? undefined,
-    website: dbProfile.website ?? undefined,
-    overview: dbProfile.overview,
-    products: dbProfile.products ?? undefined,
-    challenges: dbProfile.challenges ?? undefined,
-    keyFacts: dbProfile.keyFacts ?? [],
-    sourceUrls: dbProfile.sourceUrls ?? [],
-    isActive: dbProfile.isActive,
-    createdAt: dbProfile.createdAt,
-    updatedAt: dbProfile.updatedAt,
-    lastRefreshedAt: dbProfile.lastRefreshedAt ?? undefined,
-    createdBy: dbProfile.createdBy ?? undefined,
-    owners: dbProfile.owners ?? undefined,
-    history: dbProfile.history ?? undefined,
-  };
+  return profileClient.delete(id);
 }

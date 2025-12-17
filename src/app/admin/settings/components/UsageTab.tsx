@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { UsageData } from "./types";
 import { FEATURE_LABELS } from "./constants";
 import { formatCost, formatTokens } from "./utils";
+import { InlineError } from "@/components/ui/status-display";
 
 export default function UsageTab() {
   const [usageData, setUsageData] = useState<UsageData | null>(null);
@@ -40,7 +41,7 @@ export default function UsageTab() {
   }
 
   if (error) {
-    return <div className="p-4 bg-red-50 text-red-600 rounded-lg">{error}</div>;
+    return <InlineError message={error} onDismiss={() => setError(null)} />;
   }
 
   return (

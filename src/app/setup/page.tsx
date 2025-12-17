@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { InlineError } from "@/components/ui/status-display";
 
 type Step = "welcome" | "google" | "test" | "done";
 
@@ -175,15 +176,8 @@ export default function SetupPage() {
             </div>
 
             {error && (
-              <div style={{
-                backgroundColor: "#fee2e2",
-                color: "#b91c1c",
-                padding: "12px",
-                borderRadius: "8px",
-                marginBottom: "16px",
-                fontSize: "14px",
-              }}>
-                {error}
+              <div style={{ marginBottom: "16px" }}>
+                <InlineError message={error} onDismiss={() => setError(null)} />
               </div>
             )}
 

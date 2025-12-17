@@ -16,12 +16,13 @@ import {
   useChatSessions,
   useSendMessage,
   useSaveSession,
+  ChatSessionItem,
 } from "@/hooks/use-chat-data";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ChatInput } from "./components/chat-input";
 import { MessageList } from "./components/message-list";
 import { KnowledgeSidebar } from "./components/knowledge-sidebar";
-import { ChatHistoryPanel, ChatSessionItem } from "./components/chat-history-panel";
+import { ChatHistoryPanel } from "./components/chat-history-panel";
 import { TransparencyModal, TransparencyData } from "./components/transparency-modal";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
@@ -265,11 +266,12 @@ ${keyFactsText}`;
         customersUsed: response.customersUsed,
         documentsUsed: response.documentsUsed,
         urlsUsed: response.urlsUsed,
-        confidence: parsed.confidence,
-        sources: parsed.sources,
-        reasoning: parsed.reasoning,
-        inference: parsed.inference,
-        remarks: parsed.remarks,
+        // Only include transparency fields if they have actual values
+        ...(parsed.confidence && { confidence: parsed.confidence }),
+        ...(parsed.sources && { sources: parsed.sources }),
+        ...(parsed.reasoning && { reasoning: parsed.reasoning }),
+        ...(parsed.inference && { inference: parsed.inference }),
+        ...(parsed.remarks && { remarks: parsed.remarks }),
       };
 
       addMessage(assistantMessage);

@@ -4,8 +4,10 @@ import { useState, useEffect, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
+import { InlineError } from "@/components/ui/status-display";
 
+import { parseApiData } from "@/lib/apiClient";
 import {
   BrandingTab,
   IntegrationsTab,
@@ -66,7 +68,7 @@ function AdminSettingsContent() {
       }
       if (!res.ok) throw new Error("Failed to fetch settings");
       const json = await res.json();
-      const data = json.data ?? json;
+      const data = parseApiData<SettingsResponse>(json);
       setSettings(data);
       if (data.branding) {
         setBranding(data.branding);
@@ -131,7 +133,7 @@ function AdminSettingsContent() {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-5xl mx-auto">
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">{error}</div>
+          <InlineError message={error} onDismiss={() => setError(null)} />
         </div>
       </div>
     );
@@ -207,7 +209,7 @@ export default function AdminSettingsPage() {
         minHeight: "200px",
         color: "#64748b",
       }}>
-        <Loader2 className="animate-spin" style={{ marginRight: "8px" }} />
+        <InlineLoader size="md" className="mr-2" />
         Loading settings...
       </div>
     }>

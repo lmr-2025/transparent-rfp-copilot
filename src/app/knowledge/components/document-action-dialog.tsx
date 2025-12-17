@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, FileText, BookOpen, Archive } from "lucide-react";
+import { FileText, BookOpen, Archive } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import {
   Dialog,
   DialogContent,
@@ -97,7 +98,7 @@ export function DocumentActionDialog({
             <div className="flex items-start gap-3">
               <div className="p-2 bg-gray-100 rounded-lg group-hover:bg-gray-200">
                 {isLoading ? (
-                  <Loader2 className="h-5 w-5 text-gray-600 animate-spin" />
+                  <InlineLoader size="md" className="text-gray-600" />
                 ) : (
                   <Archive className="h-5 w-5 text-gray-600" />
                 )}

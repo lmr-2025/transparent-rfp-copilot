@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Loader2, Check, X, RefreshCw, AlertCircle } from "lucide-react";
+import { Check, X, RefreshCw, AlertCircle } from "lucide-react";
+import { InlineLoader } from "@/components/ui/loading";
 import {
   Dialog,
   DialogContent,
@@ -72,7 +73,7 @@ export function SkillRefreshDialog({
         <div className="flex-1 overflow-y-auto py-4">
           {isLoading && (
             <div className="flex flex-col items-center justify-center py-12 gap-4">
-              <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+              <InlineLoader size="lg" className="text-blue-600" />
               <p className="text-muted-foreground">
                 Fetching source URLs and comparing content...
               </p>
@@ -183,7 +184,7 @@ export function SkillRefreshDialog({
               </Button>
               <Button onClick={handleApply} disabled={isApplying}>
                 {isApplying ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <InlineLoader size="sm" className="mr-2" />
                 ) : (
                   <Check className="h-4 w-4 mr-2" />
                 )}

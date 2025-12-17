@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
-import { getApiErrorMessage } from "@/lib/utils";
+import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { Skill } from "@/types/skill";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import { CustomerProfile } from "@/types/customerProfile";
@@ -38,8 +38,7 @@ export function useDocuments() {
       const res = await fetch("/api/documents");
       if (!res.ok) throw new Error("Failed to fetch documents");
       const json = await res.json();
-      // API returns { data: { documents: [...] } } format
-      const data = json.data?.documents ?? json.documents ?? [];
+      const data = parseApiData<KnowledgeDocument[]>(json, "documents");
       return Array.isArray(data) ? data : [];
     },
   });
@@ -49,12 +48,11 @@ export function useDocuments() {
 export function useReferenceUrls() {
   return useQuery({
     queryKey: chatQueryKeys.urls,
-    queryFn: async () => {
+    queryFn: async (): Promise<ReferenceUrl[]> => {
       const res = await fetch("/api/reference-urls");
       if (!res.ok) throw new Error("Failed to fetch URLs");
       const json = await res.json();
-      // API returns { data: [...] } format
-      const data = json.data ?? json.urls ?? json;
+      const data = parseApiData<ReferenceUrl[]>(json);
       return Array.isArray(data) ? data : [];
     },
   });
@@ -86,23 +84,33 @@ export function useInstructionPresets() {
       const res = await fetch("/api/instruction-presets");
       if (!res.ok) throw new Error("Failed to fetch presets");
       const json = await res.json();
-      // API returns { data: { presets: [...] } } format
-      const data = json.data?.presets ?? json.presets ?? [];
+      const data = parseApiData<unknown[]>(json, "presets");
       return Array.isArray(data) ? data : [];
     },
   });
+}
+
+// Chat session item type
+export interface ChatSessionItem {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  messages?: { role: string; content: string; timestamp?: string }[];
+  skillsUsed?: { id: string; title: string }[];
+  documentsUsed?: { id: string; title: string }[];
+  customersUsed?: { id: string; name: string }[];
+  urlsUsed?: { id: string; title: string }[];
 }
 
 // Fetch chat sessions
 export function useChatSessions(limit = 20) {
   return useQuery({
     queryKey: chatQueryKeys.sessions(limit),
-    queryFn: async () => {
+    queryFn: async (): Promise<ChatSessionItem[]> => {
       const res = await fetch(`/api/chat-sessions?limit=${limit}`);
       if (!res.ok) throw new Error("Failed to fetch sessions");
       const json = await res.json();
-      // API returns { data: { sessions: [...] } } format
-      const data = json.data?.sessions ?? json.sessions ?? [];
+      const data = parseApiData<ChatSessionItem[]>(json, "sessions");
       return Array.isArray(data) ? data : [];
     },
   });
@@ -122,15 +130,35 @@ type SendMessageParams = {
     keyFacts?: { label: string; value: string }[];
   }[];
   documentIds: string[];
-  referenceUrls: { id: string; url: string; title: string }[];
+  referenceUrls: { id: string; url: string; title: string | null }[];
   conversationHistory: { role: string; content: string }[];
   userInstructions: string;
   quickMode?: boolean; // Use Haiku for faster responses
 };
 
+type SendMessageResponse = {
+  response: string;
+  skillsUsed?: { id: string; title: string }[];
+  customersUsed?: { id: string; name: string }[];
+  documentsUsed?: { id: string; title: string }[];
+  urlsUsed?: { id: string; title: string }[];
+  contextTruncated?: boolean;
+  transparency?: {
+    systemPrompt: string;
+    baseSystemPrompt?: string;
+    knowledgeContext: string;
+    customerContext?: string;
+    documentContext?: string;
+    urlContext?: string;
+    model: string;
+    maxTokens: number;
+    temperature: number;
+  };
+};
+
 export function useSendMessage() {
   return useMutation({
-    mutationFn: async (params: SendMessageParams) => {
+    mutationFn: async (params: SendMessageParams): Promise<SendMessageResponse> => {
       const res = await fetch("/api/knowledge-chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,8 +171,7 @@ export function useSendMessage() {
       }
 
       const json = await res.json();
-      // API returns { data: { response, skillsUsed, ... } } format
-      return json.data ?? json;
+      return parseApiData<SendMessageResponse>(json);
     },
   });
 }
@@ -184,8 +211,7 @@ export function useSaveSession() {
         });
         if (!res.ok) throw new Error("Failed to create session");
         const json = await res.json();
-        // API returns { data: { id, ... } } format
-        return json.data ?? json;
+        return parseApiData<{ id: string }>(json);
       }
     },
     onSuccess: () => {

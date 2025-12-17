@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useConfirm } from "@/components/ConfirmModal";
 import Link from "next/link";
+import { parseApiData } from "@/lib/apiClient";
 import {
   PromptBlock,
   PromptModifier,
@@ -67,11 +68,11 @@ export default function PromptBlocksPage() {
         const res = await fetch("/api/prompt-blocks");
         if (res.ok) {
           const json = await res.json();
-          const data = json.data ?? json;
-          if (data.blocks?.length > 0) {
+          const data = parseApiData<{ blocks?: PromptBlock[]; modifiers?: PromptModifier[] }>(json);
+          if (data.blocks && data.blocks.length > 0) {
             setBlocks(data.blocks);
           }
-          if (data.modifiers?.length > 0) {
+          if (data.modifiers && data.modifiers.length > 0) {
             setModifiers(data.modifiers);
           }
         }

@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
+import { InlineError } from "@/components/ui/status-display";
 import { ContractReviewSummary } from "@/types/contractReview";
+import { parseApiData } from "@/lib/apiClient";
 
 const styles = {
   container: {
@@ -107,8 +109,8 @@ export default function ContractLibraryPage() {
       const response = await fetch("/api/contracts");
       if (!response.ok) throw new Error("Failed to fetch contracts");
       const json = await response.json();
-      const data = json.data ?? json;
-      setContracts(data.contracts || []);
+      const contracts = parseApiData<ContractReviewSummary[]>(json, "contracts");
+      setContracts(Array.isArray(contracts) ? contracts : []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load contracts");
     } finally {
@@ -180,15 +182,7 @@ export default function ContractLibraryPage() {
       </div>
 
       {error && (
-        <div style={{
-          backgroundColor: "#fee2e2",
-          color: "#b91c1c",
-          padding: "12px",
-          borderRadius: "6px",
-          marginBottom: "16px",
-        }}>
-          {error}
-        </div>
+        <InlineError message={error} onDismiss={() => setError(null)} />
       )}
 
       {contracts.length > 0 && (
