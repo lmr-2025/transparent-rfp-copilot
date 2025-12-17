@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { SkipForward, AlertTriangle } from "lucide-react";
+import { SkipForward, AlertTriangle, X } from "lucide-react";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { Button } from "@/components/ui/button";
@@ -46,9 +46,12 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
     setSkillPlan,
     approveSkillPlan,
     skipPlanning,
+    reset,
+    setWorkflowStep,
   } = useBulkImportStore();
 
   const [input, setInput] = useState("");
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [systemPrompt, setSystemPrompt] = useState<string>("");
@@ -363,6 +366,15 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
     skipPlanning();
   };
 
+  const handleCancel = () => {
+    setShowCancelConfirm(true);
+  };
+
+  const handleConfirmCancel = () => {
+    reset();
+    setWorkflowStep("input");
+  };
+
   // Convert PlanningMessage[] to Message[] for the ConversationalPanel
   const messages: Message[] = planningMessages;
 
@@ -389,14 +401,24 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
            "Discuss how to organize your sources before generating"}
         </p>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleSkip}
-      >
-        <SkipForward className="h-4 w-4 mr-1" />
-        Skip Planning
-      </Button>
+      <div style={{ display: "flex", gap: "8px" }}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCancel}
+        >
+          <X className="h-4 w-4 mr-1" />
+          Cancel
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSkip}
+        >
+          <SkipForward className="h-4 w-4 mr-1" />
+          Skip Planning
+        </Button>
+      </div>
     </div>
   );
 
@@ -493,6 +515,62 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
           onSkip={handleSkip}
         />
       </div>
+
+      {/* Cancel Confirmation Modal */}
+      {showCancelConfirm && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          backgroundColor: "rgba(0, 0, 0, 0.5)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 50,
+        }}>
+          <div style={{
+            backgroundColor: "#fff",
+            borderRadius: "12px",
+            padding: "24px",
+            maxWidth: "400px",
+            width: "90%",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
+              <div style={{
+                width: "40px",
+                height: "40px",
+                borderRadius: "50%",
+                backgroundColor: "#fef3c7",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+                <AlertTriangle size={20} style={{ color: "#d97706" }} />
+              </div>
+              <h3 style={{ fontSize: "18px", fontWeight: 600, color: "#1e293b", margin: 0 }}>
+                Cancel skill planning?
+              </h3>
+            </div>
+            <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 20px 0" }}>
+              Your conversation and any plan you&apos;ve created will be lost. You&apos;ll need to start over.
+            </p>
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <Button
+                variant="outline"
+                onClick={() => setShowCancelConfirm(false)}
+              >
+                Keep planning
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={handleConfirmCancel}
+              >
+                Cancel and start over
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
