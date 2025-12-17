@@ -121,12 +121,31 @@ export async function POST(request: NextRequest) {
         ).join("\n\n---\n\n")
       : "";
 
-    // Build customer context from profiles
+    // Fetch customer documents if customer profiles are selected
+    let customerDocuments: { id: string; customerId: string; title: string; content: string; docType: string | null }[] = [];
+    if (customerProfiles.length > 0) {
+      const customerIds = customerProfiles.map(p => p.id);
+      customerDocuments = await prisma.customerDocument.findMany({
+        where: { customerId: { in: customerIds } },
+        select: { id: true, customerId: true, title: true, content: true, docType: true },
+      });
+    }
+
+    // Build customer context from profiles (including their documents)
     const customerContext = customerProfiles.length > 0
       ? customerProfiles.map((profile) => {
           const keyFactsText = profile.keyFacts.length > 0
             ? `Key Facts:\n${profile.keyFacts.map(f => `  - ${f.label}: ${f.value}`).join("\n")}`
             : "";
+
+          // Get documents for this customer
+          const customerDocs = customerDocuments.filter(d => d.customerId === profile.id);
+          const customerDocsText = customerDocs.length > 0
+            ? `\nCustomer Documents:\n${customerDocs.map(d =>
+                `--- ${d.title}${d.docType ? ` (${d.docType})` : ""} ---\n${d.content}`
+              ).join("\n\n")}`
+            : "";
+
           return `=== CUSTOMER PROFILE: ${profile.name} ===
 Industry: ${profile.industry || "Not specified"}
 
@@ -134,7 +153,7 @@ Overview:
 ${profile.overview}
 ${profile.products ? `\nProducts & Services:\n${profile.products}` : ""}
 ${profile.challenges ? `\nChallenges & Needs:\n${profile.challenges}` : ""}
-${keyFactsText}`;
+${keyFactsText}${customerDocsText}`;
         }).join("\n\n---\n\n")
       : "";
 
@@ -228,6 +247,7 @@ ${keyFactsText}`;
         skillCount: skills.length,
         documentCount: documents.length,
         customerCount: customerProfiles.length,
+        customerDocCount: customerDocuments.length,
         urlCount: referenceUrls.length,
         conversationLength: conversationHistory.length,
         quickMode: quickMode || false,

@@ -9,6 +9,7 @@ import {
 } from "@/lib/customerProfileApi";
 import { CustomerProfile, CustomerProfileKeyFact } from "@/types/customerProfile";
 import { InlineError } from "@/components/ui/status-display";
+import CustomerDocuments from "./components/CustomerDocuments";
 
 const styles = {
   container: {
@@ -524,6 +525,12 @@ export default function CustomerProfileLibraryPage() {
                           </div>
                         </div>
                       )}
+
+                      {/* Customer Documents */}
+                      <CustomerDocuments
+                        customerId={profile.id}
+                        customerName={profile.name}
+                      />
 
                       {/* Actions */}
                       <div style={{ marginTop: "16px", display: "flex", gap: "8px", flexWrap: "wrap" }}>

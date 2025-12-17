@@ -293,10 +293,32 @@ model CustomerProfile {
   history         Json?    // Audit trail entries
 
   projects        ProjectCustomerProfile[]
+  documents       CustomerDocument[]
 
   @@index([isActive, updatedAt])
   @@index([industry])
   @@index([ownerId])
+}
+
+// Customer-specific documents (only used when this customer is selected)
+model CustomerDocument {
+  id              String   @id @default(uuid())
+  customerId      String
+  customer        CustomerProfile @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  title           String
+  filename        String
+  fileType        String   // pdf, doc, docx, txt, xlsx
+  content         String   @db.Text // Extracted text content
+  fileSize        Int      // bytes
+  description     String?  @db.Text
+  uploadedAt      DateTime @default(now())
+  uploadedBy      String?  // User email for display
+  // Document types for organization
+  docType         String?  // proposal, meeting_notes, requirements, contract, other
+
+  @@index([customerId])
+  @@index([uploadedAt])
+  @@index([docType])
 }
 
 // Join table for Projects <-> CustomerProfiles (many-to-many)
