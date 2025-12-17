@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { logUsage } from "@/lib/usageTracking";
 import { knowledgeChatSchema, validateBody } from "@/lib/validations";
@@ -81,6 +81,11 @@ export async function POST(request: NextRequest) {
   const referenceUrls = data.referenceUrls || [];
   const conversationHistory = data.conversationHistory || [];
   const userInstructions = data.userInstructions || "";
+  const quickMode = data.quickMode;
+
+  // Determine model speed (request override > user preference > system default)
+  const speed = getEffectiveSpeed("chat", quickMode);
+  const model = getModel(speed);
 
   try {
     const authSession = await getServerSession(authOptions);
@@ -199,7 +204,7 @@ ${keyFactsText}`;
     ];
 
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 4000,
       temperature: 0.3,
       system: systemPrompt,
@@ -216,7 +221,7 @@ ${keyFactsText}`;
       userId: authSession?.user?.id,
       userEmail: authSession?.user?.email,
       feature: "chat",
-      model: CLAUDE_MODEL,
+      model,
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
       metadata: {
@@ -225,6 +230,7 @@ ${keyFactsText}`;
         customerCount: customerProfiles.length,
         urlCount: referenceUrls.length,
         conversationLength: conversationHistory.length,
+        quickMode: quickMode || false,
       },
     });
 
@@ -273,7 +279,7 @@ ${keyFactsText}`;
         customerContext: finalCustomerContext,
         documentContext,
         urlContext,
-        model: CLAUDE_MODEL,
+        model,
         maxTokens: 4000,
         temperature: 0.3,
       },

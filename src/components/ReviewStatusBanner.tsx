@@ -107,7 +107,7 @@ export function getEffectiveReviewStatus(
   if (rowReviewStatus === "APPROVED") return "APPROVED";
   if (rowReviewStatus === "CORRECTED") return "CORRECTED";
   if (rowReviewStatus === "REQUESTED") return "REQUESTED";
-  if (projectStatus === "approved") return "PROJECT_ACCEPTED";
+  if (projectStatus === "finalized") return "PROJECT_ACCEPTED";
   return null;
 }
 

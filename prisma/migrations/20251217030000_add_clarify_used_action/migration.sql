@@ -1,0 +1,2 @@
+-- Add CLARIFY_USED to AuditAction enum
+ALTER TYPE "AuditAction" ADD VALUE IF NOT EXISTS 'CLARIFY_USED';

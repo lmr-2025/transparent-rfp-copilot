@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { answerQuestionsBatch } from "@/lib/llm";
+import { answerQuestionsBatch, type ModelSpeed } from "@/lib/llm";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
@@ -28,6 +28,8 @@ const batchAnswerSchema = z.object({
   prompt: z.string().optional(),
   mode: z.string().optional(),
   domains: z.array(z.string()).optional(),
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  quickMode: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -54,6 +56,8 @@ export async function POST(request: NextRequest) {
   const questions = data.questions;
   const skills = data.skills;
   const fallbackContent = data.fallbackContent;
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  const modelSpeed: ModelSpeed = data.quickMode ? "fast" : "quality";
 
   // Load prompt from database with dynamic mode/domain filtering
   const promptOptions = {
@@ -64,7 +68,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const session = await getServerSession(authOptions);
-    const result = await answerQuestionsBatch(questions, promptText, skills, fallbackContent);
+    const result = await answerQuestionsBatch(questions, promptText, skills, fallbackContent, modelSpeed);
 
     // Log usage asynchronously (don't block the response)
     if (result.usage) {

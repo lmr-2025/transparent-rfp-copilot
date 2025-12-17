@@ -49,11 +49,24 @@ export const knowledgeQueryKeys = {
   users: ["users"] as const,
 };
 
+// Stale times for caching - data stays "fresh" for this duration before refetching
+// This significantly reduces redundant API calls during active sessions
+const STALE_TIMES = {
+  skills: 30 * 60 * 1000, // 30 minutes - skills are stable after initial build
+  documents: 30 * 60 * 1000, // 30 minutes - documents are stable
+  urls: 30 * 60 * 1000, // 30 minutes - URLs rarely change
+  customers: 15 * 60 * 1000, // 15 minutes - customer profiles may be updated
+  snippets: 60 * 60 * 1000, // 1 hour - snippets are very stable
+  categories: 60 * 60 * 1000, // 1 hour - categories rarely change
+  users: 30 * 60 * 1000, // 30 minutes - users list is fairly stable
+};
+
 // Fetch all skills
 export function useAllSkills() {
   return useQuery({
     queryKey: knowledgeQueryKeys.skills,
     queryFn: loadSkillsFromApi,
+    staleTime: STALE_TIMES.skills,
   });
 }
 
@@ -69,6 +82,7 @@ export function useAllDocuments() {
       const data = json.data?.documents ?? json.documents ?? [];
       return Array.isArray(data) ? data : [];
     },
+    staleTime: STALE_TIMES.documents,
   });
 }
 
@@ -84,6 +98,7 @@ export function useAllReferenceUrls() {
       const data = json.data ?? json;
       return Array.isArray(data) ? data : [];
     },
+    staleTime: STALE_TIMES.urls,
   });
 }
 
@@ -92,6 +107,7 @@ export function useAllCustomers() {
   return useQuery({
     queryKey: knowledgeQueryKeys.customers,
     queryFn: fetchActiveProfiles,
+    staleTime: STALE_TIMES.customers,
   });
 }
 
@@ -107,6 +123,7 @@ export function useAllSnippets() {
       const data = json.data ?? json.snippets ?? json;
       return Array.isArray(data) ? data : [];
     },
+    staleTime: STALE_TIMES.snippets,
   });
 }
 
@@ -115,6 +132,7 @@ export function useAllCategories() {
   return useQuery({
     queryKey: knowledgeQueryKeys.categories,
     queryFn: loadCategoriesFromApi,
+    staleTime: STALE_TIMES.categories,
   });
 }
 
@@ -130,6 +148,7 @@ export function useAllUsers() {
       const data = json.data?.users ?? json.users ?? [];
       return Array.isArray(data) ? data : [];
     },
+    staleTime: STALE_TIMES.users,
   });
 }
 

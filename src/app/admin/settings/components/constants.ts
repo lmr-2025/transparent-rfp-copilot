@@ -64,11 +64,13 @@ export const actionConfig: Record<AuditAction, { label: string; color: string }>
   APPROVED: { label: "Approved", color: "#10b981" },
   REVIEW_REQUESTED: { label: "Review Requested", color: "#8b5cf6" },
   FLAG_RESOLVED: { label: "Flag Resolved", color: "#22c55e" },
+  CLARIFY_USED: { label: "Clarify Used", color: "#0ea5e9" },
 };
 
 export const TABS = [
   { id: "branding", label: "Branding" },
   { id: "integrations", label: "Integrations" },
+  { id: "llm-speed", label: "LLM Speed" },
   { id: "rate-limits", label: "Rate Limits" },
   { id: "categories", label: "Categories" },
   { id: "usage", label: "API Usage" },

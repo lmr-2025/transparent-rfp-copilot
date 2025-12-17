@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect, useCallback } from "react";
 import { Skill } from "@/types/skill";
 import TransparencyDetails from "@/components/TransparencyDetails";
 import ReviewStatusBanner, { getEffectiveReviewStatus, getReviewerName } from "@/components/ReviewStatusBanner";
@@ -61,6 +62,22 @@ export default function ResponseSection({
   onFlagOrReview,
   onUnflag,
 }: ResponseSectionProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea to fit content
+  const autoResize = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  // Auto-resize when editing starts or content changes
+  useEffect(() => {
+    if (isEditing) {
+      autoResize(textareaRef.current);
+    }
+  }, [isEditing, editedResponse, autoResize]);
+
   return (
     <div style={{
       marginTop: "20px",
@@ -122,17 +139,22 @@ export default function ResponseSection({
       {isEditing ? (
         <div>
           <textarea
+            ref={textareaRef}
             value={editedResponse}
-            onChange={(e) => onSetEditedResponse(e.target.value)}
+            onChange={(e) => {
+              onSetEditedResponse(e.target.value);
+              autoResize(e.target);
+            }}
             style={{
               width: "100%",
-              minHeight: "200px",
+              minHeight: "60px",
               padding: "12px",
               borderRadius: "8px",
               border: "1px solid #e2e8f0",
               fontSize: "0.95rem",
               lineHeight: 1.6,
-              resize: "vertical",
+              resize: "none",
+              overflow: "hidden",
               fontFamily: "inherit",
             }}
           />
@@ -169,7 +191,7 @@ export default function ResponseSection({
                 fontWeight: 500,
               }}
             >
-              Approve (No Change Needed)
+              Verify (No Change Needed)
             </button>
             <button
               type="button"

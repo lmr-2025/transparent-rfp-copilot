@@ -39,7 +39,13 @@ export default function AuditTab() {
       if (selectedAction) params.set("action", selectedAction);
 
       const response = await fetch(`/api/audit-log?${params.toString()}`);
-      if (!response.ok) throw new Error("Failed to fetch audit log");
+      if (!response.ok) {
+        // Try to extract error message from response
+        // API returns { error: { code, message } } structure
+        const errorData = await response.json().catch(() => null);
+        const errorMessage = errorData?.error?.message || errorData?.message || `HTTP ${response.status}: ${response.statusText}`;
+        throw new Error(errorMessage);
+      }
       const result = await response.json();
       // Handle both { data: { entries, pagination } } and { entries, pagination } formats
       const data = result.data || result;
@@ -235,6 +241,61 @@ export default function AuditTab() {
                               <div className="font-medium text-gray-600">{field}</div>
                               <div className="text-red-500">From: {formatValue(change.from)}</div>
                               <div className="text-green-500">To: {formatValue(change.to)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {/* Special display for Clarify Used entries */}
+                    {entry.action === "CLARIFY_USED" && entry.metadata && (() => {
+                      const meta = entry.metadata as Record<string, unknown>;
+                      const autoFlagged = Boolean(meta.autoFlagged);
+                      const projectName = meta.projectName ? String(meta.projectName) : null;
+                      const question = meta.question ? String(meta.question) : null;
+                      const userMessage = meta.userMessage ? String(meta.userMessage) : null;
+                      const conversationLength = meta.conversationLength ? String(meta.conversationLength) : null;
+                      return (
+                        <div className="mb-2 space-y-2">
+                          {autoFlagged && (
+                            <div className="text-xs bg-amber-50 text-amber-700 px-2 py-1 rounded border border-amber-200">
+                              Auto-flagged for review
+                            </div>
+                          )}
+                          {projectName && (
+                            <div className="text-xs">
+                              <span className="text-gray-500">Project:</span>{" "}
+                              <span className="text-gray-700 font-medium">{projectName}</span>
+                            </div>
+                          )}
+                          {question && (
+                            <div className="text-xs">
+                              <span className="text-gray-500">Question:</span>{" "}
+                              <span className="text-gray-700">{question.substring(0, 200)}{question.length > 200 ? "..." : ""}</span>
+                            </div>
+                          )}
+                          {userMessage && (
+                            <div className="bg-white border border-gray-200 rounded p-2">
+                              <div className="text-xs font-medium text-gray-600 mb-1">User asked:</div>
+                              <div className="text-xs text-gray-700 whitespace-pre-wrap">{userMessage}</div>
+                            </div>
+                          )}
+                          {conversationLength && (
+                            <div className="text-xs text-gray-500">
+                              Conversation length: {conversationLength} messages
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {/* Show other metadata for non-clarify entries */}
+                    {entry.action !== "CLARIFY_USED" && entry.metadata && Object.keys(entry.metadata).length > 0 && (
+                      <div className="mb-2">
+                        <h5 className="text-xs font-medium text-gray-600 mb-1">Details</h5>
+                        <div className="bg-white border border-gray-200 rounded text-xs p-2 space-y-1">
+                          {Object.entries(entry.metadata).map(([key, value]) => (
+                            <div key={key} className="flex gap-2">
+                              <span className="text-gray-500">{key}:</span>
+                              <span className="text-gray-700">{formatValue(value)}</span>
                             </div>
                           ))}
                         </div>

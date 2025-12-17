@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
 import { getAnthropicClient, parseJsonResponse } from "@/lib/apiHelpers";
@@ -301,8 +301,12 @@ Identify which company this content is about and whether we should create a new 
 
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("customers-analyze");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 1500,
     temperature: 0.1,
     system: systemPrompt,
@@ -322,7 +326,7 @@ Return ONLY the JSON object.`;
     transparency: {
       systemPrompt,
       userPrompt,
-      model: CLAUDE_MODEL,
+      model,
       maxTokens: 1500,
       temperature: 0.1,
     },

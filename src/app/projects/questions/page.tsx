@@ -17,6 +17,7 @@ import { parseAnswerSections, selectRelevantSkills } from "@/lib/questionHelpers
 import LoadingSpinner from "@/components/LoadingSpinner";
 import DomainSelector, { Domain } from "@/components/DomainSelector";
 import { useFlagReview } from "@/components/FlagReviewModal";
+import { SpeedToggle } from "@/components/speed-toggle";
 
 import {
   QuestionHistoryPanel,
@@ -65,6 +66,8 @@ function QuestionsPageContent() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedResponse, setEditedResponse] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  const [quickMode, setQuickMode] = useState(false);
 
   const { data: session } = useSession();
   const { openFlagReview, FlagReviewDialog } = useFlagReview();
@@ -284,6 +287,7 @@ function QuestionsPageContent() {
           skills: skillsPayload,
           mode: "single",
           domains: selectedDomains.length > 0 ? selectedDomains : undefined,
+          quickMode,
         }),
       });
       const json = await response.json().catch(() => null);
@@ -568,18 +572,27 @@ function QuestionsPageContent() {
           </button>
         </div>
 
-        <DomainSelector
-          selectedDomains={selectedDomains}
-          onChange={setSelectedDomains}
-          disabled={isAnswering}
-          style={{ marginTop: "12px" }}
-        />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px", gap: "16px" }}>
+          <DomainSelector
+            selectedDomains={selectedDomains}
+            onChange={setSelectedDomains}
+            disabled={isAnswering}
+          />
+          <SpeedToggle
+            quickMode={quickMode}
+            onChange={setQuickMode}
+            disabled={isAnswering}
+          />
+        </div>
 
         {isAnswering && (
           <div style={{ marginTop: "16px" }}>
             <LoadingSpinner
               title="Generating response..."
-              subtitle="Analyzing your question and searching knowledge base. This may take 10-20 seconds."
+              subtitle={quickMode
+                ? "Using fast mode. This typically takes 2-5 seconds."
+                : "Analyzing your question and searching knowledge base. This may take 10-20 seconds."
+              }
             />
           </div>
         )}

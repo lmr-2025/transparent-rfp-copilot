@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { logUsage } from "@/lib/usageTracking";
@@ -34,6 +34,7 @@ type OptimizePromptRequest = {
   promptType: string;
   sections: PromptSection[];
   outputFormat?: string; // "plain_text" | "json" | "markdown" - what format the prompt produces
+  quickMode?: boolean;
 };
 
 type OptimizePromptResponse = {
@@ -71,7 +72,11 @@ export async function POST(request: NextRequest) {
     return errors.badRequest("Invalid JSON body.");
   }
 
-  const { promptType, sections, outputFormat = "plain_text" } = body;
+  const { promptType, sections, outputFormat = "plain_text", quickMode } = body;
+
+  // Determine model speed (request override > user preference > system default)
+  const speed = getEffectiveSpeed("prompts-optimize", quickMode);
+  const model = getModel(speed);
 
   if (!Array.isArray(sections) || sections.length === 0) {
     return errors.badRequest("No sections to analyze.");
@@ -153,7 +158,7 @@ Output format: ${outputFormat}
 Return ONLY the JSON object with your analysis.`;
 
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 4000,
       temperature: 0.2,
       system: systemPrompt,
@@ -170,10 +175,10 @@ Return ONLY the JSON object with your analysis.`;
       userId: session?.user?.id,
       userEmail: session?.user?.email,
       feature: "prompt-optimize",
-      model: CLAUDE_MODEL,
+      model,
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
-      metadata: { promptType, sectionCount: enabledSections.length },
+      metadata: { promptType, sectionCount: enabledSections.length, quickMode: quickMode || false },
     });
 
     const parsed = parseJsonResponse<{
@@ -200,7 +205,7 @@ Return ONLY the JSON object with your analysis.`;
       transparency: {
         systemPrompt,
         userPrompt,
-        model: CLAUDE_MODEL,
+        model,
         maxTokens: 4000,
         temperature: 0.2,
       },

@@ -23,7 +23,7 @@ interface ReviewItem {
   flaggedAt?: string;
   flaggedBy?: string;
   flagNote?: string;
-  // Flag resolution fields
+  // Flag resolution fields (already in interface)
   flagResolved?: boolean;
   flagResolvedAt?: string;
   flagResolvedBy?: string;
@@ -43,6 +43,7 @@ interface ReviewCounts {
   approved: number;
   corrected: number;
   flagged: number;
+  resolved: number;
 }
 
 const styles = {
@@ -243,9 +244,9 @@ function formatTimeAgo(dateString?: string) {
 
 export default function ReviewsPage() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "approved" | "corrected" | "all">("pending");
+  const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "resolved" | "approved" | "corrected" | "all">("pending");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0, flagged: 0 });
+  const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0, flagged: 0, resolved: 0 });
   const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
@@ -259,6 +260,8 @@ export default function ReviewsPage() {
         url += "&type=review&status=REQUESTED";
       } else if (activeTab === "flagged") {
         url += "&type=flagged";
+      } else if (activeTab === "resolved") {
+        url += "&type=resolved";
       } else if (activeTab === "approved") {
         url += "&type=review&status=APPROVED";
       } else if (activeTab === "corrected") {
@@ -371,7 +374,7 @@ export default function ReviewsPage() {
 
       {/* Tabs */}
       <div style={styles.tabs}>
-        {(["pending", "flagged", "approved", "corrected", "all"] as const).map((tab) => (
+        {(["pending", "flagged", "resolved", "approved", "corrected", "all"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -383,7 +386,8 @@ export default function ReviewsPage() {
           >
             {tab === "pending" && `Need Help (${counts.pending})`}
             {tab === "flagged" && `Flagged (${counts.flagged})`}
-            {tab === "approved" && `Approved (${counts.approved})`}
+            {tab === "resolved" && `Resolved (${counts.resolved})`}
+            {tab === "approved" && `Verified (${counts.approved})`}
             {tab === "corrected" && `Corrected (${counts.corrected})`}
             {tab === "all" && `All (${counts.pending + counts.flagged + counts.approved + counts.corrected})`}
           </button>
@@ -396,18 +400,21 @@ export default function ReviewsPage() {
       ) : reviews.length === 0 ? (
         <div style={styles.empty}>
           <div style={{ fontSize: "48px", marginBottom: "16px" }}>
-            {activeTab === "pending" || activeTab === "flagged" ? "🎉" : "📭"}
+            {activeTab === "pending" || activeTab === "flagged" ? "🎉" : activeTab === "resolved" ? "📋" : "📭"}
           </div>
           <p style={{ fontSize: "16px", fontWeight: 500, color: "#1e293b", marginBottom: "8px" }}>
             {activeTab === "pending" && "No items needing help!"}
             {activeTab === "flagged" && "No flagged items!"}
-            {activeTab !== "pending" && activeTab !== "flagged" && "No reviews found"}
+            {activeTab === "resolved" && "No resolved flags yet"}
+            {activeTab !== "pending" && activeTab !== "flagged" && activeTab !== "resolved" && "No reviews found"}
           </p>
           <p>
             {activeTab === "pending"
               ? "All caught up. Check back later for new review requests."
               : activeTab === "flagged"
               ? "No answers have been flagged for investigation."
+              : activeTab === "resolved"
+              ? "Resolved flags will appear here for record-keeping."
               : "Try switching tabs to see other reviews."}
           </p>
         </div>
@@ -429,13 +436,19 @@ export default function ReviewsPage() {
               </div>
               <div style={styles.meta}>
                 {review.flaggedForReview ? (
-                  <span style={{ ...styles.statusBadge, ...getStatusStyle("", true) }}>
-                    Flagged
-                  </span>
+                  review.flagResolved ? (
+                    <span style={{ ...styles.statusBadge, backgroundColor: "#dcfce7", color: "#166534" }}>
+                      Resolved
+                    </span>
+                  ) : (
+                    <span style={{ ...styles.statusBadge, ...getStatusStyle("", true) }}>
+                      Flagged
+                    </span>
+                  )
                 ) : (
                   <span style={{ ...styles.statusBadge, ...getStatusStyle(review.reviewStatus) }}>
                     {review.reviewStatus === "REQUESTED" && "Need Help"}
-                    {review.reviewStatus === "APPROVED" && "Approved"}
+                    {review.reviewStatus === "APPROVED" && "Verified"}
                     {review.reviewStatus === "CORRECTED" && "Corrected"}
                   </span>
                 )}
@@ -462,6 +475,31 @@ export default function ReviewsPage() {
               {review.reviewedBy && (
                 <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>
                   Reviewed by {review.reviewedBy} • {formatTimeAgo(review.reviewedAt)}
+                </div>
+              )}
+
+              {/* Resolution info for resolved flags */}
+              {review.flagResolved && (
+                <div style={{
+                  fontSize: "13px",
+                  padding: "10px 14px",
+                  backgroundColor: "#f0fdf4",
+                  borderRadius: "8px",
+                  border: "1px solid #86efac",
+                  marginBottom: "12px",
+                }}>
+                  <strong style={{ color: "#166534" }}>Resolved</strong>
+                  {review.flagResolvedBy && (
+                    <span style={{ color: "#64748b" }}> by {review.flagResolvedBy}</span>
+                  )}
+                  {review.flagResolvedAt && (
+                    <span style={{ color: "#94a3b8" }}> • {formatTimeAgo(review.flagResolvedAt)}</span>
+                  )}
+                  {review.flagResolutionNote && (
+                    <div style={{ marginTop: "6px", color: "#475569" }}>
+                      {review.flagResolutionNote}
+                    </div>
+                  )}
                 </div>
               )}
 

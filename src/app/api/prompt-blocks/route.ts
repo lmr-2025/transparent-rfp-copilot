@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/apiAuth";
 import { defaultBlocks, defaultModifiers } from "@/lib/promptBlocks";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { invalidatePromptCache } from "@/lib/cache";
 
 type BlockInput = {
   id: string;
@@ -136,6 +137,9 @@ export async function PUT(request: Request) {
         },
       });
     }
+
+    // Invalidate the prompt cache so next request gets fresh data
+    await invalidatePromptCache();
 
     return apiSuccess({ success: true });
   } catch (error) {

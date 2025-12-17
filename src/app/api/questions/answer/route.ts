@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { answerQuestionWithPrompt } from "@/lib/llm";
+import { answerQuestionWithPrompt, type ModelSpeed } from "@/lib/llm";
 import { defaultQuestionPrompt } from "@/lib/questionPrompt";
 import { logUsage } from "@/lib/usageTracking";
 import { questionAnswerSchema, validateBody } from "@/lib/validations";
@@ -34,6 +34,8 @@ export async function POST(request: NextRequest) {
   const question = data.question.trim();
   const skills = data.skills;
   const fallbackContent = data.fallbackContent;
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  const modelSpeed: ModelSpeed = data.quickMode ? "fast" : "quality";
 
   // Load prompt from database with dynamic mode/domain filtering
   const promptOptions = {
@@ -44,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const session = await getServerSession(authOptions);
-    const result = await answerQuestionWithPrompt(question, promptText, skills, fallbackContent);
+    const result = await answerQuestionWithPrompt(question, promptText, skills, fallbackContent, modelSpeed);
 
     // Log usage asynchronously (don't block the response)
     if (result.usage) {

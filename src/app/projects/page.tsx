@@ -28,7 +28,7 @@ function ProjectsListContent() {
   // State
   const [statusFilter, setStatusFilter] = useState<StatusFilter>(() => {
     const filterParam = searchParams.get("filter");
-    if (filterParam && ["all", "draft", "in_progress", "needs_review", "approved", "has_flagged"].includes(filterParam)) {
+    if (filterParam && ["all", "draft", "in_progress", "needs_review", "finalized", "has_flagged"].includes(filterParam)) {
       return filterParam as StatusFilter;
     }
     return "all";
@@ -73,11 +73,11 @@ function ProjectsListContent() {
     try {
       await updateProjectMutation.mutateAsync({
         ...project,
-        status: "approved",
+        status: "finalized",
         reviewedAt: new Date().toISOString(),
         reviewedBy: reviewerName,
       });
-      toast.success("Project approved");
+      toast.success("Project finalized");
     } catch {
       toast.error("Failed to approve project");
     } finally {

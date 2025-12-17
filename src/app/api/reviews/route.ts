@@ -30,29 +30,41 @@ export async function GET(request: NextRequest) {
     // Build where clause for BulkRow based on type
     let rowWhereClause: Record<string, unknown> = { ...assignedToClause };
     if (type === "flagged") {
-      // Flagged items only
+      // Flagged items only (exclude resolved flags)
       rowWhereClause.flaggedForReview = true;
+      rowWhereClause.flagResolved = { not: true };
+    } else if (type === "resolved") {
+      // Resolved flags only
+      rowWhereClause.flaggedForReview = true;
+      rowWhereClause.flagResolved = true;
     } else if (type === "review") {
       // Review requests only
       rowWhereClause.reviewStatus = status as "REQUESTED" | "APPROVED" | "CORRECTED";
     } else {
-      // Both: review requests OR flagged items
+      // Both: review requests OR flagged items (exclude resolved flags)
       rowWhereClause.OR = [
         { reviewStatus: status as "REQUESTED" | "APPROVED" | "CORRECTED" },
-        { flaggedForReview: true },
+        { flaggedForReview: true, flagResolved: { not: true } },
       ];
     }
 
     // Build where clause for QuestionHistory (same pattern)
     let questionWhereClause: Record<string, unknown> = { ...assignedToClause };
     if (type === "flagged") {
+      // Flagged items only (exclude resolved flags)
       questionWhereClause.flaggedForReview = true;
+      questionWhereClause.flagResolved = { not: true };
+    } else if (type === "resolved") {
+      // Resolved flags only
+      questionWhereClause.flaggedForReview = true;
+      questionWhereClause.flagResolved = true;
     } else if (type === "review") {
       questionWhereClause.reviewStatus = status as "REQUESTED" | "APPROVED" | "CORRECTED";
     } else {
+      // Both: review requests OR flagged items (exclude resolved flags)
       questionWhereClause.OR = [
         { reviewStatus: status as "REQUESTED" | "APPROVED" | "CORRECTED" },
-        { flaggedForReview: true },
+        { flaggedForReview: true, flagResolved: { not: true } },
       ];
     }
 
@@ -112,6 +124,11 @@ export async function GET(request: NextRequest) {
       flaggedAt: row.flaggedAt?.toISOString(),
       flaggedBy: row.flaggedBy,
       flagNote: row.flagNote,
+      // Flag resolution fields
+      flagResolved: row.flagResolved,
+      flagResolvedAt: row.flagResolvedAt?.toISOString(),
+      flagResolvedBy: row.flagResolvedBy,
+      flagResolutionNote: row.flagResolutionNote,
       project: row.project,
       source: "project" as const,
     }));
@@ -137,6 +154,11 @@ export async function GET(request: NextRequest) {
       flaggedAt: q.flaggedAt?.toISOString(),
       flaggedBy: q.flaggedBy,
       flagNote: q.flagNote,
+      // Flag resolution fields
+      flagResolved: q.flagResolved,
+      flagResolvedAt: q.flagResolvedAt?.toISOString(),
+      flagResolvedBy: q.flagResolvedBy,
+      flagResolutionNote: q.flagResolutionNote,
       project: null,
       source: "questions" as const,
       createdAt: q.createdAt?.toISOString(),
@@ -182,11 +204,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // Flagged counts
+    // Flagged counts (exclude resolved flags)
     const rowFlaggedCount = await prisma.bulkRow.count({
       where: {
         ...assignedToClause,
         flaggedForReview: true,
+        flagResolved: { not: true },
       },
     });
 
@@ -194,6 +217,24 @@ export async function GET(request: NextRequest) {
       where: {
         ...assignedToClause,
         flaggedForReview: true,
+        flagResolved: { not: true },
+      },
+    });
+
+    // Resolved flag counts
+    const rowResolvedCount = await prisma.bulkRow.count({
+      where: {
+        ...assignedToClause,
+        flaggedForReview: true,
+        flagResolved: true,
+      },
+    });
+
+    const questionResolvedCount = await prisma.questionHistory.count({
+      where: {
+        ...assignedToClause,
+        flaggedForReview: true,
+        flagResolved: true,
       },
     });
 
@@ -208,6 +249,7 @@ export async function GET(request: NextRequest) {
         (rowReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0) +
         (questionReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0),
       flagged: rowFlaggedCount + questionFlaggedCount,
+      resolved: rowResolvedCount + questionResolvedCount,
     };
 
     return apiSuccess({

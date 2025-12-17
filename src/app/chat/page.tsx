@@ -34,6 +34,8 @@ export default function ChatPageV2() {
   const [showTransparency, setShowTransparency] = useState(false);
   const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
   const [lastTransparency, setLastTransparency] = useState<TransparencyData | null>(null);
+  // Quick mode for faster LLM responses (Haiku vs Sonnet)
+  const [quickMode, setQuickMode] = useState(false);
 
   // Zustand stores
   const {
@@ -226,6 +228,7 @@ ${keyFactsText}`;
         referenceUrls: selectedUrls,
         conversationHistory,
         userInstructions,
+        quickMode,
       });
 
       // Parse the response to extract transparency metadata (reuse existing parser from questions)
@@ -293,6 +296,7 @@ ${keyFactsText}`;
     urls,
     userInstructions,
     currentSessionId,
+    quickMode,
     addMessage,
     setInputValue,
     setIsLoading,
@@ -443,6 +447,8 @@ ${keyFactsText}`;
                 ? "Select at least one knowledge item to start chatting..."
                 : "Type your message..."
             }
+            quickMode={quickMode}
+            onQuickModeChange={setQuickMode}
           />
         </div>
       </div>

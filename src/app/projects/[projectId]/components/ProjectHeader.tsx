@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { BulkProject, ProjectCustomerProfileRef } from "@/types/bulkProject";
 import ExportDropdown from "./ExportDropdown";
 
@@ -36,7 +35,7 @@ const getStatusColor = (status: BulkProject["status"]) => {
       return { backgroundColor: "#dbeafe", color: "#1e40af" };
     case "needs_review":
       return { backgroundColor: "#fef3c7", color: "#92400e" };
-    case "approved":
+    case "finalized":
       return { backgroundColor: "#dcfce7", color: "#166534" };
     default:
       return { backgroundColor: "#f1f5f9", color: "#64748b" };
@@ -51,8 +50,8 @@ const getStatusLabel = (status: BulkProject["status"]) => {
       return "In Progress";
     case "needs_review":
       return "Needs Review";
-    case "approved":
-      return "Approved";
+    case "finalized":
+      return "Finalized";
     default:
       return status;
   }
@@ -95,60 +94,47 @@ export default function ProjectHeader({
   onEditCustomers,
   onEditOwner,
 }: ProjectHeaderProps) {
-  const router = useRouter();
-
   return (
-    <div style={{ ...styles.card, display: "flex", flexWrap: "wrap", gap: "12px", justifyContent: "space-between" }}>
-      <div>
-        <div style={{ marginBottom: "8px" }}>
+    <div style={{ ...styles.card, display: "flex", flexWrap: "wrap", gap: "16px", justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ flex: "1 1 auto", minWidth: "300px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
           <span style={{ ...styles.statusBadge, ...getStatusColor(project.status) }}>
             {getStatusLabel(project.status)}
           </span>
+          <span style={{ fontSize: "1.1rem", fontWeight: 600 }}>{project.name}</span>
         </div>
-        <strong>Project:</strong> {project.name}
-        <br />
-        <strong>Worksheet:</strong> {project.sheetName}
-        <br />
-        <strong>Created:</strong> {new Date(project.createdAt).toLocaleString()}
-        <br />
-        <strong>Owner:</strong>{" "}
-        {project.owner?.name || project.ownerName || (
-          <span style={{ color: "#94a3b8" }}>Not assigned</span>
-        )}
-        <button
-          type="button"
-          onClick={onEditOwner}
-          style={{
-            marginLeft: "8px",
-            padding: "2px 8px",
-            fontSize: "0.8rem",
-            backgroundColor: "#f1f5f9",
-            border: "1px solid #e2e8f0",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          Change
-        </button>
-        {project.reviewRequestedBy && (
-          <>
-            <br />
-            <strong>Review requested by:</strong> {project.reviewRequestedBy}
-          </>
-        )}
-        {project.reviewedBy && (
-          <>
-            <br />
-            <strong>Approved by:</strong> {project.reviewedBy}
-          </>
-        )}
-        <div style={{ marginTop: "8px" }}>
-          <strong>Customers:</strong>{" "}
-          {project.customerProfiles && project.customerProfiles.length > 0 ? (
-            <span>
-              {project.customerProfiles.map((cp: ProjectCustomerProfileRef) => (
-                <span key={cp.id}>
-                  <span style={{
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", fontSize: "0.9rem", color: "#475569" }}>
+          <span><strong>Worksheet:</strong> {project.sheetName}</span>
+          <span><strong>Created:</strong> {new Date(project.createdAt).toLocaleDateString()}</span>
+          <span>
+            <strong>Owner:</strong>{" "}
+            {project.owner?.name || project.ownerName || (
+              <span style={{ color: "#94a3b8" }}>Not assigned</span>
+            )}
+            <button
+              type="button"
+              onClick={onEditOwner}
+              style={{
+                marginLeft: "6px",
+                padding: "1px 6px",
+                fontSize: "0.75rem",
+                backgroundColor: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "3px",
+                cursor: "pointer",
+              }}
+            >
+              Change
+            </button>
+          </span>
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "10px", fontSize: "0.9rem" }}>
+          <span>
+            <strong>Customers:</strong>{" "}
+            {project.customerProfiles && project.customerProfiles.length > 0 ? (
+              <span>
+                {project.customerProfiles.map((cp: ProjectCustomerProfileRef) => (
+                  <span key={cp.id} style={{
                     display: "inline-block",
                     padding: "2px 8px",
                     backgroundColor: "#e0e7ff",
@@ -160,35 +146,34 @@ export default function ProjectHeader({
                   }}>
                     {cp.name}
                   </span>
-                </span>
-              ))}
-            </span>
-          ) : (
-            <span style={{ color: "#94a3b8" }}>None linked</span>
-          )}
-          <button
-            type="button"
-            onClick={onEditCustomers}
-            style={{
-              marginLeft: "8px",
-              padding: "2px 8px",
-              fontSize: "0.8rem",
-              backgroundColor: "#f1f5f9",
-              border: "1px solid #e2e8f0",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            Edit
-          </button>
+                ))}
+              </span>
+            ) : (
+              <span style={{ color: "#94a3b8" }}>None linked</span>
+            )}
+            <button
+              type="button"
+              onClick={onEditCustomers}
+              style={{
+                marginLeft: "6px",
+                padding: "1px 6px",
+                fontSize: "0.75rem",
+                backgroundColor: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "3px",
+                cursor: "pointer",
+              }}
+            >
+              Edit
+            </button>
+          </span>
+          <span style={{ color: "#64748b" }}>
+            {stats.total} questions · {stats.high} high · {stats.medium} med · {stats.low} low
+            {stats.errors > 0 && <span style={{ color: "#dc2626" }}> · {stats.errors} errors</span>}
+          </span>
         </div>
       </div>
-      <div>
-        <strong>Total:</strong> {stats.total} · <strong>High:</strong> {stats.high} ·{" "}
-        <strong>Medium:</strong> {stats.medium} · <strong>Low:</strong> {stats.low} ·{" "}
-        <strong>Errors:</strong> {stats.errors}
-      </div>
-      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
         {/* Send All Queued */}
         {queuedCount > 0 && (
           <button
@@ -243,13 +228,6 @@ export default function ProjectHeader({
           </button>
         )}
         <ExportDropdown project={project} />
-        <button
-          type="button"
-          onClick={() => router.push("/projects/upload")}
-          style={{ ...styles.button, backgroundColor: "#f1f5f9", color: "#0f172a" }}
-        >
-          Upload new file
-        </button>
         <button
           type="button"
           onClick={onDeleteProject}

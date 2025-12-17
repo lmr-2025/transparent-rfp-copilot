@@ -125,6 +125,7 @@ type SendMessageParams = {
   referenceUrls: { id: string; url: string; title: string }[];
   conversationHistory: { role: string; content: string }[];
   userInstructions: string;
+  quickMode?: boolean; // Use Haiku for faster responses
 };
 
 export function useSendMessage() {

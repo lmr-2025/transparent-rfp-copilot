@@ -233,7 +233,7 @@ function formatStatus(status: string): string {
     draft: "Draft",
     in_progress: "In Progress",
     needs_review: "Needs Review",
-    approved: "Approved",
+    finalized: "Finalized",
   };
   return statusMap[status] || status;
 }

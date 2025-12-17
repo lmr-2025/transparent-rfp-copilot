@@ -72,7 +72,7 @@ export type BulkProject = {
   ownerName?: string;
   owner?: { id: string; name: string | null; email: string | null };
   customerName?: string;
-  status: "draft" | "in_progress" | "needs_review" | "approved";
+  status: "draft" | "in_progress" | "needs_review" | "finalized";
   notes?: string;
   // Review workflow fields
   reviewRequestedAt?: string;

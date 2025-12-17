@@ -5,6 +5,7 @@ import { createSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { cacheGetOrSet, CacheKeys, CacheTTL, invalidateSkillCache } from "@/lib/cache";
 
 /**
  * GET /api/skills - List all skills
@@ -173,6 +174,9 @@ export async function POST(request: NextRequest) {
       { categories: data.categories },
       getRequestContext(request)
     );
+
+    // Invalidate skill cache since we added a new skill
+    await invalidateSkillCache();
 
     return apiSuccess({ skill }, { status: 201 });
   } catch (error) {

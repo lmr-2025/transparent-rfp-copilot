@@ -1,7 +1,10 @@
 import { defaultSkillPrompt } from "./skillPrompt";
 import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE_MODEL } from "./config";
+import { CLAUDE_MODEL, getModel, type ModelSpeed } from "./config";
+
+// Re-export ModelSpeed for consumers
+export type { ModelSpeed } from "./config";
 
 export type UsageInfo = {
   inputTokens: number;
@@ -92,6 +95,7 @@ export async function answerQuestionWithPrompt(
   promptText = defaultQuestionPrompt,
   skills?: { title: string; content: string }[],
   fallbackContent?: FallbackContent[],
+  modelSpeed: ModelSpeed = "quality",
 ): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) {
@@ -166,9 +170,11 @@ export async function answerQuestionWithPrompt(
   const contextPrefix = skillsContext || fallbackContext;
   const userMessage = contextPrefix ? `${contextPrefix}${trimmedQuestion}` : trimmedQuestion;
 
+  const model = getModel(modelSpeed);
+
   try {
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 16000,
       temperature: 0.2,
       system: promptText,
@@ -201,7 +207,7 @@ export async function answerQuestionWithPrompt(
       usage: {
         inputTokens: response.usage?.input_tokens || 0,
         outputTokens: response.usage?.output_tokens || 0,
-        model: CLAUDE_MODEL,
+        model,
       },
     };
   } catch (error) {
@@ -233,12 +239,15 @@ export type BatchAnswerResult = {
  * Answer multiple questions in a single API call.
  * Much more efficient than calling answerQuestionWithPrompt multiple times
  * as the system prompt and skills context are only sent once.
+ *
+ * @param modelSpeed - "fast" for Haiku (2-5s), "quality" for Sonnet (10-30s)
  */
 export async function answerQuestionsBatch(
   questions: { index: number; question: string }[],
   promptText = defaultQuestionPrompt,
   skills?: { title: string; content: string }[],
   fallbackContent?: FallbackContent[],
+  modelSpeed: ModelSpeed = "quality",
 ): Promise<BatchAnswerResult> {
   if (!questions || questions.length === 0) {
     throw new Error("At least one question is required.");
@@ -334,9 +343,11 @@ export async function answerQuestionsBatch(
   const contextPrefix = skillsContext || fallbackContext;
   const userMessage = contextPrefix ? `${contextPrefix}${batchInstruction}` : batchInstruction;
 
+  const model = getModel(modelSpeed);
+
   try {
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 16000,
       temperature: 0.2,
       system: promptText,
@@ -384,7 +395,7 @@ export async function answerQuestionsBatch(
       usage: {
         inputTokens: response.usage?.input_tokens || 0,
         outputTokens: response.usage?.output_tokens || 0,
-        model: CLAUDE_MODEL,
+        model,
       },
     };
   } catch (error) {

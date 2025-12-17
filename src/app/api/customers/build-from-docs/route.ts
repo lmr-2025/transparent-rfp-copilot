@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
@@ -212,8 +212,12 @@ Extract a comprehensive customer profile from these documents.
 These may include sales decks, meeting notes, past proposals, or other internal documents about this customer.
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("customers-build");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 5000,
     temperature: 0.2,
     system: promptText,
@@ -240,7 +244,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "customers-build-from-docs",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { mode: "create", documentCount: documentNames.length },
@@ -251,7 +255,7 @@ Return ONLY the JSON object.`;
     transparency: {
       systemPrompt: promptText,
       userPrompt,
-      model: CLAUDE_MODEL,
+      model,
       maxTokens: 5000,
       temperature: 0.2,
     },
@@ -344,8 +348,12 @@ Review these documents against the existing profile.
 Return an updated profile with hasChanges indicating if there were significant updates.
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("customers-build");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 5000,
     temperature: 0.2,
     system: systemPrompt,
@@ -377,7 +385,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "customers-build-from-docs",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { mode: "update", documentCount: documentNames.length },
@@ -398,7 +406,7 @@ Return ONLY the JSON object.`;
     transparency: {
       systemPrompt,
       userPrompt,
-      model: CLAUDE_MODEL,
+      model,
       maxTokens: 5000,
       temperature: 0.2,
     },

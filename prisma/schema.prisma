@@ -30,6 +30,7 @@ model User {
   role             UserRole            @default(USER)
   accounts         Account[]
   sessions         Session[]
+  preferences      UserPreference?
   questionHistory  QuestionHistory[]
   chatSessions     ChatSession[]
   apiUsage         ApiUsage[]
@@ -41,6 +42,25 @@ model User {
   ownedUrls        ReferenceUrl[]      @relation("UrlOwner")
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
+}
+
+// User Preferences - per-user settings including LLM speed preferences
+model UserPreference {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // LLM Speed settings - JSON object with feature-specific overrides
+  // e.g., { "chat": "fast", "questions": "quality" }
+  // null = use system defaults
+  llmSpeedOverrides Json?
+
+  // Future preference fields can be added here
+  // theme            String?  @default("system")
+  // defaultSkillIds  Json?    // Favorite skills to auto-select
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 }
 
 model Account {
@@ -169,7 +189,7 @@ enum ProjectStatus {
   DRAFT
   IN_PROGRESS
   NEEDS_REVIEW
-  APPROVED
+  FINALIZED
 }
 
 enum RowStatus {
@@ -613,6 +633,7 @@ enum AuditAction {
   APPROVED
   REVIEW_REQUESTED
   FLAG_RESOLVED
+  CLARIFY_USED
 }
 
 // Answer Feedback - tracks user ratings on AI-generated responses

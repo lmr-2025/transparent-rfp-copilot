@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import {
   BrandingTab,
   IntegrationsTab,
+  LLMSpeedTab,
   RateLimitsTab,
   CategoriesTab,
   UsageTab,
@@ -175,6 +176,7 @@ function AdminSettingsContent() {
           {activeTab === "integrations" && (
             <IntegrationsTab settings={settings} onSave={handleSaveIntegration} />
           )}
+          {activeTab === "llm-speed" && <LLMSpeedTab />}
           {activeTab === "rate-limits" && <RateLimitsTab />}
           {activeTab === "categories" && <CategoriesTab />}
           {activeTab === "usage" && <UsageTab />}

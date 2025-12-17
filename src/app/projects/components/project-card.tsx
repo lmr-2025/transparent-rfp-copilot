@@ -17,7 +17,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
   const statusColors = getStatusColor(project.status);
 
   const borderColor = {
-    approved: "border-l-green-500",
+    finalized: "border-l-green-500",
     needs_review: "border-l-amber-500",
     in_progress: "border-l-blue-500",
     draft: "border-l-slate-400",

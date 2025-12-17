@@ -86,7 +86,7 @@ export default function ReviewInbox() {
         }}
       >
         <span style={{ position: "relative" }}>
-          📥 Review Inbox
+          Review Inbox
           {counts.pending > 0 && (
             <span style={styles.badge}>{counts.pending > 99 ? "99+" : counts.pending}</span>
           )}

@@ -103,7 +103,7 @@ export function getStatusColor(status: BulkProject["status"]) {
       return { bg: "bg-blue-100", text: "text-blue-700", border: "border-blue-200" };
     case "needs_review":
       return { bg: "bg-amber-100", text: "text-amber-700", border: "border-amber-200" };
-    case "approved":
+    case "finalized":
       return { bg: "bg-green-100", text: "text-green-700", border: "border-green-200" };
     default:
       return { bg: "bg-slate-100", text: "text-slate-600", border: "border-slate-200" };
@@ -118,8 +118,8 @@ export function getStatusLabel(status: BulkProject["status"]) {
       return "In Progress";
     case "needs_review":
       return "Needs Review";
-    case "approved":
-      return "Approved";
+    case "finalized":
+      return "Finalized";
     default:
       return status;
   }

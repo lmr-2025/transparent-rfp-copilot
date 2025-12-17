@@ -128,7 +128,7 @@ function transformProjectFromDb(dbProject: DbProject): BulkProject {
     lastModifiedAt: dbProject.lastModifiedAt,
     ownerName: dbProject.ownerName,
     customerName: dbProject.customerName,
-    status: dbProject.status.toLowerCase() as "draft" | "in_progress" | "needs_review" | "approved",
+    status: dbProject.status.toLowerCase() as "draft" | "in_progress" | "needs_review" | "finalized",
     notes: dbProject.notes,
     reviewRequestedAt: dbProject.reviewRequestedAt,
     reviewRequestedBy: dbProject.reviewRequestedBy,

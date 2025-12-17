@@ -5,6 +5,7 @@ import { updateSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { invalidateSkillCache } from "@/lib/cache";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -132,6 +133,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
+    // Invalidate cache since skill was updated
+    await invalidateSkillCache();
+
     return apiSuccess({ skill });
   } catch (error) {
     logger.error("Failed to update skill", error, { route: "/api/skills/[id]" });
@@ -169,6 +173,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       undefined,
       { deletedSkill: { title: skill.title, categories: skill.categories } }
     );
+
+    // Invalidate cache since skill was deleted
+    await invalidateSkillCache();
 
     return apiSuccess({ success: true });
   } catch (error) {

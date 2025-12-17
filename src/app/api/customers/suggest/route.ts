@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
@@ -125,8 +125,12 @@ ${sourceInfo.join("\n")}
 Extract a customer profile from this source material.
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("customers-suggest");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 4000,
     temperature: 0.2,
     system: promptText,
@@ -143,7 +147,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "customers-suggest",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { mode: "create", urlCount: sourceUrls.length },
@@ -154,7 +158,7 @@ Return ONLY the JSON object.`;
     transparency: {
       systemPrompt: promptText,
       userPrompt,
-      model: CLAUDE_MODEL,
+      model,
       maxTokens: 4000,
       temperature: 0.2,
     },
@@ -238,8 +242,12 @@ Review the new source material against the existing profile.
 Return an updated profile with hasChanges indicating if there were significant updates.
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("customers-suggest");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 5000,
     temperature: 0.2,
     system: systemPrompt,
@@ -261,7 +269,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "customers-suggest",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { mode: "update", urlCount: sourceUrls.length },

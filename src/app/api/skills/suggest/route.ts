@@ -4,7 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { generateSkillDraftFromMessages } from "@/lib/llm";
 import { defaultSkillPrompt } from "@/lib/skillPrompt";
 import { ConversationFeedback } from "@/types/conversation";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
@@ -22,6 +22,7 @@ type SuggestRequestBody = {
     title: string;
     content: string;
   };
+  quickMode?: boolean;
 };
 
 // Response type for draft updates
@@ -61,6 +62,11 @@ export async function POST(request: NextRequest) {
 
   const conversationMessages = extractConversationMessages(body?.conversationMessages);
   const existingSkill = body?.existingSkill;
+  const quickMode = body?.quickMode;
+
+  // Determine model speed (request override > user preference > system default)
+  const speed = getEffectiveSpeed("skills-suggest", quickMode);
+  const model = getModel(speed);
 
   if (!sourceText && sourceUrls.length === 0 && conversationMessages.length === 0) {
     return errors.badRequest("Provide conversationMessages or at least one valid source entry.");
@@ -76,7 +82,7 @@ export async function POST(request: NextRequest) {
     if (existingSkill && (sourceText || sourceUrls.length > 0)) {
       const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
       // Use the new simpler draft-based approach
-      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession);
+      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession, model);
       return apiSuccess({
         updateMode: true,
         draftMode: true,
@@ -138,7 +144,8 @@ async function generateDraftUpdate(
   existingSkill: { title: string; content: string },
   newSourceContent: string,
   sourceUrls: string[],
-  authSession: { user?: { id?: string; email?: string | null } } | null
+  authSession: { user?: { id?: string; email?: string | null } } | null,
+  model: string
 ): Promise<DraftUpdateResponse> {
   const anthropic = getAnthropicClient();
 
@@ -202,7 +209,7 @@ Return ONLY the JSON object.`;
 
   // Use streaming for large outputs to avoid timeout
   const stream = anthropic.messages.stream({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 32000,
     temperature: 0.1,
     system: systemPrompt,
@@ -236,7 +243,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "skills-suggest",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { mode: "update", urlCount: sourceUrls.length },

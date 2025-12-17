@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { validateUrlForSSRF } from "@/lib/ssrfProtection";
@@ -264,8 +264,12 @@ Analyze this content and decide: Should it update an existing skill, create a ne
 
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("skills-analyze");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 2000,
     temperature: 0.1,
     system: systemPrompt,
@@ -404,8 +408,12 @@ Sources that match existing skills should update those skills.
 
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("skills-analyze");
+  const model = getModel(speed);
+
   const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 4000,
     temperature: 0.1,
     system: systemPrompt,

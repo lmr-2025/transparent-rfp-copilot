@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { logSkillChange, getUserFromSession } from "@/lib/auditLog";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { logUsage } from "@/lib/usageTracking";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { SourceUrl, SkillHistoryEntry } from "@/types/skill";
@@ -248,8 +248,12 @@ Review the refreshed source material against the existing skill.
 
 Return ONLY the JSON object.`;
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("skills-refresh");
+  const model = getModel(speed);
+
   const stream = anthropic.messages.stream({
-    model: CLAUDE_MODEL,
+    model,
     max_tokens: 32000,
     temperature: 0.1,
     system: systemPrompt,
@@ -270,7 +274,7 @@ Return ONLY the JSON object.`;
     userId: authSession?.user?.id,
     userEmail: authSession?.user?.email,
     feature: "skills-refresh",
-    model: CLAUDE_MODEL,
+    model,
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
     metadata: { urlCount: sourceUrls.length },

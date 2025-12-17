@@ -83,6 +83,20 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     logger.error("Failed to fetch audit log", error, { route: "/api/audit-log" });
+
+    // Check for specific Prisma errors
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Handle enum value not found (happens when migration hasn't been run)
+    if (errorMessage.includes("enum") || errorMessage.includes("CLARIFY_USED")) {
+      return errors.internal("Database migration required. Please run 'npx prisma migrate dev' to update the schema.");
+    }
+
+    // Handle table not found
+    if (errorMessage.includes("does not exist") || errorMessage.includes("P2021")) {
+      return errors.internal("Audit log table not found. Please run database migrations.");
+    }
+
     return errors.internal("Failed to fetch audit log");
   }
 }

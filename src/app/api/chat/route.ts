@@ -8,7 +8,7 @@
  */
 
 import { NextRequest } from 'next/server';
-import { CLAUDE_MODEL } from '@/lib/config';
+import { getModel, getEffectiveSpeed } from '@/lib/config';
 import { simpleChatSchema, validateBody } from '@/lib/validations';
 import { getAnthropicClient } from '@/lib/apiHelpers';
 import { requireAuth } from '@/lib/apiAuth';
@@ -68,13 +68,17 @@ export async function POST(req: NextRequest) {
       return errors.validation(validation.error);
     }
 
-    const { messages, systemPrompt } = validation.data;
+    const { messages, systemPrompt, quickMode } = validation.data;
 
     const anthropic = getAnthropicClient();
 
+    // Determine model speed (request override > user preference > system default)
+    const speed = getEffectiveSpeed("chat", quickMode);
+    const model = getModel(speed);
+
     // Call Claude API
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 16000,
       system: systemPrompt || '',
       messages: messages as Anthropic.MessageParam[],

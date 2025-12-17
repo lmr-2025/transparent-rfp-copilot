@@ -33,6 +33,10 @@ interface ConversationalRefinementProps {
   originalConversationHistory?: OriginalMessage[];
   clarifyConversation?: ClarifyMessage[];
   onConversationChange?: (messages: ClarifyMessage[]) => void;
+  // For audit logging and auto-flagging
+  projectId?: string;
+  rowId?: string;
+  onAutoFlagged?: () => void;
 }
 
 const styles = {
@@ -135,6 +139,9 @@ export default function ConversationalRefinement({
   originalConversationHistory,
   clarifyConversation,
   onConversationChange,
+  projectId,
+  rowId,
+  onAutoFlagged,
 }: ConversationalRefinementProps) {
   // Initialize from saved conversation or create initial message
   const [messages, setMessages] = useState<Message[]>(() => {
@@ -165,6 +172,29 @@ export default function ConversationalRefinement({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Log clarify usage to API for audit logging and auto-flagging
+  const logClarifyUsage = async (conversation: ClarifyMessage[], userMessage?: string) => {
+    if (!projectId || !rowId) return;
+
+    try {
+      const response = await fetch(`/api/projects/${projectId}/rows/${rowId}/clarify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversation, userMessage }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.data?.autoFlagged && onAutoFlagged) {
+          onAutoFlagged();
+        }
+      }
+    } catch (error) {
+      // Silent failure - don't block the conversation
+      console.warn('Failed to log clarify usage:', error);
+    }
+  };
 
   // Auto-save conversation when messages change
   useEffect(() => {
@@ -255,7 +285,13 @@ If the user asks you to generate a new/updated response, format it the same way 
         timestamp: new Date(),
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      setMessages((prev) => {
+        const newMessages = [...prev, assistantMessage];
+        // Log clarify usage to audit log (with the full updated conversation)
+        const simplified = newMessages.map(msg => ({ role: msg.role, content: msg.content }));
+        logClarifyUsage(simplified, userMessage.content);
+        return newMessages;
+      });
 
       // Check if this looks like a refined response (has "Answer:" or similar structure)
       if (

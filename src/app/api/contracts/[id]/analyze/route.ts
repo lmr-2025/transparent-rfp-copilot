@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { ContractFinding, FindingCategory, AlignmentRating } from "@/types/contractReview";
 import { logUsage } from "@/lib/usageTracking";
 import {
@@ -124,8 +124,12 @@ ${contractText}
 
 Identify and rate security-related clauses against our documented capabilities. Return your analysis as JSON.`;
 
+    // Determine model speed
+    const speed = getEffectiveSpeed("contracts-analyze");
+    const model = getModel(speed);
+
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 8000,
       temperature: 0.1,
       system: systemPrompt,
@@ -142,7 +146,7 @@ Identify and rate security-related clauses against our documented capabilities. 
       userId: authSession?.user?.id,
       userEmail: authSession?.user?.email,
       feature: "contracts-analyze",
-      model: CLAUDE_MODEL,
+      model,
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
       metadata: { contractId: id, skillCount: skills.length },

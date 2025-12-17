@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { LibraryRecommendation, AnalyzeLibraryResponse } from "@/types/libraryAnalysis";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
@@ -38,6 +38,10 @@ export async function POST(request: NextRequest) {
 
   const skills = Array.isArray(body?.skills) ? body.skills : [];
 
+  // Determine model speed
+  const speed = getEffectiveSpeed("skills-analyze-library");
+  const model = getModel(speed);
+
   if (skills.length === 0) {
     return apiSuccess({
       recommendations: [],
@@ -46,7 +50,7 @@ export async function POST(request: NextRequest) {
       transparency: {
         systemPrompt: "",
         userPrompt: "",
-        model: CLAUDE_MODEL,
+        model,
         maxTokens: 0,
         temperature: 0,
         skillCount: 0,
@@ -62,7 +66,7 @@ export async function POST(request: NextRequest) {
       transparency: {
         systemPrompt: "",
         userPrompt: "",
-        model: CLAUDE_MODEL,
+        model,
         maxTokens: 0,
         temperature: 0,
         skillCount: 1,
@@ -92,7 +96,7 @@ ${skillsContext}
 Return ONLY the JSON object with your analysis.`;
 
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 4000,
       temperature: 0.2,
       system: systemPrompt,
@@ -137,7 +141,7 @@ Return ONLY the JSON object with your analysis.`;
       transparency: {
         systemPrompt,
         userPrompt,
-        model: CLAUDE_MODEL,
+        model,
         maxTokens: 4000,
         temperature: 0.2,
         skillCount: skills.length,

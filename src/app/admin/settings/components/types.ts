@@ -102,7 +102,8 @@ export type AuditAction =
   | "CORRECTED"
   | "APPROVED"
   | "REVIEW_REQUESTED"
-  | "FLAG_RESOLVED";
+  | "FLAG_RESOLVED"
+  | "CLARIFY_USED";
 
 export type AuditLogEntry = {
   id: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { BulkRow } from "@/types/bulkProject";
 import { Skill } from "@/types/skill";
 import { parseAnswerSections } from "@/lib/questionHelpers";
@@ -40,6 +40,7 @@ const styles = {
 
 type RowCardProps = {
   row: BulkRow;
+  projectId: string;
   projectStatus: BulkProject["status"];
   projectReviewedBy?: string;
   promptText: string;
@@ -70,6 +71,7 @@ function renderStatus(status: string) {
 
 export default function RowCard({
   row,
+  projectId,
   projectStatus,
   projectReviewedBy,
   promptText,
@@ -86,10 +88,31 @@ export default function RowCard({
   const [resolutionNote, setResolutionNote] = useState("");
   const [isEditing, setIsEditing] = useState(false);
 
+  const questionRef = useRef<HTMLTextAreaElement>(null);
+  const responseRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea to fit content
+  const autoResize = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = "auto";
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  // Auto-resize on mount and when content changes
+  useEffect(() => {
+    autoResize(questionRef.current);
+  }, [row.question, autoResize]);
+
+  useEffect(() => {
+    autoResize(responseRef.current);
+  }, [row.response, autoResize]);
+
   // Lock by default when response exists and has been reviewed/approved
+  // Project is fully locked when finalized
   const hasResponse = Boolean(row.response);
   const isReviewed = row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED";
-  const locked = hasResponse && !isEditing;
+  const isProjectFinalized = projectStatus === "finalized";
+  const locked = isProjectFinalized || (hasResponse && !isEditing);
 
   const handleResolve = () => {
     onResolveFlag(row.id, resolutionNote || undefined);
@@ -133,7 +156,7 @@ export default function RowCard({
               backgroundColor: "#dcfce7",
               color: "#166534",
             }}>
-              Approved
+              Verified
             </span>
           )}
           {row.reviewStatus === "CORRECTED" && (
@@ -171,8 +194,8 @@ export default function RowCard({
           )}
         </div>
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
-          {/* Edit/Save toggle - only show when there's a response */}
-          {hasResponse && (
+          {/* Edit/Save toggle - only show when there's a response and project is not finalized */}
+          {hasResponse && !isProjectFinalized && (
             <button
               type="button"
               onClick={() => setIsEditing(!isEditing)}
@@ -194,8 +217,8 @@ export default function RowCard({
               )}
             </button>
           )}
-          {/* Flag / Need Help buttons - only show if no active flag and not resolved */}
-          {row.response && (!row.reviewStatus || row.reviewStatus === "NONE") && !row.flaggedForReview && (
+          {/* Flag / Need Help buttons - only show if no active flag, not resolved, and project not finalized */}
+          {row.response && !isProjectFinalized && (!row.reviewStatus || row.reviewStatus === "NONE") && !row.flaggedForReview && (
             <>
               <button
                 type="button"
@@ -229,8 +252,8 @@ export default function RowCard({
               </button>
             </>
           )}
-          {/* Resolve Flag button - for active flags */}
-          {isFlagActive && row.reviewStatus !== "REQUESTED" && (
+          {/* Resolve Flag button - for active flags (not shown when finalized) */}
+          {isFlagActive && !isProjectFinalized && row.reviewStatus !== "REQUESTED" && (
             <button
               type="button"
               onClick={() => setShowResolveForm(true)}
@@ -245,8 +268,8 @@ export default function RowCard({
               Resolve
             </button>
           )}
-          {/* Reopen Flag button - for resolved flags */}
-          {isFlagResolved && (
+          {/* Reopen Flag button - for resolved flags (not shown when finalized) */}
+          {isFlagResolved && !isProjectFinalized && (
             <button
               type="button"
               onClick={() => onReopenFlag(row.id)}
@@ -261,8 +284,8 @@ export default function RowCard({
               Reopen
             </button>
           )}
-          {/* Approve/Correct buttons */}
-          {row.reviewStatus === "REQUESTED" && (
+          {/* Confirm/Correct buttons (not shown when finalized) */}
+          {row.reviewStatus === "REQUESTED" && !isProjectFinalized && (
             <>
               <button
                 type="button"
@@ -275,7 +298,7 @@ export default function RowCard({
                   color: "#fff",
                 }}
               >
-                Approve
+                Verify
               </button>
               <button
                 type="button"
@@ -287,9 +310,9 @@ export default function RowCard({
                   backgroundColor: "#3b82f6",
                   color: "#fff",
                 }}
-                title="Mark current answer as corrected (save your edits)"
+                title="Save your edits as the corrected answer"
               >
-                Mark Corrected
+                Corrected
               </button>
             </>
           )}
@@ -410,13 +433,18 @@ export default function RowCard({
       {/* Question */}
       <label style={{ ...styles.label, fontSize: "0.9rem", marginTop: "4px" }}>Question</label>
       <textarea
+        ref={questionRef}
         value={row.question}
-        onChange={(event) => onQuestionEdit(row.id, event.target.value)}
+        onChange={(event) => {
+          onQuestionEdit(row.id, event.target.value);
+          autoResize(event.target);
+        }}
         disabled={locked}
         style={{
           ...styles.input,
-          minHeight: "60px",
-          resize: "vertical",
+          minHeight: "40px",
+          resize: "none",
+          overflow: "hidden",
           fontSize: "0.9rem",
           backgroundColor: locked ? "#f8fafc" : "#fff",
           cursor: locked ? "not-allowed" : "text",
@@ -444,14 +472,19 @@ export default function RowCard({
             Response
           </label>
           <textarea
+            ref={responseRef}
             value={row.response}
-            onChange={(event) => onUpdateRow(row.id, { response: event.target.value })}
+            onChange={(event) => {
+              onUpdateRow(row.id, { response: event.target.value });
+              autoResize(event.target);
+            }}
             disabled={locked}
             style={{
               ...styles.input,
-              minHeight: "180px",
+              minHeight: "60px",
               fontSize: "0.9rem",
-              resize: "vertical",
+              resize: "none",
+              overflow: "hidden",
               backgroundColor: locked ? "#f8fafc" : "#fff",
               cursor: locked ? "not-allowed" : "text",
               marginTop: "6px"
@@ -473,7 +506,7 @@ export default function RowCard({
               .filter((s): s is Skill => typeof s === "object" && s !== null && "id" in s && "title" in s)
               .map(s => ({ id: s.id, title: s.title, type: "skill" as const }))
             }
-            renderClarifyButton={!row.conversationOpen ? () => (
+            renderClarifyButton={!row.conversationOpen && !isProjectFinalized ? () => (
               <button
                 type="button"
                 onClick={() => onUpdateRow(row.id, { conversationOpen: true })}
@@ -497,7 +530,7 @@ export default function RowCard({
         </div>
       )}
 
-      {row.error && (
+      {row.error && !row.response && (
         <p style={{ color: "#b91c1c", fontSize: "0.85rem", marginTop: "8px" }}>{row.error}</p>
       )}
 
@@ -532,6 +565,9 @@ export default function RowCard({
             originalConversationHistory={row.conversationHistory}
             clarifyConversation={row.clarifyConversation}
             onConversationChange={(messages) => onUpdateRow(row.id, { clarifyConversation: messages })}
+            projectId={projectId}
+            rowId={row.id}
+            onAutoFlagged={() => onUpdateRow(row.id, { flaggedForReview: true, flagNote: "Auto-flagged: Clarify conversation started" })}
           />
         </div>
       )}

@@ -24,6 +24,7 @@ import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { CustomerProfile } from "@/types/customerProfile";
 import { features } from "@/lib/featureFlags";
 import UserSelector, { SelectableUser } from "@/components/UserSelector";
+import { SpeedToggle } from "@/components/speed-toggle";
 
 import {
   RowCard,
@@ -108,6 +109,8 @@ export default function BulkResponsesPage() {
   const [selectedDomains, setSelectedDomains] = useState<Domain[]>([]);
   const [sendingReviewRowId, setSendingReviewRowId] = useState<string | null>(null);
   const [isSendingQueued, setIsSendingQueued] = useState(false);
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  const [quickMode, setQuickMode] = useState(false);
 
   // Track processing state for beforeunload warning
   const isProcessingRef = useRef(false);
@@ -387,6 +390,7 @@ export default function BulkResponsesPage() {
               prompt: promptText,
               mode: "bulk",
               domains: selectedDomains.length > 0 ? selectedDomains : undefined,
+              quickMode,
             }),
           });
 
@@ -535,13 +539,13 @@ export default function BulkResponsesPage() {
     try {
       const updatedProject = {
         ...project,
-        status: "approved" as const,
+        status: "finalized" as const,
         reviewedAt: new Date().toISOString(),
         reviewedBy: reviewerName,
       };
       await updateProject(updatedProject);
       setProject(updatedProject);
-      toast.success("Project approved!");
+      toast.success("Project finalized!");
     } catch {
       toast.error("Failed to approve project. Please try again.");
     } finally {
@@ -935,8 +939,28 @@ export default function BulkResponsesPage() {
         queuedCount={queuedItems.length}
       />
 
-      {/* Generate section */}
-      {stats.needsGeneration > 0 && (
+      {/* Finalized notice */}
+      {project.status === "finalized" && (
+        <div style={{
+          ...styles.card,
+          backgroundColor: "#f0fdf4",
+          borderColor: "#86efac",
+          display: "flex",
+          alignItems: "center",
+          gap: "12px",
+        }}>
+          <span style={{ fontSize: "1.5rem" }}>🔒</span>
+          <div>
+            <div style={{ fontWeight: 600, color: "#166534" }}>Project Finalized</div>
+            <div style={{ color: "#15803d", fontSize: "0.9rem" }}>
+              This project has been finalized and is now read-only. Export the results using the dropdown above.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generate section - only show when not finalized */}
+      {project.status !== "finalized" && stats.needsGeneration > 0 && (
         <div style={styles.card}>
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
             <button
@@ -975,60 +999,68 @@ export default function BulkResponsesPage() {
             )}
           </div>
 
-          <DomainSelector
-            selectedDomains={selectedDomains}
-            onChange={setSelectedDomains}
-            disabled={isGeneratingAll}
-            style={{ marginTop: "12px" }}
-          />
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "12px", gap: "16px" }}>
+            <DomainSelector
+              selectedDomains={selectedDomains}
+              onChange={setSelectedDomains}
+              disabled={isGeneratingAll}
+            />
+            <SpeedToggle
+              quickMode={quickMode}
+              onChange={setQuickMode}
+              disabled={isGeneratingAll}
+            />
+          </div>
         </div>
       )}
 
-      {/* Prompt section */}
-      <div style={styles.card}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: promptCollapsed ? "0" : "12px" }}>
-          <div>
-            <label style={{ ...styles.label, marginTop: 0, marginBottom: "4px" }} htmlFor="promptText">
-              System Prompt
-            </label>
-            <a href="/admin/prompt-blocks" style={{ color: "#2563eb", fontSize: "0.85rem" }}>
-              Need to edit the prompt? Visit Prompt Builder →
-            </a>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPromptCollapsed(!promptCollapsed)}
-            style={{
-              ...styles.button,
-              backgroundColor: "#f1f5f9",
-              color: "#0f172a",
-              padding: "6px 12px",
-            }}
-          >
-            {promptCollapsed ? "Show Prompt" : "Hide Prompt"}
-          </button>
-        </div>
-
-        {!promptCollapsed && (
-          <>
-            <textarea
-              id="promptText"
-              value={promptText}
-              onChange={(event) => setPromptText(event.target.value)}
+      {/* Prompt section - hide when finalized */}
+      {project.status !== "finalized" && (
+        <div style={styles.card}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: promptCollapsed ? "0" : "12px" }}>
+            <div>
+              <label style={{ ...styles.label, marginTop: 0, marginBottom: "4px" }} htmlFor="promptText">
+                System Prompt
+              </label>
+              <a href="/admin/prompt-blocks" style={{ color: "#2563eb", fontSize: "0.85rem" }}>
+                Need to edit the prompt? Visit Prompt Builder →
+              </a>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPromptCollapsed(!promptCollapsed)}
               style={{
-                ...styles.input,
-                minHeight: "200px",
-                fontFamily: "monospace",
-                backgroundColor: "#f8fafc",
-                resize: "vertical",
+                ...styles.button,
+                backgroundColor: "#f1f5f9",
+                color: "#0f172a",
+                padding: "6px 12px",
               }}
-            />
-            <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "8px" }}>
-              All bulk responses and challenges share this prompt. Editing it here keeps everything in sync.
-            </p>
-          </>
-        )}
-      </div>
+            >
+              {promptCollapsed ? "Show Prompt" : "Hide Prompt"}
+            </button>
+          </div>
+
+          {!promptCollapsed && (
+            <>
+              <textarea
+                id="promptText"
+                value={promptText}
+                onChange={(event) => setPromptText(event.target.value)}
+                style={{
+                  ...styles.input,
+                  minHeight: "200px",
+                  fontFamily: "monospace",
+                  backgroundColor: "#f8fafc",
+                  resize: "vertical",
+                }}
+              />
+              <p style={{ color: "#64748b", fontSize: "0.9rem", marginTop: "8px" }}>
+                All bulk responses and challenges share this prompt. Editing it here keeps everything in sync.
+              </p>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Rows */}
       {filteredRows.length === 0 ? (
@@ -1045,6 +1077,7 @@ export default function BulkResponsesPage() {
             <RowCard
               key={row.id}
               row={row}
+              projectId={project.id}
               projectStatus={project.status}
               projectReviewedBy={project.reviewedBy}
               promptText={promptText}

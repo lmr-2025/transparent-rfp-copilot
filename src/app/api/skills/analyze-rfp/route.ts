@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE_MODEL } from "@/lib/config";
+import { getModel, getEffectiveSpeed } from "@/lib/config";
 import { SkillCategory } from "@/types/skill";
 import { getCategoryNamesFromDb } from "@/lib/categoryStorageServer";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
@@ -95,8 +95,12 @@ Analyze these Q&A pairs and suggest skill updates or new skills. Remember to:
 3. Extract clean, reusable content from the answers
 4. Return valid JSON only.`;
 
+    // Determine model speed
+    const speed = getEffectiveSpeed("skills-analyze-rfp");
+    const model = getModel(speed);
+
     const response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
+      model,
       max_tokens: 16000,
       temperature: 0.1,
       system: systemPrompt,

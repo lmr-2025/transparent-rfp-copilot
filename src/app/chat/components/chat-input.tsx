@@ -4,6 +4,7 @@ import { useRef, useEffect } from "react";
 import { Send, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { SpeedToggle } from "@/components/speed-toggle";
 import { cn } from "@/lib/utils";
 
 interface ChatInputProps {
@@ -12,6 +13,8 @@ interface ChatInputProps {
   onSend: () => void;
   isLoading: boolean;
   placeholder?: string;
+  quickMode?: boolean;
+  onQuickModeChange?: (quickMode: boolean) => void;
 }
 
 export function ChatInput({
@@ -20,6 +23,8 @@ export function ChatInput({
   onSend,
   isLoading,
   placeholder = "Type your message...",
+  quickMode,
+  onQuickModeChange,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,32 +45,45 @@ export function ChatInput({
   };
 
   return (
-    <div className="flex gap-3 items-end p-4 border-t border-border bg-background">
-      <Textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        disabled={isLoading}
-        className={cn(
-          "flex-1 min-h-[48px] max-h-[150px] resize-none",
-          "text-base leading-relaxed"
-        )}
-      />
-      <Button
-        onClick={onSend}
-        disabled={!value.trim() || isLoading}
-        size="icon"
-        className="h-12 w-12 shrink-0"
-        aria-label={isLoading ? "Sending message" : "Send message"}
-      >
-        {isLoading ? (
-          <Loader2 className="h-5 w-5 animate-spin" />
-        ) : (
-          <Send className="h-5 w-5" />
-        )}
-      </Button>
+    <div className="flex flex-col gap-2 p-4 border-t border-border bg-background">
+      {/* Speed toggle row */}
+      {onQuickModeChange && quickMode !== undefined && (
+        <div className="flex justify-end">
+          <SpeedToggle
+            quickMode={quickMode}
+            onChange={onQuickModeChange}
+            disabled={isLoading}
+          />
+        </div>
+      )}
+      {/* Input row */}
+      <div className="flex gap-3 items-end">
+        <Textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={isLoading}
+          className={cn(
+            "flex-1 min-h-[48px] max-h-[150px] resize-none",
+            "text-base leading-relaxed"
+          )}
+        />
+        <Button
+          onClick={onSend}
+          disabled={!value.trim() || isLoading}
+          size="icon"
+          className="h-12 w-12 shrink-0"
+          aria-label={isLoading ? "Sending message" : "Send message"}
+        >
+          {isLoading ? (
+            <Loader2 className="h-5 w-5 animate-spin" />
+          ) : (
+            <Send className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
     </div>
   );
 }

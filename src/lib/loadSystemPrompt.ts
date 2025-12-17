@@ -8,6 +8,7 @@ import {
   defaultCompositions,
   buildPromptFromBlocks,
 } from "@/lib/promptBlocks";
+import { cacheGetOrSet, CacheKeys, CacheTTL } from "@/lib/cache";
 
 /**
  * Options for dynamic prompt building
@@ -38,16 +39,40 @@ const keyToContext: Record<string, PromptContext> = {
   prompt_optimize: "prompt_optimize",
 };
 
+// Type for cached DB data
+type CachedPromptData = {
+  dbBlocks: Array<{ blockId: string; name: string | null; description: string | null; variants: unknown }>;
+  dbModifiers: Array<{ modifierId: string; name: string | null; content: string }>;
+};
+
 /**
- * Load blocks and modifiers from DB, falling back to defaults
+ * Fetch raw prompt data from DB (for caching)
+ */
+async function fetchPromptDataFromDB(): Promise<CachedPromptData> {
+  const [dbBlocks, dbModifiers] = await Promise.all([
+    prisma.promptBlock.findMany(),
+    prisma.promptModifier.findMany(),
+  ]);
+  return { dbBlocks, dbModifiers };
+}
+
+/**
+ * Load blocks and modifiers from cache or DB, falling back to defaults
+ * Uses Redis cache with 1 hour TTL to avoid repeated DB queries
  */
 async function loadBlocksAndModifiers(): Promise<{
   blocks: PromptBlock[];
   modifiers: PromptModifier[];
 }> {
   try {
-    const dbBlocks = await prisma.promptBlock.findMany();
-    const dbModifiers = await prisma.promptModifier.findMany();
+    // Get cached or fetch fresh from DB
+    const cached = await cacheGetOrSet<CachedPromptData>(
+      CacheKeys.PROMPT_BLOCKS,
+      CacheTTL.PROMPT_BLOCKS,
+      fetchPromptDataFromDB
+    );
+
+    const { dbBlocks, dbModifiers } = cached;
 
     // Merge DB with defaults
     const blocks = defaultBlocks.map(defaultBlock => {

@@ -227,6 +227,8 @@ export const simpleChatSchema = z.object({
     content: z.string(),
   })).min(1, "messages array is required"),
   systemPrompt: z.string().optional(),
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  quickMode: z.boolean().optional(),
 });
 
 // Chat schemas - knowledge chat route
@@ -278,6 +280,8 @@ export const knowledgeChatSchema = z.object({
   conversationHistory: z.array(chatMessageItemSchema).optional(),
   chatSections: z.array(chatSectionSchema).optional(),
   userInstructions: z.string().max(50000).optional(), // User-facing behavior/persona instructions
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  quickMode: z.boolean().optional(),
 });
 
 // Legacy chat message schema (for other uses)
@@ -306,6 +310,8 @@ export const questionAnswerSchema = z.object({
   // Dynamic prompt options
   mode: z.enum(["single", "bulk"]).optional(),
   domains: z.array(z.enum(["technical", "legal", "security"])).optional(),
+  // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
+  quickMode: z.boolean().optional(),
 });
 
 // Helper to validate and return typed result

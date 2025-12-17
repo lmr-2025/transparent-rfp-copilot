@@ -3,14 +3,14 @@
 import { cn } from "@/lib/utils";
 import { BulkProject } from "@/types/bulkProject";
 
-export type StatusFilter = "all" | "draft" | "in_progress" | "needs_review" | "approved" | "has_flagged";
+export type StatusFilter = "all" | "draft" | "in_progress" | "needs_review" | "finalized" | "has_flagged";
 
 interface FilterCounts {
   all: number;
   draft: number;
   in_progress: number;
   needs_review: number;
-  approved: number;
+  finalized: number;
   has_flagged: number;
 }
 
@@ -26,7 +26,7 @@ export function StatusFilter({ currentFilter, onFilterChange, counts }: StatusFi
     { key: "draft", label: "Draft" },
     { key: "in_progress", label: "In Progress" },
     { key: "needs_review", label: "Needs Review" },
-    { key: "approved", label: "Approved" },
+    { key: "finalized", label: "Finalized" },
   ];
 
   return (
@@ -60,7 +60,7 @@ export function StatusSummaryCards({ currentFilter, onFilterChange, counts }: St
     { key: "needs_review", label: "Needs Review", color: "text-amber-500", bgActive: "bg-amber-50", borderActive: "border-amber-300" },
     { key: "has_flagged", label: "Has Flagged", color: "text-amber-500", bgActive: "bg-amber-50", borderActive: "border-amber-300" },
     { key: "in_progress", label: "In Progress", color: "text-blue-500", bgActive: "bg-blue-50", borderActive: "border-blue-300" },
-    { key: "approved", label: "Approved", color: "text-green-500", bgActive: "bg-green-50", borderActive: "border-green-300" },
+    { key: "finalized", label: "Finalized", color: "text-green-500", bgActive: "bg-green-50", borderActive: "border-green-300" },
   ];
 
   return (
@@ -94,7 +94,7 @@ export function calculateFilterCounts(projects: BulkProject[]): FilterCounts {
     draft: projects.filter((p) => p.status === "draft").length,
     in_progress: projects.filter((p) => p.status === "in_progress").length,
     needs_review: projects.filter((p) => p.status === "needs_review").length,
-    approved: projects.filter((p) => p.status === "approved").length,
+    finalized: projects.filter((p) => p.status === "finalized").length,
     has_flagged: projects.filter((p) => p.rows.some((r) => r.flaggedForReview)).length,
   };
 }
