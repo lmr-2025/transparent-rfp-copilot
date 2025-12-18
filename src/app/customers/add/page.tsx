@@ -40,7 +40,9 @@ export default function CustomerProfileBuilderPage() {
   // Document upload state
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; currentFileName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   // Transparency state
   const [analyzeTransparency, setAnalyzeTransparency] = useState<TransparencyData | null>(null);
@@ -73,6 +75,20 @@ export default function CustomerProfileBuilderPage() {
     };
     checkSalesforce();
   }, []);
+
+  // Warn user before leaving page if upload is in progress
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isUploading) {
+        e.preventDefault();
+        e.returnValue = "Upload in progress. Are you sure you want to leave?";
+        return e.returnValue;
+      }
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isUploading]);
 
   // Get current prompt for preview
   const getCurrentPrompt = () => {
@@ -158,10 +174,18 @@ export default function CustomerProfileBuilderPage() {
     setError(null);
     setIsUploading(true);
 
+    const fileArray = Array.from(files);
     const newDocs: UploadedDocument[] = [];
 
-    for (const file of Array.from(files)) {
+    // Create abort controller for this upload session
+    uploadAbortControllerRef.current = new AbortController();
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
       const filename = file.name.toLowerCase();
+
+      // Update progress
+      setUploadProgress({ current: i + 1, total: fileArray.length, currentFileName: file.name });
 
       if (
         !filename.endsWith(".pdf") &&
@@ -178,10 +202,18 @@ export default function CustomerProfileBuilderPage() {
         formData.append("file", file);
         formData.append("title", file.name);
 
+        // Use AbortController with 3 minute timeout for PDF processing (Claude extraction can take time)
+        const timeoutId = setTimeout(() => {
+          uploadAbortControllerRef.current?.abort();
+        }, 180000); // 3 minutes
+
         const response = await fetch("/api/documents", {
           method: "POST",
           body: formData,
+          signal: uploadAbortControllerRef.current.signal,
         });
+
+        clearTimeout(timeoutId);
 
         const json = await response.json();
 
@@ -204,7 +236,11 @@ export default function CustomerProfileBuilderPage() {
         // Delete the temporary document
         await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
       } catch (err) {
-        setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
+        if (err instanceof Error && err.name === "AbortError") {
+          setError(`Upload timed out for ${file.name}. Please try again with a smaller file.`);
+        } else {
+          setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
+        }
       }
     }
 
@@ -213,6 +249,8 @@ export default function CustomerProfileBuilderPage() {
     }
 
     setIsUploading(false);
+    setUploadProgress(null);
+    uploadAbortControllerRef.current = null;
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -462,6 +500,7 @@ export default function CustomerProfileBuilderPage() {
           isAnalyzing={isAnalyzing}
           isBuilding={isBuilding}
           isUploading={isUploading}
+          uploadProgress={uploadProgress}
           uploadedDocs={uploadedDocs}
           onFileUpload={handleFileUpload}
           onRemoveDocument={removeDocument}
