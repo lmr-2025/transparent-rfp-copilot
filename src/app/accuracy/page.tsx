@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
@@ -25,6 +25,7 @@ import {
 import { InlineLoader } from "@/components/ui/loading";
 import { InlineError } from "@/components/ui/status-display";
 import { exportQuestionLog } from "@/lib/exportUtils";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import type {
   QuestionLogEntry,
   QuestionLogStats,
@@ -152,95 +153,83 @@ export default function AccuracyPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("accuracy");
 
   // Accuracy tab state
-  const [data, setData] = useState<AccuracyData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [expandedCorrection, setExpandedCorrection] = useState<string | null>(null);
 
   // Question Log tab state
-  const [logEntries, setLogEntries] = useState<QuestionLogEntry[]>([]);
-  const [logStats, setLogStats] = useState<QuestionLogStats>({ total: 0, answered: 0, verified: 0, corrected: 0, locked: 0, resolved: 0, pending: 0 });
-  const [logPagination, setLogPagination] = useState<Pagination>({ page: 1, limit: 50, total: 0, totalPages: 0 });
-  const [logLoading, setLogLoading] = useState(false);
-  const [logError, setLogError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<QuestionLogStatus | "all">("answered");
   const [selectedSource, setSelectedSource] = useState<QuestionLogSource | "all">("all");
   const [selectedUserId, setSelectedUserId] = useState<string>(""); // User filter for org-wide tracking
-  const [users, setUsers] = useState<{ id: string; name: string | null; email: string | null }[]>([]);
   const [showFilters, setShowFilters] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/accuracy/stats?days=${days}`);
-      if (!res.ok) throw new Error("Failed to fetch accuracy data");
-      const result = await res.json();
-      // Handle both old format (direct data) and new format ({ data: ... })
-      setData(result.data || result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
+  // Accuracy data query
+  const {
+    data,
+    isLoading: loading,
+    error: accuracyError,
+    refetch: fetchData,
+  } = useApiQuery<AccuracyData>({
+    queryKey: ["accuracy-stats", days],
+    url: "/api/accuracy/stats",
+    params: { days },
+  });
 
-  // Question Log fetch
-  const fetchQuestionLog = useCallback(async () => {
-    setLogLoading(true);
-    setLogError(null);
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(logPagination.page));
-      params.set("limit", String(logPagination.limit));
-      if (searchQuery) params.set("search", searchQuery);
-      if (selectedStatus !== "all") params.set("status", selectedStatus);
-      if (selectedSource !== "all") params.set("source", selectedSource);
-      if (selectedUserId) params.set("userId", selectedUserId);
+  const error = accuracyError?.message || null;
 
-      const response = await fetch(`/api/question-log?${params.toString()}`);
-      if (!response.ok) throw new Error("Failed to fetch question log");
-      const result = await response.json();
-      const logData = result.data || result;
-      setLogEntries(logData.entries || []);
-      setLogStats(logData.stats || { total: 0, answered: 0, verified: 0, corrected: 0, locked: 0, resolved: 0, pending: 0 });
-      setLogPagination(logData.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
-    } catch (err) {
-      setLogError(err instanceof Error ? err.message : "Failed to load question log");
-    } finally {
-      setLogLoading(false);
-    }
-  }, [logPagination.page, logPagination.limit, searchQuery, selectedStatus, selectedSource, selectedUserId]);
+  // Question log response type
+  type QuestionLogResponse = {
+    entries: QuestionLogEntry[];
+    stats: QuestionLogStats;
+    pagination: Pagination;
+  };
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // Question Log query
+  const {
+    data: logData,
+    isLoading: logLoading,
+    error: logQueryError,
+    refetch: fetchQuestionLog,
+  } = useApiQuery<QuestionLogResponse>({
+    queryKey: ["question-log", page, limit, searchQuery, selectedStatus, selectedSource, selectedUserId],
+    url: "/api/question-log",
+    params: {
+      page,
+      limit,
+      search: searchQuery || undefined,
+      status: selectedStatus !== "all" ? selectedStatus : undefined,
+      source: selectedSource !== "all" ? selectedSource : undefined,
+      userId: selectedUserId || undefined,
+    },
+    enabled: activeTab === "question-log",
+  });
 
-  // Fetch users for the filter dropdown
-  useEffect(() => {
-    if (activeTab === "question-log" && users.length === 0) {
-      fetch("/api/users")
-        .then((res) => res.json())
-        .then((result) => {
-          const data = result.data || result;
-          setUsers(data.users || []);
-        })
-        .catch(() => {
-          // Silent fail - users filter won't be populated
-        });
-    }
-  }, [activeTab, users.length]);
+  const logEntries = logData?.entries || [];
+  const logStats = logData?.stats || { total: 0, answered: 0, verified: 0, corrected: 0, locked: 0, resolved: 0, pending: 0 };
+  const logPagination = logData?.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 };
+  const logError = logQueryError?.message || null;
 
-  // Fetch question log when switching to that tab or when filters change
-  useEffect(() => {
-    if (activeTab === "question-log") {
-      fetchQuestionLog();
-    }
-  }, [activeTab, fetchQuestionLog]);
+  // Users query for filter dropdown
+  type UsersResponse = { users: { id: string; name: string | null; email: string | null }[] };
+  const { data: usersData } = useApiQuery<UsersResponse>({
+    queryKey: ["users-list"],
+    url: "/api/users",
+    responseKey: "users",
+    enabled: activeTab === "question-log",
+  });
+  const users = (usersData as unknown as { id: string; name: string | null; email: string | null }[]) || [];
+
+  // Delete mutation
+  const deleteMutation = useApiMutation<void, { id: string; source: string }>({
+    url: (vars) => `/api/question-log?id=${vars.id}&source=${vars.source}`,
+    method: "DELETE",
+    invalidateKeys: [["question-log"]],
+  });
+
+  const deletingId = deleteMutation.isPending ? deleteMutation.variables?.id : null;
 
   const maxDaily = data?.daily?.reduce((max, d) => Math.max(max, d.total), 0) || 1;
 
@@ -258,40 +247,17 @@ export default function AccuracyPage() {
     setSelectedStatus("answered");
     setSelectedSource("all");
     setSelectedUserId("");
-    setLogPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
   const hasActiveFilters = searchQuery || selectedStatus !== "answered" || selectedSource !== "all" || selectedUserId;
 
-  const handleDeleteEntry = async (entry: QuestionLogEntry) => {
+  const handleDeleteEntry = (entry: QuestionLogEntry) => {
     if (!confirm(`Delete this question?\n\n"${entry.question.slice(0, 100)}${entry.question.length > 100 ? "..." : ""}"\n\nThis action cannot be undone.`)) {
       return;
     }
 
-    setDeletingId(entry.id);
-    try {
-      const response = await fetch(`/api/question-log?id=${entry.id}&source=${entry.source}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const result = await response.json();
-        throw new Error(result.error || "Failed to delete");
-      }
-
-      // Remove from local state
-      setLogEntries((prev) => prev.filter((e) => e.id !== entry.id));
-      // Update stats
-      setLogStats((prev) => ({
-        ...prev,
-        total: prev.total - 1,
-        [entry.status]: Math.max(0, (prev[entry.status] || 0) - 1),
-      }));
-    } catch (err) {
-      setLogError(err instanceof Error ? err.message : "Failed to delete question");
-    } finally {
-      setDeletingId(null);
-    }
+    deleteMutation.mutate({ id: entry.id, source: entry.source });
   };
 
   return (
@@ -363,7 +329,7 @@ export default function AccuracyPage() {
             </select>
 
             <button
-              onClick={fetchData}
+              onClick={() => fetchData()}
               style={{
                 padding: "8px 16px",
                 borderRadius: "6px",
@@ -385,7 +351,7 @@ export default function AccuracyPage() {
 
           {error && (
             <div style={{ marginBottom: "24px" }}>
-              <InlineError message={error} onDismiss={() => setError(null)} />
+              <InlineError message={error} />
             </div>
           )}
 
@@ -878,7 +844,7 @@ export default function AccuracyPage() {
                   value={searchQuery}
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
-                    setLogPagination((p) => ({ ...p, page: 1 }));
+                    setPage(1);
                   }}
                   style={{ flex: 1, border: "none", outline: "none", fontSize: "0.875rem", background: "transparent" }}
                 />
@@ -908,7 +874,7 @@ export default function AccuracyPage() {
                 {hasActiveFilters && <span style={{ width: "8px", height: "8px", background: "#dc2626", borderRadius: "50%" }} />}
               </button>
               <button
-                onClick={fetchQuestionLog}
+                onClick={() => fetchQuestionLog()}
                 disabled={logLoading}
                 style={{
                   display: "flex",
@@ -954,7 +920,7 @@ export default function AccuracyPage() {
                   value={selectedStatus}
                   onChange={(e) => {
                     setSelectedStatus(e.target.value as QuestionLogStatus | "all");
-                    setLogPagination((p) => ({ ...p, page: 1 }));
+                    setPage(1);
                   }}
                   style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.875rem" }}
                 >
@@ -970,7 +936,7 @@ export default function AccuracyPage() {
                   value={selectedSource}
                   onChange={(e) => {
                     setSelectedSource(e.target.value as QuestionLogSource | "all");
-                    setLogPagination((p) => ({ ...p, page: 1 }));
+                    setPage(1);
                   }}
                   style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.875rem" }}
                 >
@@ -982,7 +948,7 @@ export default function AccuracyPage() {
                   value={selectedUserId}
                   onChange={(e) => {
                     setSelectedUserId(e.target.value);
-                    setLogPagination((p) => ({ ...p, page: 1 }));
+                    setPage(1);
                   }}
                   style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", fontSize: "0.875rem" }}
                 >
@@ -1003,10 +969,10 @@ export default function AccuracyPage() {
           </div>
 
           {/* Error */}
-          {logError && (
+          {(logError || deleteMutation.error) && (
             <div style={{ padding: "12px", background: "#fef2f2", color: "#dc2626", borderRadius: "8px", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
               <AlertCircle size={16} />
-              {logError}
+              {logError || deleteMutation.error?.message || "An error occurred"}
             </div>
           )}
 
@@ -1310,7 +1276,7 @@ export default function AccuracyPage() {
               </span>
               <div style={{ display: "flex", gap: "8px" }}>
                 <button
-                  onClick={() => setLogPagination((p) => ({ ...p, page: p.page - 1 }))}
+                  onClick={() => setPage((p) => p - 1)}
                   disabled={logPagination.page === 1}
                   style={{
                     padding: "6px 12px",
@@ -1325,7 +1291,7 @@ export default function AccuracyPage() {
                   Previous
                 </button>
                 <button
-                  onClick={() => setLogPagination((p) => ({ ...p, page: p.page + 1 }))}
+                  onClick={() => setPage((p) => p + 1)}
                   disabled={logPagination.page === logPagination.totalPages}
                   style={{
                     padding: "6px 12px",

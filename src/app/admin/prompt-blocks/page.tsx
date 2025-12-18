@@ -109,15 +109,6 @@ export default function PromptBlocksPage() {
     }
   }, [blocks, modifiers]);
 
-  // Auto-save disabled - using manual save button instead
-  // useEffect(() => {
-  //   if (!loaded || !hasChanges) return;
-  //   const timer = setTimeout(() => {
-  //     saveBlocks();
-  //   }, 1000);
-  //   return () => clearTimeout(timer);
-  // }, [blocks, modifiers, loaded, hasChanges, saveBlocks]);
-
   const handleBlockChange = (blockId: string, variants: Record<string, string>) => {
     setHasChanges(true);
     setBlocks(prev => prev.map(b =>

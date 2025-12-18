@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { FileDown, Eye, Download, Loader2, Copy, Check, ChevronDown } from "lucide-react";
+import { FileDown, Download, Loader2, Copy, Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -13,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import type { TemplateResponse, FillTemplateResponse, TemplateFillContext } from "@/types/template";
 
 type TemplateListItem = Omit<TemplateResponse, "content" | "placeholderHint">;
@@ -30,35 +30,21 @@ export function TemplateSelector({ context, disabled }: TemplateSelectorProps) {
   const [copied, setCopied] = useState(false);
 
   // Fetch available templates
-  const { data: templates, isLoading: templatesLoading } = useQuery<TemplateListItem[]>({
+  const { data: templates, isLoading: templatesLoading } = useApiQuery<TemplateListItem[]>({
     queryKey: ["templates"],
-    queryFn: async () => {
-      const res = await fetch("/api/templates");
-      if (!res.ok) throw new Error("Failed to fetch templates");
-      const data = await res.json();
-      return data.data || [];
-    },
+    url: "/api/templates",
+    responseKey: "templates",
+    transform: (data) => (Array.isArray(data) ? data : []),
   });
 
   // Fill template mutation
-  const fillMutation = useMutation<FillTemplateResponse, Error, { templateId: string; outputFormat: "markdown" | "docx" }>({
-    mutationFn: async ({ templateId, outputFormat }) => {
-      const res = await fetch("/api/templates/fill", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          templateId,
-          context,
-          outputFormat,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to fill template");
-      }
-      const data = await res.json();
-      return data.data;
-    },
+  const fillMutation = useApiMutation<
+    FillTemplateResponse,
+    { templateId: string; context: TemplateFillContext; outputFormat: "markdown" | "docx" }
+  >({
+    url: "/api/templates/fill",
+    method: "POST",
+    responseKey: "data",
     onSuccess: (data) => {
       setFilledContent(data.filledContent);
       setDocxBase64(data.docxBase64 || null);
@@ -79,7 +65,7 @@ export function TemplateSelector({ context, disabled }: TemplateSelectorProps) {
       toast.error("Please select a template first");
       return;
     }
-    fillMutation.mutate({ templateId: selectedTemplate.id, outputFormat });
+    fillMutation.mutate({ templateId: selectedTemplate.id, context, outputFormat });
   };
 
   const handleCopy = async () => {

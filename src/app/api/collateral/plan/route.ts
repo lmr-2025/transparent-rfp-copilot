@@ -66,7 +66,8 @@ type TemplateContext = {
   id: string;
   name: string;
   category: string | null;
-  description: string | null;
+  description?: string | null;
+  content?: string; // Template content with placeholders
 };
 
 type CollateralPlanRequest = {
@@ -76,7 +77,9 @@ type CollateralPlanRequest = {
     customer?: CustomerContext;
     skills?: SkillContext[];
     gtm?: GTMContext;
-    templates?: TemplateContext[];
+    template?: TemplateContext; // Single template for content generation
+    templates?: TemplateContext[]; // Legacy: list of available templates
+    userInstructions?: string;
   };
 };
 
@@ -128,6 +131,89 @@ function parseCollateralPlan(response: string): {
   }
 
   return collateral.length > 0 ? { collateral } : null;
+}
+
+// Strip data blocks from response for cleaner display
+function stripDataBlocks(response: string): string {
+  let cleaned = response;
+  // Remove ---SLIDE_DATA---, ---BVA_DATA---, ---DATA--- blocks with END marker
+  cleaned = cleaned.replace(/---(?:BVA_DATA|SLIDE_DATA|DATA)---[\s\S]*?---END_(?:DATA|BVA_DATA|SLIDE_DATA)---/gi, "");
+  // Also remove blocks without END marker (from marker to end of string)
+  cleaned = cleaned.replace(/---(?:BVA_DATA|SLIDE_DATA|DATA)---[\s\S]*$/gi, "");
+  // Clean up excessive whitespace left behind
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  return cleaned;
+}
+
+// Parse key-value data from markdown table or structured format
+// Supports: markdown tables, "Key: Value" lines, and ---BVA_DATA--- blocks
+function parseKeyValueData(response: string): Record<string, string> | null {
+  const data: Record<string, string> = {};
+  let foundData = false;
+
+  // Check for ---BVA_DATA--- or ---SLIDE_DATA--- blocks with END marker
+  const blockMatchWithEnd = response.match(/---(BVA_DATA|SLIDE_DATA|DATA)---\s*([\s\S]*?)---END_(?:DATA|BVA_DATA|SLIDE_DATA)---/i);
+  if (blockMatchWithEnd) {
+    const blockContent = blockMatchWithEnd[2].trim();
+    // Parse the block content
+    parseKeyValueLines(blockContent, data);
+    foundData = Object.keys(data).length > 0;
+  }
+
+  // If no END marker found, try to parse content after ---SLIDE_DATA--- to end of response
+  if (!foundData) {
+    const blockMatchNoEnd = response.match(/---(BVA_DATA|SLIDE_DATA|DATA)---\s*([\s\S]+)$/i);
+    if (blockMatchNoEnd) {
+      const blockContent = blockMatchNoEnd[2].trim();
+      // Parse the block content (may be the rest of the response)
+      parseKeyValueLines(blockContent, data);
+      foundData = Object.keys(data).length > 0;
+    }
+  }
+
+  // Check for markdown table format: | Key | Value |
+  const tableMatch = response.match(/\|[^\n]+\|[^\n]+\|[\s\S]*?\n(?:\|[-:]+\|[-:]+\|[\s\S]*?\n)?((?:\|[^\n]+\|[^\n]+\|\n?)+)/);
+  if (tableMatch && !foundData) {
+    const tableRows = tableMatch[1].trim().split("\n");
+    for (const row of tableRows) {
+      // Parse table row: | Key | Value |
+      const cells = row.split("|").map(c => c.trim()).filter(c => c);
+      if (cells.length >= 2) {
+        const key = cells[0].trim();
+        const value = cells[1].trim();
+        // Skip separator rows and headers
+        if (!key.match(/^[-:]+$/) && key.toLowerCase() !== "key" && key.toLowerCase() !== "field") {
+          data[key] = value;
+          foundData = true;
+        }
+      }
+    }
+  }
+
+  // Check for "Key: Value" format throughout the response
+  if (!foundData) {
+    parseKeyValueLines(response, data);
+    foundData = Object.keys(data).length > 0;
+  }
+
+  return foundData ? data : null;
+}
+
+// Helper to parse "Key: Value" lines
+function parseKeyValueLines(content: string, data: Record<string, string>): void {
+  const lines = content.split("\n");
+  for (const line of lines) {
+    // Match "Key: Value" or "**Key:** Value" or "- Key: Value"
+    const kvMatch = line.match(/^(?:\*\*)?[-•]?\s*([^:|\n]+?)(?:\*\*)?\s*:\s*(.+)$/);
+    if (kvMatch) {
+      const key = kvMatch[1].trim().replace(/^\*\*|\*\*$/g, "");
+      const value = kvMatch[2].trim();
+      // Skip common non-data lines
+      if (!key.match(/^(note|example|tip|warning)$/i) && value.length > 0) {
+        data[key] = value;
+      }
+    }
+  }
 }
 
 // GET - Fetch the system prompt for transparency
@@ -219,9 +305,13 @@ ${contextStr}`;
     const anthropic = new Anthropic();
     const model = getModel("quality"); // Use quality model for better planning
 
+    // Use higher token limit when filling templates with many placeholders
+    const hasTemplate = !!context.template?.content;
+    const maxTokens = hasTemplate ? 8000 : 2000;
+
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 2000,
+      max_tokens: maxTokens,
       system: fullSystemPrompt,
       messages,
     });
@@ -234,9 +324,16 @@ ${contextStr}`;
     // Try to parse a collateral plan from the response
     const plan = parseCollateralPlan(responseText);
 
+    // Try to parse key-value data (for BVA, slide data, etc.)
+    const slideData = parseKeyValueData(responseText);
+
+    // Clean the response for display (strip out data blocks)
+    const displayResponse = slideData ? stripDataBlocks(responseText) : responseText;
+
     return apiSuccess({
-      response: responseText,
+      response: displayResponse,
       plan,
+      slideData, // Key-value data for filling slides
       transparency: {
         systemPrompt: fullSystemPrompt,
         model,
@@ -307,8 +404,32 @@ function buildContextString(context: CollateralPlanRequest["context"]): string {
     }
   }
 
-  // Add templates context
-  if (context.templates?.length) {
+  // Add selected template context (for content generation)
+  if (context.template?.content) {
+    parts.push("\n### Selected Template");
+    parts.push(`**${context.template.name}**${context.template.category ? ` (${context.template.category})` : ""}`);
+
+    // Extract placeholders from template content
+    const placeholders = extractPlaceholders(context.template.content);
+    if (placeholders.length > 0) {
+      parts.push(`\n**Placeholders to fill (${placeholders.length}):**`);
+      for (const p of placeholders) {
+        parts.push(`- ${p}`);
+      }
+      parts.push("\n**IMPORTANT:** When the user asks to 'generate all' or 'fill the template', you MUST output values for each placeholder using this EXACT format:");
+      parts.push("```");
+      parts.push("---SLIDE_DATA---");
+      for (const p of placeholders.slice(0, 5)) {
+        parts.push(`${p}: [Generated value for ${p}]`);
+      }
+      if (placeholders.length > 5) {
+        parts.push(`... (continue for all ${placeholders.length} placeholders)`);
+      }
+      parts.push("---END_SLIDE_DATA---");
+      parts.push("```");
+    }
+  } else if (context.templates?.length) {
+    // Legacy: list of available templates
     parts.push("\n### Available Templates");
     for (const template of context.templates) {
       parts.push(`- **${template.name}**${template.category ? ` (${template.category})` : ""}${template.description ? `: ${template.description}` : ""}`);
@@ -317,5 +438,25 @@ function buildContextString(context: CollateralPlanRequest["context"]): string {
     parts.push("\n### Available Templates\nNo templates available. Custom content can be generated.");
   }
 
+  // Add user instructions if provided
+  if (context.userInstructions) {
+    parts.push("\n### User Instructions");
+    parts.push(context.userInstructions);
+  }
+
   return parts.join("\n");
+}
+
+// Extract placeholder names from template content
+function extractPlaceholders(content: string): string[] {
+  const placeholders: string[] = [];
+  const regex = /\{\{([^}]+)\}\}/g;
+  let match;
+  while ((match = regex.exec(content)) !== null) {
+    const placeholder = match[1].trim();
+    if (!placeholders.includes(placeholder)) {
+      placeholders.push(placeholder);
+    }
+  }
+  return placeholders;
 }

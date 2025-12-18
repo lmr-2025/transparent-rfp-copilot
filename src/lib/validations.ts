@@ -73,6 +73,23 @@ export const updateSkillSchema = z.object({
   lastRefreshedAt: z.string().optional(),
 });
 
+// Customer profile source URL schema - supports both string and object formats
+const customerSourceUrlSchema = z.union([
+  z.string().url(),
+  z.object({
+    url: z.string().url(),
+    addedAt: z.string(),
+    lastFetchedAt: z.string().optional(),
+  }),
+]);
+
+// Customer profile source document schema
+const customerSourceDocumentSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  uploadedAt: z.string(),
+});
+
 // Customer profile schemas
 export const createCustomerSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -85,10 +102,22 @@ export const createCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).default([]),
-  sourceUrls: z.array(z.string().url()).default([]),
+  sourceUrls: z.array(customerSourceUrlSchema).default([]),
+  sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
+  // New content field
+  content: z.string().max(100000).optional(),
+  considerations: z.array(z.string()).optional(),
   isActive: z.boolean().default(true),
   owners: z.string().nullable().optional(),
+  // Salesforce static fields
   salesforceId: z.string().optional(),
+  region: z.string().optional(),
+  tier: z.string().optional(),
+  employeeCount: z.number().optional(),
+  annualRevenue: z.number().optional(),
+  accountType: z.string().optional(),
+  billingLocation: z.string().optional(),
+  lastSalesforceSync: z.string().optional(),
 });
 
 // For updates, use a separate schema without defaults
@@ -104,10 +133,22 @@ export const updateCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).optional(),
-  sourceUrls: z.array(z.string().url()).optional(),
+  sourceUrls: z.array(customerSourceUrlSchema).optional(),
+  sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
+  // New content field
+  content: z.string().max(100000).optional(),
+  considerations: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
   owners: z.string().nullable().optional(),
+  // Salesforce static fields
   salesforceId: z.string().optional(),
+  region: z.string().optional(),
+  tier: z.string().optional(),
+  employeeCount: z.number().optional(),
+  annualRevenue: z.number().optional(),
+  accountType: z.string().optional(),
+  billingLocation: z.string().optional(),
+  lastSalesforceSync: z.string().optional(),
 });
 
 // Project row schema

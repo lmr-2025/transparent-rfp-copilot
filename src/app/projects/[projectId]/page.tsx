@@ -905,7 +905,7 @@ export default function BulkResponsesPage() {
       <ConfirmDialog />
       <FlagReviewDialog />
       <div style={{ marginBottom: "16px" }}>
-        <Link href="/projects/" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
+        <Link href="/projects" style={{ color: "#2563eb", fontWeight: 600, fontSize: "0.9rem" }}>
           ← Back to Projects
         </Link>
       </div>

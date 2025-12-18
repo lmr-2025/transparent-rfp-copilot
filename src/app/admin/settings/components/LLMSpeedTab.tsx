@@ -5,7 +5,7 @@ import { Zap, Gauge, RotateCcw, Info } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { toast } from "sonner";
 import { LLM_SPEED_DEFAULTS, type LLMFeature, type ModelSpeed } from "@/lib/config";
-import { parseApiData } from "@/lib/apiClient";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 // Friendly labels for each LLM feature
 const FEATURE_LABELS: Record<LLMFeature, { label: string; description: string }> = {
@@ -87,34 +87,42 @@ const FEATURE_GROUPS = [
   },
 ];
 
-type UserPreferences = {
-  llmSpeedOverrides: Record<string, ModelSpeed>;
+type PreferencesResponse = {
+  preferences?: { llmSpeedOverrides?: Record<string, ModelSpeed> };
 };
 
 export default function LLMSpeedTab() {
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [userOverrides, setUserOverrides] = useState<Record<string, ModelSpeed>>({});
   const [hasChanges, setHasChanges] = useState(false);
 
-  useEffect(() => {
-    fetchPreferences();
-  }, []);
+  // Fetch preferences
+  const { data: prefsData, isLoading: loading } = useApiQuery<PreferencesResponse>({
+    queryKey: ["user-preferences"],
+    url: "/api/user/preferences",
+  });
 
-  const fetchPreferences = async () => {
-    try {
-      const res = await fetch("/api/user/preferences");
-      if (res.ok) {
-        const json = await res.json();
-        const data = parseApiData<{ preferences?: { llmSpeedOverrides?: Record<string, ModelSpeed> } }>(json);
-        setUserOverrides(data.preferences?.llmSpeedOverrides || {});
-      }
-    } catch {
-      // Continue with empty overrides on failure
-    } finally {
-      setLoading(false);
+  // Sync fetched data to local state
+  useEffect(() => {
+    if (prefsData?.preferences?.llmSpeedOverrides) {
+      setUserOverrides(prefsData.preferences.llmSpeedOverrides);
     }
-  };
+  }, [prefsData]);
+
+  // Save mutation
+  const saveMutation = useApiMutation<void, { llmSpeedOverrides: Record<string, ModelSpeed> }>({
+    url: "/api/user/preferences",
+    method: "PUT",
+    invalidateKeys: [["user-preferences"]],
+    onSuccess: () => {
+      toast.success("Speed preferences saved");
+      setHasChanges(false);
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to save");
+    },
+  });
+
+  const saving = saveMutation.isPending;
 
   const handleSpeedChange = (feature: LLMFeature, speed: ModelSpeed) => {
     const systemDefault = LLM_SPEED_DEFAULTS[feature];
@@ -132,26 +140,8 @@ export default function LLMSpeedTab() {
     setHasChanges(true);
   };
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/user/preferences", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ llmSpeedOverrides: userOverrides }),
-      });
-
-      if (!res.ok) {
-        throw new Error("Failed to save preferences");
-      }
-
-      toast.success("Speed preferences saved");
-      setHasChanges(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to save");
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    saveMutation.mutate({ llmSpeedOverrides: userOverrides });
   };
 
   const handleReset = () => {

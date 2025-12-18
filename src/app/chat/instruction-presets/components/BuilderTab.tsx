@@ -5,6 +5,7 @@ import { Sparkles, Zap } from "lucide-react";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
+import { useApiMutation } from "@/hooks/use-api";
 import BuilderPreviewPanel, { PresetDraft } from "./BuilderPreviewPanel";
 
 // Resizable panel constraints
@@ -44,12 +45,18 @@ type BuilderTabProps = {
   onPresetSaved: () => void;
 };
 
+type SavePresetInput = {
+  name: string;
+  description: string;
+  content: string;
+  requestShare: boolean;
+};
+
 export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [draft, setDraft] = useState<PresetDraft>({ name: "", description: "", content: "" });
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [chatSystemPrompt, setChatSystemPrompt] = useState<string>("");
   const [builderSystemPrompt, setBuilderSystemPrompt] = useState<string>("");
@@ -88,6 +95,27 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
     };
     fetchPrompts();
   }, []);
+
+  // Save preset mutation
+  const savePresetMutation = useApiMutation<void, SavePresetInput>({
+    url: "/api/instruction-presets",
+    method: "POST",
+    invalidateKeys: [["instruction-presets"]],
+    onSuccess: () => {
+      // Success - reset and notify
+      setMessages([{
+        role: "assistant",
+        content: `Great! Your "${draft.name}" preset has been saved and submitted for approval. You can find it in the Presets tab.\n\nWould you like to create another assistant?`,
+      }]);
+      setDraft({ name: "", description: "", content: "" });
+      onPresetSaved();
+    },
+    onError: (err) => {
+      setError(err.message || "Failed to save preset");
+    },
+  });
+
+  const saving = savePresetMutation.isPending;
 
   const handleTemplateClick = (template: typeof STARTER_TEMPLATES[0]) => {
     setInput(template.prompt);
@@ -182,41 +210,16 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
     setError(null);
   };
 
-  const handleSavePreset = async () => {
+  const handleSavePreset = () => {
     if (!draft.name || !draft.content) return;
-
-    setSaving(true);
     setError(null);
 
-    try {
-      const res = await fetch("/api/instruction-presets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: draft.name,
-          description: draft.description,
-          content: draft.content,
-          requestShare: true,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || "Failed to save preset");
-      }
-
-      // Success - reset and notify
-      setMessages([{
-        role: "assistant",
-        content: `Great! Your "${draft.name}" preset has been saved and submitted for approval. You can find it in the Presets tab.\n\nWould you like to create another assistant?`,
-      }]);
-      setDraft({ name: "", description: "", content: "" });
-      onPresetSaved();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save preset");
-    } finally {
-      setSaving(false);
-    }
+    savePresetMutation.mutate({
+      name: draft.name,
+      description: draft.description,
+      content: draft.content,
+      requestShare: true,
+    });
   };
 
   // Starter template buttons

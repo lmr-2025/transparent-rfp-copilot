@@ -1,37 +1,29 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { UsageData } from "./types";
 import { FEATURE_LABELS } from "./constants";
 import { formatCost, formatTokens } from "./utils";
 import { InlineError } from "@/components/ui/status-display";
+import { useApiQuery } from "@/hooks/use-api";
 
 export default function UsageTab() {
-  const [usageData, setUsageData] = useState<UsageData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [days, setDays] = useState(30);
   const [scope, setScope] = useState<"user" | "all">("all");
 
-  const fetchUsageData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/usage?days=${days}&scope=${scope}`);
-      if (!res.ok) throw new Error("Failed to fetch usage data");
-      const result = await res.json();
-      // Handle both { data: {...} } and direct {...} formats
-      setUsageData(result.data || result);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, [days, scope]);
+  const {
+    data: usageData,
+    isLoading: loading,
+    error: queryError,
+    refetch: fetchUsageData,
+  } = useApiQuery<UsageData>({
+    queryKey: ["usage", days, scope],
+    url: "/api/usage",
+    params: { days, scope },
+    staleTime: 60 * 1000, // 1 minute
+  });
 
-  useEffect(() => {
-    fetchUsageData();
-  }, [fetchUsageData]);
+  const error = queryError?.message || null;
 
   const maxTokens = usageData?.byFeature?.reduce((max, f) => Math.max(max, f.totalTokens), 0) || 1;
   const maxDailyTokens = usageData?.daily?.reduce((max, d) => Math.max(max, d.tokens), 0) || 1;
@@ -41,7 +33,7 @@ export default function UsageTab() {
   }
 
   if (error) {
-    return <InlineError message={error} onDismiss={() => setError(null)} />;
+    return <InlineError message={error} />;
   }
 
   return (
@@ -66,7 +58,7 @@ export default function UsageTab() {
           <option value="user">My Usage Only</option>
         </select>
         <button
-          onClick={fetchUsageData}
+          onClick={() => fetchUsageData()}
           className="px-3 py-1.5 bg-blue-500 text-white rounded-md text-sm hover:bg-blue-600"
         >
           Refresh

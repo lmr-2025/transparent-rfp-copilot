@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Clock, AlertCircle } from "lucide-react";
+import { useState } from "react";
+import { Clock } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { InlineError } from "@/components/ui/status-display";
+import { useApiQuery } from "@/hooks/use-api";
 
 import {
   SearchFilterBar,
@@ -15,16 +16,14 @@ import {
   Pagination,
 } from "./components";
 
+type AuditLogResponse = {
+  entries: AuditLogEntry[];
+  pagination: Pagination;
+};
+
 export default function AuditLogPage() {
-  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
-  const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    limit: 50,
-    total: 0,
-    totalPages: 0,
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [limit] = useState(50);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -35,39 +34,28 @@ export default function AuditLogPage() {
   // Expanded entries
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-  const fetchAuditLog = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+  // Fetch audit log with useApiQuery
+  const {
+    data: auditData,
+    isLoading,
+    error: queryError,
+    refetch: fetchAuditLog,
+  } = useApiQuery<AuditLogResponse>({
+    queryKey: ["audit-log", page, limit, searchQuery, selectedEntityType, selectedAction],
+    url: "/api/audit-log",
+    params: {
+      page,
+      limit,
+      search: searchQuery || undefined,
+      entityType: selectedEntityType || undefined,
+      action: selectedAction || undefined,
+    },
+    staleTime: 30 * 1000, // 30 seconds
+  });
 
-    try {
-      const params = new URLSearchParams();
-      params.set("page", String(pagination.page));
-      params.set("limit", String(pagination.limit));
-
-      if (searchQuery) params.set("search", searchQuery);
-      if (selectedEntityType) params.set("entityType", selectedEntityType);
-      if (selectedAction) params.set("action", selectedAction);
-
-      const response = await fetch(`/api/audit-log?${params.toString()}`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch audit log");
-      }
-
-      const result = await response.json();
-      // Handle both { data: { entries, pagination } } and { entries, pagination } formats
-      const data = result.data || result;
-      setEntries(data.entries || []);
-      setPagination(data.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load audit log");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [pagination.page, pagination.limit, searchQuery, selectedEntityType, selectedAction]);
-
-  useEffect(() => {
-    fetchAuditLog();
-  }, [fetchAuditLog]);
+  const entries = auditData?.entries || [];
+  const pagination = auditData?.pagination || { page: 1, limit: 50, total: 0, totalPages: 0 };
+  const error = queryError?.message || null;
 
   const toggleExpanded = (id: string) => {
     setExpandedIds((prev) => {
@@ -85,26 +73,26 @@ export default function AuditLogPage() {
     setSearchQuery("");
     setSelectedEntityType("");
     setSelectedAction("");
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
   const handleEntityTypeChange = (value: AuditEntityType | "") => {
     setSelectedEntityType(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
   const handleActionChange = (value: AuditAction | "") => {
     setSelectedAction(value);
-    setPagination((prev) => ({ ...prev, page: 1 }));
+    setPage(1);
   };
 
-  const handlePageChange = (page: number) => {
-    setPagination((prev) => ({ ...prev, page }));
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
   };
 
   const hasActiveFilters = searchQuery || selectedEntityType || selectedAction;
@@ -147,7 +135,7 @@ export default function AuditLogPage() {
       {/* Error State */}
       {error && (
         <div style={{ marginBottom: "20px" }}>
-          <InlineError message={error} onDismiss={() => setError(null)} />
+          <InlineError message={error} />
         </div>
       )}
 

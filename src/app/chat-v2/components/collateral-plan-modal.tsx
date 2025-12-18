@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { X, FileText, Sparkles, CheckCircle, Loader2 } from "lucide-react";
+import { X, FileText, Sparkles, CheckCircle, Loader2, Presentation, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConversationalPanel, type Message } from "@/components/ui/conversational-panel";
 import { toast } from "sonner";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import type { CustomerProfile } from "@/types/customerProfile";
 import type { Skill } from "@/types/skill";
 import type { CustomerGTMData } from "@/types/gtmData";
@@ -25,6 +25,9 @@ type CollateralPlan = {
   collateral: CollateralItem[];
 };
 
+// Key-value data for slide filling
+type SlideData = Record<string, string>;
+
 // Template info from API
 type TemplateInfo = {
   id: string;
@@ -40,6 +43,7 @@ interface CollateralPlanModalProps {
   skills: Skill[];
   gtmData: CustomerGTMData | null;
   onApplyPlan?: (plan: CollateralPlan) => void;
+  onFillSlides?: (data: SlideData) => void;
 }
 
 export function CollateralPlanModal({
@@ -49,22 +53,22 @@ export function CollateralPlanModal({
   skills,
   gtmData,
   onApplyPlan,
+  onFillSlides,
 }: CollateralPlanModalProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const [approvedPlan, setApprovedPlan] = useState<CollateralPlan | null>(null);
+  const [slideData, setSlideData] = useState<SlideData | null>(null);
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
 
   // Fetch planning prompt and templates on mount
-  const { data: planningData, isLoading: isLoadingPrompt } = useQuery({
+  const { data: planningData, isLoading: isLoadingPrompt } = useApiQuery<{
+    systemPrompt: string;
+    templates: TemplateInfo[];
+  }>({
     queryKey: ["collateral-plan-setup"],
-    queryFn: async () => {
-      const res = await fetch("/api/collateral/plan");
-      if (!res.ok) throw new Error("Failed to fetch planning setup");
-      const data = await res.json();
-      return data.data;
-    },
+    url: "/api/collateral/plan",
     enabled: isOpen,
   });
 
@@ -119,64 +123,42 @@ export function CollateralPlanModal({
       setMessages([]);
       setInput("");
       setApprovedPlan(null);
+      setSlideData(null);
     }
   }, [isOpen]);
 
   // Send message mutation
-  const sendMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const res = await fetch("/api/collateral/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          conversationHistory: messages,
-          context: {
-            customer: customer
-              ? {
-                  id: customer.id,
-                  name: customer.name,
-                  industry: customer.industry || undefined,
-                  region: customer.region || undefined,
-                  tier: customer.tier || undefined,
-                  content: customer.content || undefined,
-                  considerations: customer.considerations || undefined,
-                }
-              : undefined,
-            skills: skills.slice(0, 15).map((s) => ({
-              id: s.id,
-              title: s.title,
-              contentPreview: s.content.slice(0, 200) + (s.content.length > 200 ? "..." : ""),
-            })),
-            gtm: gtmData
-              ? {
-                  gongCalls: gtmData.gongCalls.slice(0, 5).map((c) => ({
-                    id: c.id,
-                    title: c.title,
-                    date: c.date,
-                    summary: c.summary,
-                  })),
-                  hubspotActivities: gtmData.hubspotActivities.slice(0, 10).map((a) => ({
-                    id: a.id,
-                    type: a.type,
-                    date: a.date,
-                    subject: a.subject,
-                  })),
-                }
-              : undefined,
-            templates: templates,
-          },
-        }),
-      });
+  type SendMessageInput = {
+    message: string;
+    conversationHistory: Message[];
+    context: {
+      customer?: {
+        id: string;
+        name: string;
+        industry?: string;
+        region?: string;
+        tier?: string;
+        content?: string;
+        considerations?: string[];
+      };
+      skills: { id: string; title: string; contentPreview: string }[];
+      gtm?: {
+        gongCalls: { id: string; title: string; date: string; summary?: string }[];
+        hubspotActivities: { id: string; type: string; date: string; subject: string }[];
+      };
+      templates: TemplateInfo[];
+    };
+  };
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to send message");
-      }
+  type SendMessageResponse = {
+    response: string;
+    plan?: CollateralPlan;
+    slideData?: SlideData;
+  };
 
-      const data = await res.json();
-      return data.data;
-    },
+  const sendMutation = useApiMutation<SendMessageResponse, SendMessageInput>({
+    url: "/api/collateral/plan",
+    method: "POST",
     onSuccess: (data) => {
       // Add assistant response to messages
       setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
@@ -185,6 +167,12 @@ export function CollateralPlanModal({
       if (data.plan) {
         setApprovedPlan(data.plan);
         toast.success("Collateral plan created! You can now apply it.");
+      }
+
+      // Check if slide data was extracted
+      if (data.slideData && Object.keys(data.slideData).length > 0) {
+        setSlideData(data.slideData);
+        toast.success(`Extracted ${Object.keys(data.slideData).length} fields for slides!`);
       }
     },
     onError: (error) => {
@@ -198,16 +186,62 @@ export function CollateralPlanModal({
     // Add user message to conversation
     const userMessage: Message = { role: "user", content: input.trim() };
     setMessages((prev) => [...prev, userMessage]);
+    const messageToSend = input.trim();
     setInput("");
 
-    // Send to API
-    sendMutation.mutate(input.trim());
-  }, [input, sendMutation]);
+    // Build context and send to API
+    sendMutation.mutate({
+      message: messageToSend,
+      conversationHistory: messages,
+      context: {
+        customer: customer
+          ? {
+              id: customer.id,
+              name: customer.name,
+              industry: customer.industry || undefined,
+              region: customer.region || undefined,
+              tier: customer.tier || undefined,
+              content: customer.content || undefined,
+              considerations: customer.considerations || undefined,
+            }
+          : undefined,
+        skills: skills.slice(0, 15).map((s) => ({
+          id: s.id,
+          title: s.title,
+          contentPreview: s.content.slice(0, 200) + (s.content.length > 200 ? "..." : ""),
+        })),
+        gtm: gtmData
+          ? {
+              gongCalls: gtmData.gongCalls.slice(0, 5).map((c) => ({
+                id: c.id,
+                title: c.title,
+                date: c.date,
+                summary: c.summary,
+              })),
+              hubspotActivities: gtmData.hubspotActivities.slice(0, 10).map((a) => ({
+                id: a.id,
+                type: a.type,
+                date: a.date,
+                subject: a.subject,
+              })),
+            }
+          : undefined,
+        templates: templates,
+      },
+    });
+  }, [input, sendMutation, messages, customer, skills, gtmData, templates]);
 
   const handleApplyPlan = () => {
     if (approvedPlan && onApplyPlan) {
       onApplyPlan(approvedPlan);
       toast.success("Plan applied! Check the Output section.");
+      onClose();
+    }
+  };
+
+  const handleFillSlides = () => {
+    if (slideData && onFillSlides) {
+      onFillSlides(slideData);
       onClose();
     }
   };
@@ -320,6 +354,86 @@ export function CollateralPlanModal({
             />
           )}
         </div>
+
+        {/* Slide Data Preview */}
+        {slideData && Object.keys(slideData).length > 0 && (
+          <div
+            style={{
+              padding: "16px 20px",
+              borderTop: "1px solid #e2e8f0",
+              backgroundColor: "#eff6ff",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "12px" }}>
+              <Table2 size={20} color="#2563eb" />
+              <span style={{ fontWeight: 600, color: "#2563eb" }}>
+                Slide Data Ready ({Object.keys(slideData).length} fields)
+              </span>
+            </div>
+
+            <div
+              style={{
+                maxHeight: "150px",
+                overflowY: "auto",
+                backgroundColor: "#fff",
+                borderRadius: "8px",
+                border: "1px solid #e2e8f0",
+                marginBottom: "16px",
+              }}
+            >
+              <table style={{ width: "100%", fontSize: "13px", borderCollapse: "collapse" }}>
+                <tbody>
+                  {Object.entries(slideData).slice(0, 10).map(([key, value], idx) => (
+                    <tr
+                      key={key}
+                      style={{
+                        borderBottom: idx < Math.min(Object.keys(slideData).length, 10) - 1 ? "1px solid #f1f5f9" : "none",
+                      }}
+                    >
+                      <td
+                        style={{
+                          padding: "8px 12px",
+                          fontWeight: 500,
+                          color: "#475569",
+                          width: "35%",
+                          verticalAlign: "top",
+                        }}
+                      >
+                        {key}
+                      </td>
+                      <td
+                        style={{
+                          padding: "8px 12px",
+                          color: "#1e293b",
+                          wordBreak: "break-word",
+                        }}
+                      >
+                        {value.length > 100 ? `${value.slice(0, 100)}...` : value}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {Object.keys(slideData).length > 10 && (
+                <div style={{ padding: "8px 12px", color: "#64748b", fontSize: "12px", textAlign: "center" }}>
+                  ...and {Object.keys(slideData).length - 10} more fields
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+              <Button variant="outline" onClick={() => setSlideData(null)}>
+                Clear
+              </Button>
+              {onFillSlides && (
+                <Button onClick={handleFillSlides} style={{ backgroundColor: "#2563eb" }}>
+                  <Presentation size={16} style={{ marginRight: "6px" }} />
+                  Fill Google Slides
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Plan Preview / Actions */}
         {approvedPlan && (

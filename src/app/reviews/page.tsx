@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 interface ReviewItem {
   id: string;
@@ -245,102 +246,115 @@ function formatTimeAgo(dateString?: string) {
 export default function ReviewsPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "resolved" | "approved" | "corrected" | "all">("pending");
-  const [reviews, setReviews] = useState<ReviewItem[]>([]);
-  const [counts, setCounts] = useState<ReviewCounts>({ pending: 0, approved: 0, corrected: 0, flagged: 0, resolved: 0 });
-  const [loading, setLoading] = useState(true);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
 
-  const fetchReviews = useCallback(async () => {
-    setLoading(true);
-    try {
-      let url = "/api/reviews?limit=100";
-
-      if (activeTab === "pending") {
-        url += "&type=review&status=REQUESTED";
-      } else if (activeTab === "flagged") {
-        url += "&type=flagged";
-      } else if (activeTab === "resolved") {
-        url += "&type=resolved";
-      } else if (activeTab === "approved") {
-        url += "&type=review&status=APPROVED";
-      } else if (activeTab === "corrected") {
-        url += "&type=review&status=CORRECTED";
-      }
-      // "all" tab uses default (no type filter, fetches both)
-
-      const response = await fetch(url);
-      if (response.ok) {
-        const data = await response.json();
-        const reviewList = data.data?.reviews || [];
-        setReviews(reviewList);
-        setCounts(data.data?.counts || { pending: 0, approved: 0, corrected: 0, flagged: 0 });
-      }
-    } catch {
-      toast.error("Failed to load reviews");
-    } finally {
-      setLoading(false);
+  // Build query params based on active tab
+  const getQueryParams = () => {
+    const params: Record<string, string> = { limit: "100" };
+    if (activeTab === "pending") {
+      params.type = "review";
+      params.status = "REQUESTED";
+    } else if (activeTab === "flagged") {
+      params.type = "flagged";
+    } else if (activeTab === "resolved") {
+      params.type = "resolved";
+    } else if (activeTab === "approved") {
+      params.type = "review";
+      params.status = "APPROVED";
+    } else if (activeTab === "corrected") {
+      params.type = "review";
+      params.status = "CORRECTED";
     }
-  }, [activeTab]);
-
-  useEffect(() => {
-    fetchReviews();
-  }, [fetchReviews]);
-
-  const handleApprove = async (reviewId: string, projectId: string) => {
-    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
-
-    try {
-      const response = await fetch(`/api/projects/${projectId}/rows/${reviewId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reviewStatus: "APPROVED",
-          reviewedAt: new Date().toISOString(),
-          reviewedBy: reviewerName,
-        }),
-      });
-
-      if (response.ok) {
-        toast.success("Answer approved!");
-        fetchReviews();
-      } else {
-        toast.error("Failed to approve");
-      }
-    } catch {
-      toast.error("Failed to approve");
-    }
+    return params;
   };
 
-  const handleResolveFlag = async (review: ReviewItem) => {
-    try {
-      let url: string;
-      if (review.source === "project" && review.project) {
-        url = `/api/projects/${review.project.id}/rows/${review.id}`;
-      } else {
-        url = `/api/question-history/${review.id}`;
-      }
+  // Fetch reviews with useApiQuery
+  const {
+    data: reviewsData,
+    isLoading: loading,
+    refetch: fetchReviews,
+  } = useApiQuery<{ reviews: ReviewItem[]; counts: ReviewCounts }>({
+    queryKey: ["reviews", activeTab],
+    url: "/api/reviews",
+    params: getQueryParams(),
+    staleTime: 30 * 1000, // 30 seconds
+  });
 
-      const response = await fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          flagResolved: true,
-          flagResolutionNote: resolutionNote || null,
-        }),
-      });
+  const reviews = reviewsData?.reviews || [];
+  const counts = reviewsData?.counts || { pending: 0, approved: 0, corrected: 0, flagged: 0, resolved: 0 };
 
-      if (response.ok) {
-        toast.success("Flag resolved!");
-        setResolvingId(null);
-        setResolutionNote("");
-        fetchReviews();
-      } else {
-        toast.error("Failed to resolve flag");
-      }
-    } catch {
+  // Approve mutation
+  type ApproveInput = {
+    reviewId: string;
+    projectId: string;
+    data: {
+      reviewStatus: string;
+      reviewedAt: string;
+      reviewedBy: string;
+    };
+  };
+
+  const approveMutation = useApiMutation<void, ApproveInput>({
+    url: (vars) => `/api/projects/${vars.projectId}/rows/${vars.reviewId}`,
+    method: "PATCH",
+    invalidateKeys: [["reviews"]],
+    onSuccess: () => {
+      toast.success("Answer approved!");
+    },
+    onError: () => {
+      toast.error("Failed to approve");
+    },
+  });
+
+  const handleApprove = (reviewId: string, projectId: string) => {
+    const reviewerName = session?.user?.name || session?.user?.email || "Unknown User";
+    approveMutation.mutate({
+      reviewId,
+      projectId,
+      data: {
+        reviewStatus: "APPROVED",
+        reviewedAt: new Date().toISOString(),
+        reviewedBy: reviewerName,
+      },
+    });
+  };
+
+  // Resolve flag mutation - handles both project rows and question history
+  type ResolveFlagInput = {
+    url: string;
+    data: {
+      flagResolved: boolean;
+      flagResolutionNote: string | null;
+    };
+  };
+
+  const resolveFlagMutation = useApiMutation<void, ResolveFlagInput>({
+    url: (vars) => vars.url,
+    method: "PATCH",
+    invalidateKeys: [["reviews"]],
+    onSuccess: () => {
+      toast.success("Flag resolved!");
+      setResolvingId(null);
+      setResolutionNote("");
+    },
+    onError: () => {
       toast.error("Failed to resolve flag");
-    }
+    },
+  });
+
+  const handleResolveFlag = (review: ReviewItem) => {
+    const url = review.source === "project" && review.project
+      ? `/api/projects/${review.project.id}/rows/${review.id}`
+      : `/api/question-history/${review.id}`;
+
+    resolveFlagMutation.mutate({
+      url,
+      data: {
+        flagResolved: true,
+        flagResolutionNote: resolutionNote || null,
+      },
+    });
   };
 
   return (

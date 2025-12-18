@@ -1,27 +1,53 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Plus, Trash2, Edit2, FileText, Eye, Copy, Check, Upload, Loader2 } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
+import { Plus, Trash2, Edit2, FileText, Eye, Copy, Check, Upload, Loader2, Sparkles, User } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
-import type { TemplateResponse, CreateTemplateInput } from "@/types/template";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import type { TemplateResponse, CreateTemplateInput, PlaceholderMapping } from "@/types/template";
 import { TEMPLATE_CATEGORIES, OUTPUT_FORMATS } from "@/types/template";
-import { extractPlaceholderHints } from "@/lib/templateEngine";
+import { PlaceholderMappingEditor } from "./components/PlaceholderMappingEditor";
+import { parseApiData } from "@/lib/apiClient";
 
-type TemplateListItem = Omit<TemplateResponse, "content" | "placeholderHint">;
+type InstructionPreset = {
+  id: string;
+  name: string;
+  description?: string;
+  isShared: boolean;
+  shareStatus: string;
+};
+
+type TemplateListItem = Omit<TemplateResponse, "content" | "placeholderHint" | "placeholderMappings">;
 
 export default function TemplatesPage() {
-  const [templates, setTemplates] = useState<TemplateListItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TemplateResponse | null>(null);
   const [viewingTemplate, setViewingTemplate] = useState<TemplateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [instructionPresets, setInstructionPresets] = useState<InstructionPreset[]>([]);
+
+  // Fetch instruction presets
+  useEffect(() => {
+    const loadPresets = async () => {
+      try {
+        const res = await fetch("/api/instruction-presets");
+        if (res.ok) {
+          const json = await res.json();
+          const data = parseApiData<{ presets: InstructionPreset[] }>(json);
+          setInstructionPresets(data.presets || []);
+        }
+      } catch {
+        // Silent failure - presets are optional
+      }
+    };
+    loadPresets();
+  }, []);
 
   // Form state
   const [formData, setFormData] = useState<CreateTemplateInput>({
@@ -31,28 +57,25 @@ export default function TemplatesPage() {
     category: "",
     outputFormat: "markdown",
     placeholderHint: "",
+    placeholderMappings: [],
+    instructionPresetId: "",
     isActive: true,
     sortOrder: 0,
   });
 
-  // Load templates
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
+  // Fetch templates list
+  const {
+    data: templates = [],
+    isLoading,
+    refetch: refetchTemplates,
+  } = useApiQuery<TemplateListItem[]>({
+    queryKey: ["admin-templates"],
+    url: "/api/templates",
+    params: { activeOnly: false },
+    transform: (data) => (Array.isArray(data) ? data : []),
+  });
 
-  const fetchTemplates = async () => {
-    try {
-      const res = await fetch("/api/templates?activeOnly=false");
-      if (!res.ok) throw new Error("Failed to fetch templates");
-      const data = await res.json();
-      setTemplates(data.data || []);
-    } catch (err) {
-      toast.error("Failed to load templates");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+  // Fetch single template for editing/viewing
   const fetchTemplate = async (id: string): Promise<TemplateResponse | null> => {
     try {
       const res = await fetch(`/api/templates/${id}`);
@@ -73,13 +96,66 @@ export default function TemplatesPage() {
       category: "",
       outputFormat: "markdown",
       placeholderHint: "",
+      placeholderMappings: [],
+      instructionPresetId: "",
       isActive: true,
       sortOrder: 0,
     });
     setError(null);
   };
 
-  const handleCreate = async () => {
+  // Create template mutation
+  const createMutation = useApiMutation<TemplateResponse, CreateTemplateInput>({
+    url: "/api/templates",
+    method: "POST",
+    invalidateKeys: [["admin-templates"]],
+    onSuccess: () => {
+      toast.success("Template created");
+      resetForm();
+      setShowForm(false);
+    },
+    onError: (err) => {
+      const message = err.message || "Failed to create template";
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  // Update template mutation
+  const updateMutation = useApiMutation<TemplateResponse, { id: string; data: CreateTemplateInput }>({
+    url: (vars) => `/api/templates/${vars.id}`,
+    method: "PATCH",
+    invalidateKeys: [["admin-templates"]],
+    onSuccess: () => {
+      toast.success("Template updated");
+      resetForm();
+      setEditingTemplate(null);
+    },
+    onError: (err) => {
+      const message = err.message || "Failed to update template";
+      setError(message);
+      toast.error(message);
+    },
+  });
+
+  // Delete template mutation
+  const deleteMutation = useApiMutation<void, string>({
+    url: (id) => `/api/templates/${id}`,
+    method: "DELETE",
+    invalidateKeys: [["admin-templates"]],
+    onSuccess: () => {
+      toast.success("Template deleted");
+      setDeletingId(null);
+    },
+    onError: () => {
+      toast.error("Failed to delete template");
+      setDeletingId(null);
+    },
+  });
+
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  const handleCreate = () => {
     setError(null);
 
     if (!formData.name.trim()) {
@@ -91,33 +167,10 @@ export default function TemplatesPage() {
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const res = await fetch("/api/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to create template");
-      }
-
-      toast.success("Template created");
-      resetForm();
-      setShowForm(false);
-      fetchTemplates();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to create template";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setIsSaving(false);
-    }
+    createMutation.mutate(formData);
   };
 
-  const handleUpdate = async () => {
+  const handleUpdate = () => {
     if (!editingTemplate) return;
     setError(null);
 
@@ -130,47 +183,13 @@ export default function TemplatesPage() {
       return;
     }
 
-    setIsSaving(true);
-    try {
-      const res = await fetch(`/api/templates/${editingTemplate.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to update template");
-      }
-
-      toast.success("Template updated");
-      resetForm();
-      setEditingTemplate(null);
-      fetchTemplates();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update template";
-      setError(message);
-      toast.error(message);
-    } finally {
-      setIsSaving(false);
-    }
+    updateMutation.mutate({ id: editingTemplate.id, data: formData });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm("Are you sure you want to delete this template?")) return;
-
     setDeletingId(id);
-    try {
-      const res = await fetch(`/api/templates/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete template");
-
-      toast.success("Template deleted");
-      fetchTemplates();
-    } catch (err) {
-      toast.error("Failed to delete template");
-    } finally {
-      setDeletingId(null);
-    }
+    deleteMutation.mutate(id);
   };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -237,6 +256,8 @@ export default function TemplatesPage() {
         category: full.category || "",
         outputFormat: full.outputFormat as "markdown" | "docx" | "pdf",
         placeholderHint: full.placeholderHint || "",
+        placeholderMappings: (full.placeholderMappings as PlaceholderMapping[]) || [],
+        instructionPresetId: full.instructionPresetId || "",
         isActive: full.isActive,
         sortOrder: full.sortOrder,
       });
@@ -250,7 +271,7 @@ export default function TemplatesPage() {
     }
   };
 
-  const placeholderHints = formData.content ? extractPlaceholderHints(formData.content) : {};
+  // Note: placeholderHints replaced by PlaceholderMappingEditor component
 
   return (
     <div style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
@@ -267,6 +288,25 @@ export default function TemplatesPage() {
       {/* Add Template Buttons */}
       {!showForm && !editingTemplate && (
         <div style={{ display: "flex", gap: "12px", marginBottom: "24px" }}>
+          <Link href="/admin/templates/build">
+            <button
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 16px",
+                backgroundColor: "#6366f1",
+                color: "#fff",
+                border: "none",
+                borderRadius: "6px",
+                cursor: "pointer",
+                fontWeight: 600,
+              }}
+            >
+              <Sparkles size={18} />
+              Build Template
+            </button>
+          </Link>
           <button
             onClick={() => setShowForm(true)}
             style={{
@@ -274,16 +314,16 @@ export default function TemplatesPage() {
               alignItems: "center",
               gap: "8px",
               padding: "10px 16px",
-              backgroundColor: "#6366f1",
-              color: "#fff",
-              border: "none",
+              backgroundColor: "#fff",
+              color: "#475569",
+              border: "1px solid #cbd5e1",
               borderRadius: "6px",
               cursor: "pointer",
-              fontWeight: 600,
+              fontWeight: 500,
             }}
           >
             <Plus size={18} />
-            Add Template
+            Manual Template
           </button>
           <input
             ref={fileInputRef}
@@ -436,40 +476,44 @@ export default function TemplatesPage() {
             />
           </div>
 
-          {/* Placeholder hints */}
-          {Object.keys(placeholderHints).length > 0 && (
-            <div
+          {/* Placeholder Mapping Editor */}
+          <div style={{ marginBottom: "16px" }}>
+            <PlaceholderMappingEditor
+              content={formData.content}
+              mappings={formData.placeholderMappings || []}
+              onChange={(mappings) => setFormData({ ...formData, placeholderMappings: mappings })}
+            />
+          </div>
+
+          {/* Linked Instruction Preset */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", fontWeight: 500 }}>
+              <User size={16} />
+              Linked Assistant Persona
+            </label>
+            <p style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
+              Auto-selects this persona in Collateral Builder when this template is chosen
+            </p>
+            <select
+              value={formData.instructionPresetId || ""}
+              onChange={(e) => setFormData({ ...formData, instructionPresetId: e.target.value || undefined })}
               style={{
-                marginBottom: "16px",
-                padding: "12px",
-                backgroundColor: "#fff",
+                width: "100%",
+                padding: "10px 12px",
+                border: "1px solid #cbd5e1",
                 borderRadius: "6px",
-                border: "1px solid #e2e8f0",
+                fontSize: "0.95rem",
+                backgroundColor: "#fff",
               }}
             >
-              <p style={{ fontWeight: 500, marginBottom: "8px", fontSize: "0.85rem" }}>
-                Detected Placeholders:
-              </p>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-                {Object.entries(placeholderHints).map(([placeholder, hint]) => (
-                  <span
-                    key={placeholder}
-                    title={hint}
-                    style={{
-                      padding: "4px 8px",
-                      backgroundColor: placeholder.includes("llm") ? "#fef3c7" : "#e0f2fe",
-                      color: placeholder.includes("llm") ? "#92400e" : "#0369a1",
-                      borderRadius: "4px",
-                      fontSize: "0.8rem",
-                      fontFamily: "monospace",
-                    }}
-                  >
-                    {placeholder}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+              <option value="">No linked persona</option>
+              {instructionPresets.filter(p => p.shareStatus === "APPROVED" || !p.isShared).map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.name} {preset.isShared ? "(Org)" : "(Personal)"}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div>

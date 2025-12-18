@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   BookOpen,
   FileText,
@@ -12,16 +12,14 @@ import {
   Phone,
   FileCheck,
   Database,
-  FileDown,
   Link2,
   Loader2,
   StickyNote,
   Mail,
   Calendar,
   BarChart3,
-  MessageSquare,
-  Sparkles,
 } from "lucide-react";
+import { useApiQuery } from "@/hooks/use-api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -31,13 +29,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSelectionStore } from "@/stores/selection-store";
-import { KnowledgeSourceList } from "@/app/chat/components/knowledge-source-list";
-import { TemplateSelector } from "./template-selector";
-import { CollateralPlanModal } from "./collateral-plan-modal";
+import { KnowledgeSourceList } from "@/components/chat/knowledge-source-list";
 import type { Skill } from "@/types/skill";
 import type { ReferenceUrl } from "@/types/referenceUrl";
 import type { CustomerProfile } from "@/types/customerProfile";
-import type { TemplateFillContext } from "@/types/template";
 import type { CustomerGTMData, FetchGTMDataResponse } from "@/types/gtmData";
 
 const SIDEBAR_COLLAPSED_KEY = "chat-v2-sidebar-collapsed";
@@ -161,33 +156,14 @@ export function CollapsibleKnowledgeSidebar({
   }, [skills, skillSelections]);
 
   // Fetch customer documents when customer is selected
-  const [customerDocuments, setCustomerDocuments] = useState<CustomerDocument[]>([]);
-  const [docsLoading, setDocsLoading] = useState(false);
-
-  const fetchCustomerDocuments = useCallback(async (customerId: string) => {
-    setDocsLoading(true);
-    try {
-      const res = await fetch(`/api/customers/${customerId}/documents`);
-      if (res.ok) {
-        const data = await res.json();
-        setCustomerDocuments(data.data?.documents || []);
-      } else {
-        setCustomerDocuments([]);
-      }
-    } catch {
-      setCustomerDocuments([]);
-    } finally {
-      setDocsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedCustomer?.id) {
-      fetchCustomerDocuments(selectedCustomer.id);
-    } else {
-      setCustomerDocuments([]);
-    }
-  }, [selectedCustomer?.id, fetchCustomerDocuments]);
+  const { data: customerDocuments = [], isLoading: docsLoading } = useApiQuery<CustomerDocument[]>({
+    queryKey: ["customer-documents", selectedCustomer?.id],
+    url: `/api/customers/${selectedCustomer?.id}/documents`,
+    responseKey: "documents",
+    transform: (data) => (Array.isArray(data) ? data : []),
+    enabled: !!selectedCustomer?.id,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Group documents by docType
   const groupedDocs = useMemo(() => {
@@ -212,91 +188,29 @@ export function CollapsibleKnowledgeSidebar({
   }, [customerDocuments]);
 
   // Fetch GTM data from Snowflake when customer has salesforceId
-  const [gtmData, setGtmData] = useState<CustomerGTMData | null>(null);
-  const [gtmLoading, setGtmLoading] = useState(false);
-  const [gtmError, setGtmError] = useState<string | null>(null);
-  const [showCollateralModal, setShowCollateralModal] = useState(false);
+  const {
+    data: gtmData,
+    isLoading: gtmLoading,
+    error: gtmQueryError,
+  } = useApiQuery<CustomerGTMData>({
+    queryKey: ["gtm-data", selectedCustomer?.salesforceId],
+    url: "/api/snowflake/customer-data",
+    params: {
+      salesforceAccountId: selectedCustomer?.salesforceId,
+      gongCallLimit: 5,
+      hubspotActivityLimit: 10,
+    },
+    enabled: !!selectedCustomer?.salesforceId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: false,
+  });
 
-  const fetchGTMData = useCallback(async (salesforceId: string) => {
-    setGtmLoading(true);
-    setGtmError(null);
-    try {
-      const res = await fetch(`/api/snowflake/customer-data?salesforceAccountId=${encodeURIComponent(salesforceId)}&gongCallLimit=5&hubspotActivityLimit=10`);
-      if (res.status === 503) {
-        // Snowflake not configured - not an error, just unavailable
-        setGtmData(null);
-        setGtmError("Snowflake not configured");
-      } else if (res.ok) {
-        const data: FetchGTMDataResponse = await res.json();
-        setGtmData(data.data);
-      } else {
-        setGtmData(null);
-        setGtmError("Failed to load GTM data");
-      }
-    } catch {
-      setGtmData(null);
-      setGtmError("Failed to load GTM data");
-    } finally {
-      setGtmLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (selectedCustomer?.salesforceId) {
-      fetchGTMData(selectedCustomer.salesforceId);
-    } else {
-      setGtmData(null);
-      setGtmError(null);
-    }
-  }, [selectedCustomer?.salesforceId, fetchGTMData]);
-
-  // Build template context from selected items
-  const templateContext: TemplateFillContext = useMemo(() => {
-    const selectedSkillIds = Array.from(skillSelections.entries())
-      .filter(([, selected]) => selected)
-      .map(([id]) => id);
-
-    const selectedSkills = skills
-      .filter((s) => selectedSkillIds.includes(s.id))
-      .map((s) => ({ id: s.id, title: s.title, content: s.content }));
-
-    return {
-      customer: selectedCustomer
-        ? {
-            id: selectedCustomer.id,
-            name: selectedCustomer.name,
-            industry: selectedCustomer.industry || undefined,
-            region: selectedCustomer.region || undefined,
-            tier: selectedCustomer.tier || undefined,
-            content: selectedCustomer.content || undefined,
-            considerations: selectedCustomer.considerations || undefined,
-          }
-        : undefined,
-      skills: selectedSkills.length > 0 ? selectedSkills : undefined,
-      gtm: gtmData
-        ? {
-            gongCalls: gtmData.gongCalls.map((c) => ({
-              id: c.id,
-              title: c.title,
-              date: c.date,
-              summary: c.summary,
-              participants: c.participants,
-            })),
-            hubspotActivities: gtmData.hubspotActivities.map((a) => ({
-              id: a.id,
-              type: a.type,
-              date: a.date,
-              subject: a.subject,
-              content: a.content,
-            })),
-            lookerMetrics: gtmData.lookerMetrics.map((m) => ({
-              period: m.period,
-              metrics: m.metrics,
-            })),
-          }
-        : undefined,
-    };
-  }, [selectedCustomer, skills, skillSelections, gtmData]);
+  // Derive error message from query error
+  const gtmError = gtmQueryError
+    ? gtmQueryError.message.includes("503") || gtmQueryError.message.includes("not configured")
+      ? "Snowflake not configured"
+      : "Failed to load GTM data"
+    : null;
 
   if (isLoading) {
     return (
@@ -360,23 +274,7 @@ export function CollapsibleKnowledgeSidebar({
             <TooltipContent side="left">Customer Info & Docs</TooltipContent>
           </Tooltip>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                onClick={() => {
-                  setIsCollapsed(false);
-                  setExpandedSections((prev) => ({ ...prev, output: true }));
-                }}
-              >
-                <FileDown className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="left">Output / Templates</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+          </TooltipProvider>
       </div>
     );
   }
@@ -748,57 +646,7 @@ export function CollapsibleKnowledgeSidebar({
           )}
         </Card>
 
-        {/* Section 3: Output / Templates */}
-        <Card>
-          <CardHeader className="py-2 px-3">
-            <button
-              onClick={() => toggleSection("output")}
-              className="w-full flex items-center justify-between"
-            >
-              <CardTitle className="text-sm flex items-center gap-2">
-                <FileDown className="h-4 w-4" />
-                Output / Templates
-              </CardTitle>
-              {expandedSections.output ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-          </CardHeader>
-          {expandedSections.output && (
-            <CardContent className="py-2 px-3 space-y-3">
-              {/* Plan Collateral Button */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-start gap-2"
-                onClick={() => setShowCollateralModal(true)}
-              >
-                <Sparkles className="h-4 w-4 text-primary" />
-                Plan Collateral
-              </Button>
-
-              <div className="border-t border-border pt-3">
-                <TemplateSelector context={templateContext} />
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      </div>
-
-      {/* Collateral Planning Modal */}
-      <CollateralPlanModal
-        isOpen={showCollateralModal}
-        onClose={() => setShowCollateralModal(false)}
-        customer={selectedCustomer}
-        skills={skills}
-        gtmData={gtmData}
-        onApplyPlan={(plan) => {
-          // For now, just log the plan - could be used to auto-fill templates
-          console.log("Collateral plan applied:", plan);
-        }}
-      />
+        </div>
     </div>
   );
 }

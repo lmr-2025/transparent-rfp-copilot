@@ -156,38 +156,55 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const params = await context.params;
     const { id } = params;
 
-    // Check if profile is linked to any projects
-    const linkedProjects = await prisma.projectCustomerProfile.count({
-      where: { profileId: id },
+    // Use transaction to prevent race condition between check and delete
+    const result = await prisma.$transaction(async (tx) => {
+      // Check if profile is linked to any projects
+      const linkedProjects = await tx.projectCustomerProfile.count({
+        where: { profileId: id },
+      });
+
+      if (linkedProjects > 0) {
+        throw new Error(`LINKED:${linkedProjects}`);
+      }
+
+      // Get profile before deleting for audit log
+      const profile = await tx.customerProfile.findUnique({ where: { id } });
+
+      if (!profile) {
+        throw new Error("NOT_FOUND");
+      }
+
+      await tx.customerProfile.delete({
+        where: { id },
+      });
+
+      return profile;
     });
 
-    if (linkedProjects > 0) {
-      return errors.badRequest(
-        `Cannot delete profile: it is linked to ${linkedProjects} project(s). Remove the associations first.`
-      );
-    }
-
-    // Get profile before deleting for audit log
-    const profile = await prisma.customerProfile.findUnique({ where: { id } });
-
-    await prisma.customerProfile.delete({
-      where: { id },
-    });
-
-    // Audit log
-    if (profile) {
-      await logCustomerChange(
-        "DELETED",
-        id,
-        profile.name,
-        getUserFromSession(auth.session),
-        undefined,
-        { deletedProfile: { name: profile.name, industry: profile.industry } }
-      );
-    }
+    // Audit log (outside transaction - non-critical)
+    await logCustomerChange(
+      "DELETED",
+      id,
+      result.name,
+      getUserFromSession(auth.session),
+      undefined,
+      { deletedProfile: { name: result.name, industry: result.industry } }
+    );
 
     return apiSuccess({ message: "Customer profile deleted successfully" });
   } catch (error) {
+    // Handle specific error cases
+    if (error instanceof Error) {
+      if (error.message.startsWith("LINKED:")) {
+        const count = error.message.split(":")[1];
+        return errors.badRequest(
+          `Cannot delete profile: it is linked to ${count} project(s). Remove the associations first.`
+        );
+      }
+      if (error.message === "NOT_FOUND") {
+        return errors.notFound("Customer profile");
+      }
+    }
     logger.error("Failed to delete customer profile", error, { route: "/api/customers/[id]" });
     return errors.internal("Failed to delete customer profile");
   }

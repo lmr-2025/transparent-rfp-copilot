@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useConfirm } from "@/components/ConfirmModal";
-import { parseApiData } from "@/lib/apiClient";
 import { InlineError } from "@/components/ui/status-display";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import {
   PresetCard,
   EditPresetModal,
@@ -13,9 +13,27 @@ import {
   InstructionPreset,
 } from "./index";
 
+// Types for mutations
+type UpdatePresetInput = {
+  id: string;
+  data: {
+    action?: "approve" | "reject";
+    rejectionReason?: string;
+    isDefault?: boolean;
+    name?: string;
+    description?: string;
+    content?: string;
+  };
+};
+
+type CreatePresetInput = {
+  name: string;
+  description: string;
+  content: string;
+  requestShare: boolean;
+};
+
 export default function PresetsTab() {
-  const [presets, setPresets] = useState<InstructionPreset[]>([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -41,146 +59,116 @@ export default function PresetsTab() {
   const [newDescription, setNewDescription] = useState("");
   const [newContent, setNewContent] = useState("");
 
-  useEffect(() => {
-    loadPresets();
-  }, []);
+  // Fetch presets
+  const {
+    data: presets = [],
+    isLoading: loading,
+    error: queryError,
+  } = useApiQuery<InstructionPreset[]>({
+    queryKey: ["instruction-presets"],
+    url: "/api/instruction-presets",
+    params: { pending: true },
+    responseKey: "presets",
+    transform: (data) => (Array.isArray(data) ? data : []),
+  });
 
-  const loadPresets = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch("/api/instruction-presets?pending=true");
-      if (!res.ok) throw new Error("Failed to load presets");
-      const json = await res.json();
-      const data = parseApiData<{ presets: InstructionPreset[] }>(json);
-      setPresets(data.presets || []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load presets");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleApprove = async (id: string) => {
-    setActionInProgress(id);
-    try {
-      const res = await fetch(`/api/instruction-presets/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "approve" }),
-      });
-      if (!res.ok) throw new Error("Failed to approve");
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to approve");
-    } finally {
-      setActionInProgress(null);
-    }
-  };
-
-  const handleReject = async (id: string) => {
-    setActionInProgress(id);
-    try {
-      const res = await fetch(`/api/instruction-presets/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reject", rejectionReason }),
-      });
-      if (!res.ok) throw new Error("Failed to reject");
+  // Update preset mutation
+  const updateMutation = useApiMutation<void, UpdatePresetInput>({
+    url: (vars) => `/api/instruction-presets/${vars.id}`,
+    method: "PUT",
+    invalidateKeys: [["instruction-presets"]],
+    onSuccess: () => {
       setRejectingId(null);
       setRejectionReason("");
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to reject");
-    } finally {
+      setEditingPreset(null);
+    },
+    onError: (err) => {
+      setError(err.message || "Failed to update");
+    },
+    onSettled: () => {
       setActionInProgress(null);
-    }
+    },
+  });
+
+  // Create preset mutation
+  const createMutation = useApiMutation<void, CreatePresetInput>({
+    url: "/api/instruction-presets",
+    method: "POST",
+    invalidateKeys: [["instruction-presets"]],
+    onSuccess: () => {
+      setShowCreate(false);
+      setNewName("");
+      setNewDescription("");
+      setNewContent("");
+    },
+    onError: (err) => {
+      setError(err.message || "Failed to create");
+    },
+    onSettled: () => {
+      setActionInProgress(null);
+    },
+  });
+
+  // Delete preset mutation
+  const deleteMutation = useApiMutation<void, string>({
+    url: (id) => `/api/instruction-presets/${id}`,
+    method: "DELETE",
+    invalidateKeys: [["instruction-presets"]],
+    onError: (err) => {
+      setError(err.message || "Failed to delete");
+    },
+    onSettled: () => {
+      setActionInProgress(null);
+    },
+  });
+
+  const handleApprove = (id: string) => {
+    setActionInProgress(id);
+    updateMutation.mutate({ id, data: { action: "approve" } });
   };
 
-  const handleSetDefault = async (id: string, isDefault: boolean) => {
+  const handleReject = (id: string) => {
     setActionInProgress(id);
-    try {
-      const res = await fetch(`/api/instruction-presets/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isDefault }),
-      });
-      if (!res.ok) throw new Error("Failed to update default");
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update");
-    } finally {
-      setActionInProgress(null);
-    }
+    updateMutation.mutate({ id, data: { action: "reject", rejectionReason } });
+  };
+
+  const handleSetDefault = (id: string, isDefault: boolean) => {
+    setActionInProgress(id);
+    updateMutation.mutate({ id, data: { isDefault } });
   };
 
   const handleDelete = async (id: string) => {
     const confirmed = await confirmDelete();
     if (!confirmed) return;
     setActionInProgress(id);
-    try {
-      const res = await fetch(`/api/instruction-presets/${id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Failed to delete");
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to delete");
-    } finally {
-      setActionInProgress(null);
-    }
+    deleteMutation.mutate(id);
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editingPreset) return;
     setActionInProgress(editingPreset.id);
-    try {
-      const res = await fetch(`/api/instruction-presets/${editingPreset.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: editName,
-          description: editDescription,
-          content: editContent,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save");
-      setEditingPreset(null);
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to save");
-    } finally {
-      setActionInProgress(null);
-    }
+    updateMutation.mutate({
+      id: editingPreset.id,
+      data: {
+        name: editName,
+        description: editDescription,
+        content: editContent,
+      },
+    });
   };
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!newName.trim() || !newContent.trim()) {
       setError("Name and content are required");
       return;
     }
     setActionInProgress("create");
-    try {
-      const res = await fetch("/api/instruction-presets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: newName,
-          description: newDescription,
-          content: newContent,
-          requestShare: true,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to create");
-      setShowCreate(false);
-      setNewName("");
-      setNewDescription("");
-      setNewContent("");
-      await loadPresets();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to create");
-    } finally {
-      setActionInProgress(null);
-    }
+    createMutation.mutate({
+      name: newName,
+      description: newDescription,
+      content: newContent,
+      requestShare: true,
+    });
   };
 
   const openEdit = (preset: InstructionPreset) => {
@@ -220,9 +208,12 @@ export default function PresetsTab() {
         </button>
       </div>
 
-      {error && (
+      {(error || queryError) && (
         <div style={{ marginBottom: "16px" }}>
-          <InlineError message={error} onDismiss={() => setError(null)} />
+          <InlineError
+            message={error || queryError?.message || "An error occurred"}
+            onDismiss={error ? () => setError(null) : undefined}
+          />
         </div>
       )}
 

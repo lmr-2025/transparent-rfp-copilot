@@ -22,14 +22,25 @@ export async function GET(request: NextRequest, context: RouteContext) {
     const params = await context.params;
     const { id: customerId } = params;
 
-    // Verify customer exists
+    // Verify customer exists and user has access
     const customer = await prisma.customerProfile.findUnique({
       where: { id: customerId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, ownerId: true },
     });
 
     if (!customer) {
       return errors.notFound("Customer profile");
+    }
+
+    // Access control: User must be owner OR have MANAGE_KNOWLEDGE/VIEW_ORG_DATA/ADMIN capability
+    const userCapabilities = auth.session.user.capabilities || [];
+    const isOwner = customer.ownerId === auth.session.user.id;
+    const hasOrgAccess = userCapabilities.some((cap: string) =>
+      ["ADMIN", "VIEW_ORG_DATA", "MANAGE_KNOWLEDGE"].includes(cap)
+    );
+
+    if (!isOwner && !hasOrgAccess) {
+      return errors.forbidden("You do not have access to this customer's documents");
     }
 
     const documents = await prisma.customerDocument.findMany({
@@ -67,14 +78,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const params = await context.params;
     const { id: customerId } = params;
 
-    // Verify customer exists
+    // Verify customer exists and user has access
     const customer = await prisma.customerProfile.findUnique({
       where: { id: customerId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, ownerId: true },
     });
 
     if (!customer) {
       return errors.notFound("Customer profile");
+    }
+
+    // Access control: User must be owner OR have MANAGE_KNOWLEDGE/ADMIN capability to upload
+    const userCapabilities = auth.session.user.capabilities || [];
+    const isOwner = customer.ownerId === auth.session.user.id;
+    const hasWriteAccess = userCapabilities.some((cap: string) =>
+      ["ADMIN", "MANAGE_KNOWLEDGE"].includes(cap)
+    );
+
+    if (!isOwner && !hasWriteAccess) {
+      return errors.forbidden("You do not have permission to upload documents to this customer");
     }
 
     const formData = await request.formData();

@@ -14,6 +14,7 @@ const updateTemplateSchema = z.object({
   category: z.string().max(100).optional().nullable(),
   outputFormat: z.enum(["markdown", "docx", "pdf"]).optional(),
   placeholderHint: z.string().max(2000).optional().nullable(),
+  instructionPresetId: z.string().uuid().optional().nullable(),
   isActive: z.boolean().optional(),
   sortOrder: z.number().int().optional(),
 });
