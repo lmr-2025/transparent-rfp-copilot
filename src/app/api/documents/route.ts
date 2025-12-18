@@ -186,7 +186,25 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Sanitize extracted text to remove problematic characters
+function sanitizeExtractedText(text: string): string {
+  return text
+    // Remove null bytes and other control characters (except newline, tab, carriage return)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    // Normalize multiple spaces to single space
+    .replace(/[^\S\n]+/g, " ")
+    // Normalize multiple newlines to max 2
+    .replace(/\n{3,}/g, "\n\n")
+    // Trim each line
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
+}
+
 async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
+  let rawText: string;
+
   switch (fileType) {
     case "pdf": {
       // Dynamic import for pdf-parse (v2 API)
@@ -198,7 +216,8 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
         if (!textResult.text || textResult.text.trim().length === 0) {
           throw new Error("PDF appears to be image-based or contains no extractable text");
         }
-        return textResult.text;
+        rawText = textResult.text;
+        break;
       } catch (pdfError) {
         const msg = pdfError instanceof Error ? pdfError.message : "Unknown PDF parsing error";
         // Provide more helpful error messages for common issues
@@ -217,20 +236,23 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
     }
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      rawText = result.value;
+      break;
     }
     case "doc": {
       // mammoth doesn't support old .doc format well
       // Try it anyway, but it may not work for all files
       try {
         const result = await mammoth.extractRawText({ buffer });
-        return result.value;
+        rawText = result.value;
+        break;
       } catch {
         throw new Error("Old .doc format not fully supported. Please convert to .docx");
       }
     }
     case "txt": {
-      return buffer.toString("utf-8");
+      rawText = buffer.toString("utf-8");
+      break;
     }
     case "pptx": {
       const { writeFile, unlink } = await import("fs/promises");
@@ -246,9 +268,10 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
       try {
         const parser = new PptxParser(tempPath);
         const slides = await parser.extractText();
-        return slides.map((slide: { id: string; text: string[] }) =>
+        rawText = slides.map((slide: { id: string; text: string[] }) =>
           `--- Slide ${slide.id} ---\n${slide.text.join("\n")}`
         ).join("\n\n");
+        break;
       } finally {
         // Clean up temp file
         await unlink(tempPath).catch(() => {});
@@ -257,6 +280,9 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
     default:
       throw new Error(`Unsupported file type: ${fileType}`);
   }
+
+  // Sanitize the extracted text to remove problematic characters
+  return sanitizeExtractedText(rawText);
 }
 
 // Generate a markdown template from document content using LLM
