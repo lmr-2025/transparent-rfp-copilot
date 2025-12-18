@@ -186,6 +186,59 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Extract text from PDF using Claude's native document support
+async function extractPdfWithClaude(buffer: Buffer): Promise<string> {
+  const anthropic = getAnthropicClient();
+
+  const base64Data = buffer.toString("base64");
+
+  const response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 16000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: base64Data,
+            },
+          },
+          {
+            type: "text",
+            text: `Extract ALL text content from this PDF document.
+
+IMPORTANT RULES:
+1. Extract the complete text content, preserving the document structure
+2. Include headers, paragraphs, bullet points, tables, and any other text
+3. Preserve the logical reading order
+4. For tables, format them clearly with columns separated by | characters
+5. Do NOT summarize or interpret - extract the actual text verbatim
+6. Do NOT add any commentary or explanations
+7. If there are multiple pages, extract all pages
+
+Return ONLY the extracted text content, nothing else.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const textContent = response.content[0];
+  if (textContent.type !== "text") {
+    throw new Error("Unexpected response format from Claude");
+  }
+
+  if (!textContent.text || textContent.text.trim().length === 0) {
+    throw new Error("PDF appears to be image-based or contains no extractable text");
+  }
+
+  return textContent.text;
+}
+
 // Sanitize extracted text to remove problematic characters
 function sanitizeExtractedText(text: string): string {
   return text
@@ -207,32 +260,9 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
 
   switch (fileType) {
     case "pdf": {
-      // Dynamic import for pdf-parse (v2 API)
-      const { PDFParse } = await import("pdf-parse");
-      let parser: InstanceType<typeof PDFParse> | null = null;
-      try {
-        parser = new PDFParse({ data: buffer });
-        const textResult = await parser.getText();
-        if (!textResult.text || textResult.text.trim().length === 0) {
-          throw new Error("PDF appears to be image-based or contains no extractable text");
-        }
-        rawText = textResult.text;
-        break;
-      } catch (pdfError) {
-        const msg = pdfError instanceof Error ? pdfError.message : "Unknown PDF parsing error";
-        // Provide more helpful error messages for common issues
-        if (msg.includes("password") || msg.includes("encrypted")) {
-          throw new Error("PDF is password-protected. Please provide an unencrypted version.");
-        }
-        if (msg.includes("Invalid PDF") || msg.includes("not a PDF")) {
-          throw new Error("File does not appear to be a valid PDF.");
-        }
-        throw new Error(`PDF parsing failed: ${msg}`);
-      } finally {
-        if (parser) {
-          await parser.destroy().catch(() => {});
-        }
-      }
+      // Use Claude's native PDF support for reliable extraction
+      rawText = await extractPdfWithClaude(buffer);
+      break;
     }
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });
