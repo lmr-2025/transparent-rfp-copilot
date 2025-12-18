@@ -45,6 +45,7 @@ type ChatResponse = {
     documentContext: string;
     urlContext: string;
     gtmContext?: string; // GTM data from Snowflake (Gong, HubSpot, Looker)
+    nativePdfDocuments?: string[]; // PDFs sent directly to Claude (not as extracted text)
     model: string;
     maxTokens: number;
     temperature: number;
@@ -95,13 +96,18 @@ export async function POST(request: NextRequest) {
     const anthropic = getAnthropicClient();
 
     // Fetch documents content from database if any are selected
-    let documents: { id: string; title: string; filename: string; content: string }[] = [];
+    // Include fileData for PDFs to enable native Claude document support
+    let documents: { id: string; title: string; filename: string; content: string; fileType: string; fileData: Uint8Array | null }[] = [];
     if (documentIds.length > 0) {
       documents = await prisma.knowledgeDocument.findMany({
         where: { id: { in: documentIds } },
-        select: { id: true, title: true, filename: true, content: true },
+        select: { id: true, title: true, filename: true, content: true, fileType: true, fileData: true },
       });
     }
+
+    // Separate PDFs with native file data from text-only documents
+    const pdfDocuments = documents.filter(d => d.fileType === "pdf" && d.fileData);
+    const textDocuments = documents.filter(d => d.fileType !== "pdf" || !d.fileData);
 
     // Build knowledge base context from skills
     const knowledgeContext = skills.length > 0
@@ -110,9 +116,9 @@ export async function POST(request: NextRequest) {
         ).join("\n\n---\n\n")
       : "";
 
-    // Build document context
-    const documentContext = documents.length > 0
-      ? documents.map((doc, idx) =>
+    // Build document context for text-only documents (PDFs with fileData are sent natively)
+    const documentContext = textDocuments.length > 0
+      ? textDocuments.map((doc, idx) =>
           `=== DOCUMENT ${idx + 1}: ${doc.title} ===\nFilename: ${doc.filename}\n\n${doc.content}`
         ).join("\n\n---\n\n")
       : "";
@@ -278,17 +284,56 @@ ${profileContent}${considerationsText}${customerDocsText}`;
     const systemPrompt = contextParts.join("\n\n");
 
     // Build messages array with conversation history
-    const messages: { role: "user" | "assistant"; content: string }[] = [
+    // For PDFs with fileData, include them as native document content in the user message
+    type MessageContent = string | Array<
+      | { type: "text"; text: string }
+      | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; title?: string }
+    >;
+
+    const messages: { role: "user" | "assistant"; content: MessageContent }[] = [
       ...conversationHistory,
-      { role: "user", content: message },
     ];
+
+    // Build the final user message with optional PDF documents
+    if (pdfDocuments.length > 0) {
+      // Include PDFs as native document content
+      const userContent: Array<
+        | { type: "text"; text: string }
+        | { type: "document"; source: { type: "base64"; media_type: "application/pdf"; data: string }; title?: string }
+      > = [];
+
+      // Add PDF documents first
+      for (const doc of pdfDocuments) {
+        if (doc.fileData) {
+          // Convert Uint8Array to base64
+          const base64Data = Buffer.from(doc.fileData).toString("base64");
+          userContent.push({
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: base64Data,
+            },
+            title: doc.title,
+          });
+        }
+      }
+
+      // Add the user's message text
+      userContent.push({ type: "text", text: message });
+
+      messages.push({ role: "user", content: userContent });
+    } else {
+      // No PDFs, just send the text message
+      messages.push({ role: "user", content: message });
+    }
 
     const response = await anthropic.messages.create({
       model,
       max_tokens: 4000,
       temperature: 0.3,
       system: systemPrompt,
-      messages,
+      messages: messages as Parameters<typeof anthropic.messages.create>[0]["messages"],
     });
 
     const content = response.content[0];
@@ -364,6 +409,7 @@ ${profileContent}${considerationsText}${customerDocsText}`;
         documentContext,
         urlContext,
         gtmContext: gtmContext || undefined,
+        nativePdfDocuments: pdfDocuments.length > 0 ? pdfDocuments.map(d => d.title) : undefined,
         model,
         maxTokens: 4000,
         temperature: 0.3,

@@ -257,6 +257,7 @@ model KnowledgeDocument {
   filename        String
   fileType        String   // pdf, doc, docx, txt
   content         String   @db.Text // Extracted text content
+  fileData        Bytes?   // Original file data for native document support (PDFs sent directly to Claude)
   fileSize        Int      // bytes
   categories      String[] // Uses same categories as Skills
   uploadedAt      DateTime @default(now())

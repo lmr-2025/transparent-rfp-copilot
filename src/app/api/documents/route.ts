@@ -139,12 +139,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database with owner info
+    // Store original file data for PDFs to enable native Claude document support
     const document = await prisma.knowledgeDocument.create({
       data: {
         title: title.trim(),
         filename: file.name,
         fileType,
         content,
+        fileData: fileType === "pdf" ? buffer : null, // Store original PDF for native Claude support
         fileSize: file.size,
         categories,
         description: description?.trim() || null,
