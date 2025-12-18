@@ -28,7 +28,7 @@ All subtasks are tracked in Linear under the Security team.
 | **1.2 IAM Roles** | [SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046) | ✅ Complete |
 | **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | 🔴 Not Started |
 | **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
-| **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
+| **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | ✅ Complete |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
 | **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
 | **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
@@ -205,13 +205,111 @@ See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete
 - [ ] Document all security group rules
 
 #### 2.3 Application Load Balancer (SEC-1052)
-- [ ] Create ALB in public subnets
-- [ ] Configure target groups
-- [ ] Set up HTTPS listener (port 443)
-- [ ] Request/import SSL certificate (ACM)
-- [ ] Configure health checks
-- [ ] Enable access logs to S3
-- [ ] Set up WAF rules (optional)
+- [x] Create ALB in public subnets
+- [x] Configure target groups
+- [x] Set up HTTPS listener (port 443)
+- [x] Request/import SSL certificate (ACM)
+- [x] Configure health checks
+- [x] Enable access logs to S3
+- [x] Set up CloudWatch alarms
+
+**Implementation Details**:
+- **Location**: `infrastructure/alb/`
+- **Terraform Modules**:
+  - `main.tf` - ALB, target group, listeners, health checks, CloudWatch alarms
+  - `variables.tf` - Configuration variables for ALB, SSL, health checks
+  - `outputs.tf` - ALB DNS, target group ARN, listener ARNs
+  - `README.md` - Complete documentation with troubleshooting guide
+
+**Components Created**:
+1. **Application Load Balancer**
+   - Internet-facing in public subnets
+   - Multi-AZ deployment (us-east-1a/b/c)
+   - HTTP/2 enabled
+   - Cross-zone load balancing enabled
+
+2. **Target Group**
+   - Target type: IP (for Fargate/ECS awsvpc mode)
+   - Port: 3000 (application port)
+   - Protocol: HTTP (ALB terminates HTTPS)
+   - Health check: GET /api/health every 30s
+   - Deregistration delay: 30s
+
+3. **HTTPS Listener** (port 443)
+   - SSL/TLS termination at ALB
+   - SSL policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+   - Requires ACM certificate ARN
+   - Forwards to target group
+
+4. **HTTP Listener** (port 80)
+   - Redirects to HTTPS (301 permanent redirect)
+   - Ensures all traffic is encrypted
+
+5. **Health Checks**
+   - Path: /api/health
+   - Interval: 30 seconds
+   - Timeout: 5 seconds
+   - Healthy threshold: 2 successes
+   - Unhealthy threshold: 3 failures
+   - Matcher: HTTP 200
+
+6. **CloudWatch Alarms**
+   - Unhealthy targets (> 0)
+   - High 5xx errors (> 10 in 2 minutes)
+   - High latency (> 2 seconds average)
+
+**Key Features**:
+- Multi-AZ high availability
+- HTTPS with modern TLS policy (TLS 1.3/1.2)
+- HTTP to HTTPS redirect
+- Configurable health checks
+- Optional access logs to S3
+- CloudWatch monitoring and alarms
+- Session stickiness (optional)
+- Deletion protection (production)
+
+**Outputs Available**:
+- `alb_dns_name` - For Route 53 A record alias
+- `alb_zone_id` - For Route 53 alias target
+- `target_group_arn` - For ECS service load balancer configuration
+- `https_listener_arn` - For listener rule modifications
+
+**Usage**:
+```bash
+cd infrastructure/alb
+terraform init
+VPC_ID=$(cd ../vpc && terraform output -raw vpc_id)
+PUBLIC_SUBNETS=$(cd ../vpc && terraform output -json public_subnet_ids)
+ALB_SG=$(cd ../security-groups && terraform output -raw alb_security_group_id)
+CERT_ARN="arn:aws:acm:us-east-1:ACCOUNT:certificate/..."
+
+terraform plan \
+  -var="vpc_id=$VPC_ID" \
+  -var="public_subnet_ids=$PUBLIC_SUBNETS" \
+  -var="alb_security_group_id=$ALB_SG" \
+  -var="certificate_arn=$CERT_ARN"
+
+terraform apply -var="vpc_id=$VPC_ID" ...
+```
+
+**SSL Certificate Setup**:
+```bash
+# Request ACM certificate
+aws acm request-certificate \
+  --domain-name yourdomain.com \
+  --validation-method DNS \
+  --subject-alternative-names "*.yourdomain.com" \
+  --region us-east-1
+
+# Validate via DNS (add CNAME records to Route 53)
+```
+
+**Cost Estimate**: ~$20-25/month (ALB + LCU usage)
+
+**Route 53 Integration**:
+After deployment, create an A record alias in Route 53 pointing to the ALB DNS name.
+
+See [infrastructure/alb/README.md](../infrastructure/alb/README.md) for complete documentation.
 
 ### Phase 3: Data Layer
 
