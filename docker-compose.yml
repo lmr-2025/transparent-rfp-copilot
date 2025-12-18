@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   postgres:
+    platform: linux/amd64
     image: postgres:16-alpine
     container_name: grc-minion-db
     restart: unless-stopped
