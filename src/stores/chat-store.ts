@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+export type FeedbackRating = "THUMBS_UP" | "THUMBS_DOWN" | null;
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant";
@@ -18,6 +20,13 @@ export type ChatMessage = {
   reasoning?: string;
   inference?: string;
   remarks?: string;
+  // Feedback data
+  feedback?: {
+    rating: FeedbackRating;
+    comment?: string;
+    flaggedForReview?: boolean;
+    flagNote?: string;
+  };
 };
 
 type SidebarTab = "instructions" | "knowledge" | "customers";
@@ -41,6 +50,7 @@ interface ChatState {
   // Actions
   setMessages: (messages: ChatMessage[]) => void;
   addMessage: (message: ChatMessage) => void;
+  updateMessageFeedback: (messageId: string, feedback: ChatMessage["feedback"]) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
   setCurrentSessionId: (id: string | null) => void;
@@ -68,6 +78,12 @@ export const useChatStore = create<ChatState>((set) => ({
   setMessages: (messages) => set({ messages }),
   addMessage: (message) =>
     set((state) => ({ messages: [...state.messages, message] })),
+  updateMessageFeedback: (messageId, feedback) =>
+    set((state) => ({
+      messages: state.messages.map((msg) =>
+        msg.id === messageId ? { ...msg, feedback } : msg
+      ),
+    })),
   setIsLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
   setCurrentSessionId: (currentSessionId) => set({ currentSessionId }),

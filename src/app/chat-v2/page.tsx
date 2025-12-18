@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { History, Plus, Eye } from "lucide-react";
+import { History, Plus, Eye, MessageSquareOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
@@ -19,12 +19,12 @@ import {
   ChatSessionItem,
 } from "@/hooks/use-chat-data";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
-import { ChatInput } from "@/app/chat/components/chat-input";
-import { MessageList } from "@/app/chat/components/message-list";
-import { ChatHistoryPanel } from "@/app/chat/components/chat-history-panel";
-import { TransparencyModal, TransparencyData } from "@/app/chat/components/transparency-modal";
-import { AssistantPersonaSelector, InstructionPreset } from "./components/assistant-persona-selector";
-import { CustomerFocusBar } from "./components/customer-focus-bar";
+import { ChatInput } from "@/components/chat/chat-input";
+import { MessageList } from "@/components/chat/message-list";
+import { ChatHistoryPanel } from "@/components/chat/chat-history-panel";
+import { TransparencyModal, TransparencyData } from "@/components/chat/transparency-modal";
+import { ChatFeedbackModal } from "@/components/chat/chat-feedback-modal";
+import { ContextControlsBar, InstructionPreset } from "./components/context-controls-bar";
 import { CollapsibleKnowledgeSidebar } from "./components/collapsible-knowledge-sidebar";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
@@ -42,6 +42,7 @@ export default function ChatV2Page() {
   // Local state for modals
   const [showHistory, setShowHistory] = useState(false);
   const [showTransparency, setShowTransparency] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
   const [lastTransparency, setLastTransparency] = useState<TransparencyData | null>(null);
   // Quick mode for faster LLM responses (Haiku vs Sonnet)
@@ -413,134 +414,149 @@ ${keyFactsText}`;
   const focusedCustomer = customers.find((c) => c.id === focusedCustomerId) || null;
 
   return (
-    <div ref={containerRef} className="flex flex-col h-[calc(100vh-0px)] bg-background">
-      {/* Top: Assistant Persona Selector */}
-      <AssistantPersonaSelector
-        selectedPresetId={selectedPresetId}
-        onPresetChange={handlePresetChange}
-        userInstructions={userInstructions}
-        onUserInstructionsChange={setUserInstructions}
-      />
+    <div ref={containerRef} className="flex h-screen overflow-hidden bg-background">
+      {/* Left - Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        {/* Page Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-semibold">Knowledge Chat</h1>
+          </div>
+          <a
+            href="/collateral"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            Need to build slides or collateral? →
+          </a>
+        </div>
 
-      {/* Second row: Customer Focus Bar */}
-      <CustomerFocusBar
-        customers={customers}
-        selectedCustomerId={focusedCustomerId}
-        onCustomerSelect={handleCustomerFocusChange}
-        isLoading={customersLoading}
-      />
-
-      {/* Main content area */}
-      <div className="flex flex-1 min-h-0">
-        {/* Main chat area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          {/* Header */}
-          <div className="relative flex items-center justify-between px-4 py-3 border-b border-border">
-            <h1 className="text-lg font-semibold">Chat V2</h1>
-            <div className="flex gap-2">
-              {/* Transparency info bar */}
-              {lastTransparency && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setTransparencyData(lastTransparency);
-                    setShowTransparency(true);
-                  }}
-                  className="gap-2 text-green-600 border-green-200 bg-green-50 hover:bg-green-100"
-                >
-                  <Eye className="h-4 w-4" />
-                  View Last Prompt
-                </Button>
-              )}
-              {session?.user && (
-                <Button
-                  variant={showHistory ? "secondary" : "outline"}
-                  size="sm"
-                  onClick={() => setShowHistory(!showHistory)}
-                  className="gap-2"
-                >
-                  <History className="h-4 w-4" />
-                  History ({chatSessions.length})
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={handleNewChat} className="gap-2">
-                <Plus className="h-4 w-4" />
-                New Chat
+        {/* Controls Row */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviewPrompt}
+              className="gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              System Prompt
+            </Button>
+            {lastTransparency && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTransparencyData(lastTransparency);
+                  setShowTransparency(true);
+                }}
+                className="gap-2 text-green-600 border-green-200 bg-green-50 hover:bg-green-100"
+              >
+                <Eye className="h-4 w-4" />
+                View Last Prompt
               </Button>
-            </div>
-
-            {/* Chat History Panel */}
-            {showHistory && session?.user && (
-              <ChatHistoryPanel
-                sessions={chatSessions}
-                currentSessionId={currentSessionId}
-                isLoading={sessionsLoading}
-                onLoadSession={handleLoadSession}
-                onDeleteSession={handleDeleteSession}
-                onClose={() => setShowHistory(false)}
-              />
             )}
           </div>
+          <div className="flex items-center gap-2">
+            {session?.user && (
+              <Button
+                variant={showHistory ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setShowHistory(!showHistory)}
+                className="gap-2"
+              >
+                <History className="h-4 w-4" />
+                History ({chatSessions.length})
+              </Button>
+            )}
+            {messages.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFeedback(true)}
+                className="gap-2"
+              >
+                <MessageSquareOff className="h-4 w-4" />
+                End Chat
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={handleNewChat} className="gap-2">
+              <Plus className="h-4 w-4" />
+              New Chat
+            </Button>
+          </div>
+        </div>
 
-          {/* Messages */}
+        {/* Combined Persona + Customer Controls */}
+        <ContextControlsBar
+          selectedPresetId={selectedPresetId}
+          onPresetChange={handlePresetChange}
+          userInstructions={userInstructions}
+          onUserInstructionsChange={setUserInstructions}
+          customers={customers}
+          selectedCustomerId={focusedCustomerId}
+          onCustomerSelect={handleCustomerFocusChange}
+          customersLoading={customersLoading}
+        />
+
+        {/* Messages */}
+        <div className="relative flex-1 min-h-0">
           <MessageList
             messages={messages}
             onViewTransparency={handleViewTransparency}
           />
 
-          {/* Input */}
-          <div className="border-t border-border">
-            {/* Preview prompt button */}
-            {totalSelected > 0 && (
-              <div className="px-4 pt-3 flex justify-end">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePreviewPrompt}
-                  className="text-xs"
-                >
-                  Preview System Prompt
-                </Button>
-              </div>
-            )}
-            <ChatInput
-              value={inputValue}
-              onChange={setInputValue}
-              onSend={handleSend}
-              isLoading={isLoading}
-              placeholder={
-                totalSelected === 0
-                  ? "Select at least one knowledge item to start chatting..."
-                  : "Type your message..."
-              }
-              quickMode={quickMode}
-              onQuickModeChange={setQuickMode}
+          {/* Chat History Panel */}
+          {showHistory && session?.user && (
+            <ChatHistoryPanel
+              sessions={chatSessions}
+              currentSessionId={currentSessionId}
+              isLoading={sessionsLoading}
+              onLoadSession={handleLoadSession}
+              onDeleteSession={handleDeleteSession}
+              onClose={() => setShowHistory(false)}
             />
-          </div>
+          )}
         </div>
 
-        {/* Resizable Divider */}
-        <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
-
-        {/* Knowledge sidebar */}
-        <div
-          style={{
-            width: `${sidebarWidth}px`,
-            minWidth: `${sidebarMinWidth}px`,
-            maxWidth: `${sidebarMaxWidth}px`,
-          }}
-          className="flex-shrink-0"
-        >
-          <CollapsibleKnowledgeSidebar
-            skills={skills}
-            documents={documents}
-            urls={urls}
-            customers={customers}
-            selectedCustomer={focusedCustomer}
-            isLoading={isDataLoading}
+        {/* Input */}
+        <div className="border-t border-border">
+          <ChatInput
+            value={inputValue}
+            onChange={setInputValue}
+            onSend={handleSend}
+            isLoading={isLoading}
+            placeholder={
+              totalSelected === 0
+                ? "Select at least one knowledge item to start chatting..."
+                : "Type your message..."
+            }
+            quickMode={quickMode}
+            onQuickModeChange={setQuickMode}
           />
         </div>
+      </div>
+
+      {/* Resizable Divider */}
+      <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+
+      {/* Right - Context Sidebar (full height) */}
+      <div
+        style={{
+          width: `${sidebarWidth}px`,
+          minWidth: `${sidebarMinWidth}px`,
+          maxWidth: `${sidebarMaxWidth}px`,
+        }}
+        className="flex-shrink-0 flex flex-col h-full"
+      >
+        <CollapsibleKnowledgeSidebar
+          skills={skills}
+          documents={documents}
+          urls={urls}
+          customers={customers}
+          selectedCustomer={focusedCustomer}
+          isLoading={isDataLoading}
+        />
       </div>
 
       {/* Transparency Modal */}
@@ -552,6 +568,18 @@ ${keyFactsText}`;
           isPreview={!lastTransparency}
         />
       )}
+
+      {/* Chat Feedback Modal */}
+      <ChatFeedbackModal
+        isOpen={showFeedback}
+        sessionId={currentSessionId}
+        messageCount={messages.length}
+        onClose={() => setShowFeedback(false)}
+        onSubmitAndNewChat={() => {
+          setShowFeedback(false);
+          handleNewChat();
+        }}
+      />
     </div>
   );
 }
