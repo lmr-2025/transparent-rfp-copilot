@@ -58,7 +58,6 @@ const navItems: NavSection[] = [
     items: [
       { href: "/chat-v2", label: "Chat", hint: "AI-powered conversations" },
       { href: "/collateral", label: "Collateral Builder", hint: "Build slide decks & more" },
-      { href: "/chat/instruction-presets", label: "Instructions", hint: "Manage personas", adminOnly: true },
     ],
   },
   {
@@ -73,8 +72,8 @@ const navItems: NavSection[] = [
     section: "Backstage",
     adminOnly: true,
     items: [
+      { href: "/admin/content-manager", label: "Content Manager", hint: "Personas, templates & feedback" },
       { href: "/admin/prompt-blocks", label: "Prompt Builder", hint: "Configure AI prompts" },
-      { href: "/admin/templates", label: "Templates", hint: "Collateral templates" },
       { href: "/accuracy", label: "AI Accuracy", hint: "Track performance" },
       { href: "/admin/settings", label: "Settings", hint: "App configuration" },
     ],
