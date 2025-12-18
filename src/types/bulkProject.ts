@@ -71,7 +71,10 @@ export type BulkProject = {
   ownerId?: string;
   ownerName?: string;
   owner?: { id: string; name: string | null; email: string | null };
-  customerName?: string;
+  customerName?: string; // Legacy text-only field
+  // Primary customer (1-to-1 relationship)
+  customerId?: string;
+  customer?: ProjectCustomerProfileRef;
   status: "draft" | "in_progress" | "needs_review" | "finalized";
   notes?: string;
   // Review workflow fields
@@ -79,6 +82,6 @@ export type BulkProject = {
   reviewRequestedBy?: string;
   reviewedAt?: string;
   reviewedBy?: string;
-  // Linked customer profiles
+  // Linked customer profiles (legacy many-to-many)
   customerProfiles?: ProjectCustomerProfileRef[];
 };

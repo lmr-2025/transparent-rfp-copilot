@@ -21,6 +21,7 @@ type SourceInputCardProps = {
   uploadedDocs: UploadedDocument[];
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveDocument: (index: number) => void;
+  onToggleProcessContent: (index: number) => void;
   onAnalyze: () => void;
   onViewPrompt: () => void;
   // Salesforce props
@@ -44,6 +45,7 @@ export default function SourceInputCard({
   uploadedDocs,
   onFileUpload,
   onRemoveDocument,
+  onToggleProcessContent,
   onAnalyze,
   onViewPrompt,
   salesforceConfigured,
@@ -147,6 +149,21 @@ export default function SourceInputCard({
         {/* Show uploaded documents */}
         {uploadedDocs.length > 0 && (
           <div style={{ marginTop: "12px" }}>
+            <div style={{
+              fontSize: "13px",
+              color: "#64748b",
+              marginBottom: "8px",
+              padding: "8px 12px",
+              backgroundColor: "#f8fafc",
+              borderRadius: "6px",
+              border: "1px solid #e2e8f0",
+            }}>
+              <strong>Select which files to process for profile content:</strong>
+              <div style={{ fontSize: "12px", marginTop: "4px", color: "#94a3b8" }}>
+                ✓ Checked files will be analyzed and added to the profile content<br/>
+                ✗ Unchecked files will only be stored as reference documents
+              </div>
+            </div>
             {uploadedDocs.map((doc, idx) => (
               <div
                 key={idx}
@@ -160,12 +177,31 @@ export default function SourceInputCard({
                   marginBottom: "6px",
                 }}
               >
-                <span style={{ fontSize: "14px", color: "#475569" }}>
-                  📄 {doc.name}{" "}
-                  <span style={{ color: "#94a3b8", fontSize: "12px" }}>
-                    ({Math.round(doc.size / 1024)} KB)
+                <label style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  flex: 1,
+                  cursor: "pointer",
+                }}>
+                  <input
+                    type="checkbox"
+                    checked={doc.processForContent}
+                    onChange={() => onToggleProcessContent(idx)}
+                    disabled={isAnalyzing || isBuilding}
+                    style={{
+                      width: "16px",
+                      height: "16px",
+                      cursor: "pointer",
+                    }}
+                  />
+                  <span style={{ fontSize: "14px", color: "#475569", flex: 1 }}>
+                    📄 {doc.name}{" "}
+                    <span style={{ color: "#94a3b8", fontSize: "12px" }}>
+                      ({Math.round(doc.size / 1024)} KB)
+                    </span>
                   </span>
-                </span>
+                </label>
                 <button
                   style={{
                     background: "none",

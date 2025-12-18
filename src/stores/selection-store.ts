@@ -14,6 +14,7 @@ interface SelectionState {
   documentSelections: Map<string, boolean>;
   urlSelections: Map<string, boolean>;
   customerSelections: Map<string, boolean>;
+  customerDocumentSelections: Map<string, boolean>; // For customer-specific documents
 
   // GTM Data selections (per customer)
   gtmDataSelections: Map<string, GTMDataSelection>; // key: salesforceAccountId
@@ -23,11 +24,13 @@ interface SelectionState {
   toggleDocument: (id: string) => void;
   toggleUrl: (id: string) => void;
   toggleCustomer: (id: string) => void;
+  toggleCustomerDocument: (id: string) => void;
 
   setSkillSelected: (id: string, selected: boolean) => void;
   setDocumentSelected: (id: string, selected: boolean) => void;
   setUrlSelected: (id: string, selected: boolean) => void;
   setCustomerSelected: (id: string, selected: boolean) => void;
+  setCustomerDocumentSelected: (id: string, selected: boolean) => void;
 
   // GTM Data actions
   setGtmDataSelection: (salesforceAccountId: string, selection: GTMDataSelection) => void;
@@ -51,12 +54,15 @@ interface SelectionState {
   selectNoUrls: () => void;
   selectAllCustomers: (ids: string[]) => void;
   selectNoCustomers: () => void;
+  selectAllCustomerDocuments: (ids: string[]) => void;
+  selectNoCustomerDocuments: () => void;
 
   // Getters
   getSelectedSkillIds: () => string[];
   getSelectedDocumentIds: () => string[];
   getSelectedUrlIds: () => string[];
   getSelectedCustomerIds: () => string[];
+  getSelectedCustomerDocumentIds: () => string[];
   getGtmDataSelection: (salesforceAccountId: string) => GTMDataSelection | undefined;
 }
 
@@ -65,6 +71,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   documentSelections: new Map(),
   urlSelections: new Map(),
   customerSelections: new Map(),
+  customerDocumentSelections: new Map(),
   gtmDataSelections: new Map(),
 
   toggleSkill: (id) =>
@@ -95,6 +102,13 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       return { customerSelections: newMap };
     }),
 
+  toggleCustomerDocument: (id) =>
+    set((state) => {
+      const newMap = new Map(state.customerDocumentSelections);
+      newMap.set(id, !newMap.get(id));
+      return { customerDocumentSelections: newMap };
+    }),
+
   setSkillSelected: (id, selected) =>
     set((state) => {
       const newMap = new Map(state.skillSelections);
@@ -121,6 +135,13 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       const newMap = new Map(state.customerSelections);
       newMap.set(id, selected);
       return { customerSelections: newMap };
+    }),
+
+  setCustomerDocumentSelected: (id, selected) =>
+    set((state) => {
+      const newMap = new Map(state.customerDocumentSelections);
+      newMap.set(id, selected);
+      return { customerDocumentSelections: newMap };
     }),
 
   initializeSelections: (skillIds, documentIds, urlIds, customerIds) =>
@@ -178,6 +199,18 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     set((state) => ({
       customerSelections: new Map(
         Array.from(state.customerSelections.keys()).map((id) => [id, false])
+      ),
+    })),
+
+  selectAllCustomerDocuments: (ids) =>
+    set(() => ({
+      customerDocumentSelections: new Map(ids.map((id) => [id, true])),
+    })),
+
+  selectNoCustomerDocuments: () =>
+    set((state) => ({
+      customerDocumentSelections: new Map(
+        Array.from(state.customerDocumentSelections.keys()).map((id) => [id, false])
       ),
     })),
 
@@ -262,6 +295,13 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   getSelectedCustomerIds: () => {
     const { customerSelections } = get();
     return Array.from(customerSelections.entries())
+      .filter(([, selected]) => selected)
+      .map(([id]) => id);
+  },
+
+  getSelectedCustomerDocumentIds: () => {
+    const { customerDocumentSelections } = get();
+    return Array.from(customerDocumentSelections.entries())
       .filter(([, selected]) => selected)
       .map(([id]) => id);
   },

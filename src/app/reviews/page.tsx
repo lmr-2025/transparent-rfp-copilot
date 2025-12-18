@@ -9,8 +9,10 @@ import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 interface ReviewItem {
   id: string;
   rowNumber: number | null;
-  question: string;
-  response: string;
+  question?: string;
+  response?: string;
+  title?: string;
+  content?: string;
   confidence?: string;
   reviewStatus: string;
   // Review workflow fields
@@ -30,13 +32,18 @@ interface ReviewItem {
   flagResolvedBy?: string;
   flagResolutionNote?: string;
   // Source info
-  source: "project" | "questions";
+  source: "project" | "questions" | "collateral" | "chat";
   project: {
     id: string;
     name: string;
     customerName?: string;
   } | null;
   userEmail?: string;
+  // Collateral-specific
+  templateName?: string;
+  customerName?: string;
+  owner?: { name: string; email: string };
+  customer?: { name: string };
 }
 
 interface ReviewCounts {
@@ -246,10 +253,11 @@ function formatTimeAgo(dateString?: string) {
 export default function ReviewsPage() {
   const { data: session } = useSession();
   const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "resolved" | "approved" | "corrected" | "all">("pending");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "projects" | "questions" | "collateral">("all");
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
 
-  // Build query params based on active tab
+  // Build query params based on active tab and source filter
   const getQueryParams = () => {
     const params: Record<string, string> = { limit: "100" };
     if (activeTab === "pending") {
@@ -266,6 +274,10 @@ export default function ReviewsPage() {
       params.type = "review";
       params.status = "CORRECTED";
     }
+    // Add source filter
+    if (sourceFilter !== "all") {
+      params.source = sourceFilter;
+    }
     return params;
   };
 
@@ -273,9 +285,8 @@ export default function ReviewsPage() {
   const {
     data: reviewsData,
     isLoading: loading,
-    refetch: fetchReviews,
   } = useApiQuery<{ reviews: ReviewItem[]; counts: ReviewCounts }>({
-    queryKey: ["reviews", activeTab],
+    queryKey: ["reviews", activeTab, sourceFilter],
     url: "/api/reviews",
     params: getQueryParams(),
     staleTime: 30 * 1000, // 30 seconds
@@ -346,6 +357,8 @@ export default function ReviewsPage() {
   const handleResolveFlag = (review: ReviewItem) => {
     const url = review.source === "project" && review.project
       ? `/api/projects/${review.project.id}/rows/${review.id}`
+      : review.source === "collateral"
+      ? `/api/collateral/output/${review.id}`
       : `/api/question-history/${review.id}`;
 
     resolveFlagMutation.mutate({
@@ -408,6 +421,31 @@ export default function ReviewsPage() {
         ))}
       </div>
 
+      {/* Source Filter */}
+      <div style={{ marginBottom: "24px" }}>
+        <div style={{ fontSize: "13px", fontWeight: 600, color: "#64748b", marginBottom: "8px" }}>
+          Filter by source:
+        </div>
+        <div style={styles.tabs}>
+          {(["all", "projects", "questions", "collateral"] as const).map((source) => (
+            <button
+              key={source}
+              onClick={() => setSourceFilter(source)}
+              style={{
+                ...styles.tab,
+                backgroundColor: sourceFilter === source ? "#6366f1" : "#f1f5f9",
+                color: sourceFilter === source ? "#fff" : "#64748b",
+              }}
+            >
+              {source === "all" && "All Sources"}
+              {source === "projects" && "RFP Projects"}
+              {source === "questions" && "Quick Questions"}
+              {source === "collateral" && "Collateral"}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Review List */}
       {loading ? (
         <div style={styles.empty}>Loading...</div>
@@ -444,6 +482,13 @@ export default function ReviewsPage() {
                       <span style={styles.customerName}>• {review.project.customerName}</span>
                     )}
                   </>
+                ) : review.source === "collateral" ? (
+                  <>
+                    <span style={styles.projectName}>Collateral: {review.title || "Untitled"}</span>
+                    {review.customerName && (
+                      <span style={styles.customerName}>• {review.customerName}</span>
+                    )}
+                  </>
                 ) : (
                   <span style={styles.projectName}>Quick Question</span>
                 )}
@@ -477,8 +522,22 @@ export default function ReviewsPage() {
             </div>
 
             <div style={styles.cardBody}>
-              <div style={styles.question}>Q: {review.question}</div>
-              <div style={styles.response}>{review.response}</div>
+              {review.source === "collateral" ? (
+                <>
+                  <div style={styles.question}>{review.title || "Collateral Output"}</div>
+                  {review.templateName && (
+                    <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>
+                      Template: {review.templateName}
+                    </div>
+                  )}
+                  <div style={styles.response}>{review.content?.substring(0, 500)}{(review.content?.length || 0) > 500 ? "..." : ""}</div>
+                </>
+              ) : (
+                <>
+                  <div style={styles.question}>Q: {review.question}</div>
+                  <div style={styles.response}>{review.response}</div>
+                </>
+              )}
 
               {(review.reviewNote || review.flagNote) && (
                 <div style={styles.note}>
@@ -518,6 +577,7 @@ export default function ReviewsPage() {
               )}
 
               <div style={styles.actions}>
+                {/* View action button */}
                 {review.source === "project" && review.project ? (
                   <Link
                     href={`/projects/${review.project.id}?filter=flagged`}
@@ -529,6 +589,18 @@ export default function ReviewsPage() {
                     }}
                   >
                     View in Project
+                  </Link>
+                ) : review.source === "collateral" ? (
+                  <Link
+                    href={`/collateral`}
+                    style={{
+                      ...styles.button,
+                      backgroundColor: "#f1f5f9",
+                      color: "#475569",
+                      textDecoration: "none",
+                    }}
+                  >
+                    View in Collateral
                   </Link>
                 ) : (
                   <Link
@@ -544,8 +616,10 @@ export default function ReviewsPage() {
                   </Link>
                 )}
 
+                {/* Review actions for REQUESTED status */}
                 {review.reviewStatus === "REQUESTED" && (
                   <>
+                    {/* Approve button - for projects only */}
                     {review.source === "project" && review.project && (
                       <button
                         onClick={() => handleApprove(review.id, review.project!.id)}
@@ -558,6 +632,8 @@ export default function ReviewsPage() {
                         ✓ Approve
                       </button>
                     )}
+
+                    {/* Edit/Correct buttons - different per source */}
                     {review.source === "project" && review.project ? (
                       <Link
                         href={`/projects/${review.project.id}?filter=flagged`}
@@ -569,6 +645,18 @@ export default function ReviewsPage() {
                         }}
                       >
                         Edit & Correct
+                      </Link>
+                    ) : review.source === "collateral" ? (
+                      <Link
+                        href={`/collateral`}
+                        style={{
+                          ...styles.button,
+                          backgroundColor: "#3b82f6",
+                          color: "#fff",
+                          textDecoration: "none",
+                        }}
+                      >
+                        Edit Collateral
                       </Link>
                     ) : (
                       <Link

@@ -4,6 +4,8 @@ export type UploadedDocument = {
   size: number;
   file: File; // Keep original file for attaching to profile after save
   docType?: string; // Optional document type (proposal, meeting_notes, etc.)
+  processForContent: boolean; // Whether to include in profile content analysis
+  documentId?: string; // ID of the stored document in customer documents
 };
 
 export type SalesforceSearchResult = {

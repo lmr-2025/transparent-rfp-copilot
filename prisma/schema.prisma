@@ -144,7 +144,12 @@ model BulkProject {
   ownerId        String?  // Foreign key to User
   owner          User?    @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   assignedUsers  Json?    // Array of user IDs who can access this project
-  customerName   String?
+  customerName   String?  // Legacy: kept for backwards compatibility
+
+  // Primary customer relationship (1-to-1)
+  customerId     String?  // Foreign key to CustomerProfile
+  customer       CustomerProfile? @relation("ProjectCustomer", fields: [customerId], references: [id], onDelete: SetNull)
+
   status         ProjectStatus @default(DRAFT)
   notes          String?
 
@@ -155,11 +160,12 @@ model BulkProject {
   reviewedBy        String?
 
   rows              BulkRow[] // One-to-many relationship with BulkRow
-  customerProfiles  ProjectCustomerProfile[] // Many-to-many with CustomerProfile
+  customerProfiles  ProjectCustomerProfile[] // Many-to-many with CustomerProfile (legacy)
 
   @@index([status])
   @@index([lastModifiedAt])
   @@index([ownerId])
+  @@index([customerId])
 }
 
 model BulkRow {
@@ -316,8 +322,10 @@ model CustomerProfile {
   owners          Json?    // Array of {name, email}
   history         Json?    // Audit trail entries
 
-  projects        ProjectCustomerProfile[]
-  documents       CustomerDocument[]
+  // Relations
+  primaryProjects   BulkProject[] @relation("ProjectCustomer") // Projects where this is the primary customer
+  projects          ProjectCustomerProfile[] // Legacy many-to-many relation
+  documents         CustomerDocument[]
   collateralOutputs CollateralOutput[]
 
   @@index([isActive, updatedAt])
