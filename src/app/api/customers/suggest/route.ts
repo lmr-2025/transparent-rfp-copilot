@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getModel, getEffectiveSpeed } from "@/lib/config";
-import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
+import { CustomerProfileDraft } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 import { getAnthropicClient, parseJsonResponse, fetchUrlContent } from "@/lib/apiHelpers";
@@ -17,10 +17,11 @@ type SuggestRequestBody = {
   documentNames?: string[]; // Names of uploaded documents
   existingProfile?: {
     name: string;
-    overview: string;
+    content?: string; // New format
+    // Legacy fields for backwards compatibility
+    overview?: string;
     products?: string;
     challenges?: string;
-    keyFacts: CustomerProfileKeyFact[];
   };
 };
 
@@ -168,10 +169,10 @@ Return ONLY the JSON object.`;
 async function generateProfileUpdate(
   existingProfile: {
     name: string;
-    overview: string;
+    content?: string;
+    overview?: string;
     products?: string;
     challenges?: string;
-    keyFacts: CustomerProfileKeyFact[];
   },
   sourceContent: string,
   sourceUrls: string[],
@@ -183,6 +184,13 @@ async function generateProfileUpdate(
   changeHighlights: string[];
 }> {
   const anthropic = getAnthropicClient();
+
+  // Use content field if available, otherwise build from legacy fields
+  const existingContent = existingProfile.content || [
+    existingProfile.overview ? `## Overview\n${existingProfile.overview}` : "",
+    existingProfile.products ? `## Products & Services\n${existingProfile.products}` : "",
+    existingProfile.challenges ? `## Challenges & Needs\n${existingProfile.challenges}` : "",
+  ].filter(Boolean).join("\n\n");
 
   const systemPrompt = `${promptText}
 
@@ -208,26 +216,15 @@ OUTPUT FORMAT:
   "name": "...",
   "industry": "...",
   "website": "...",
-  "overview": "... (complete updated overview)",
-  "products": "...",
-  "challenges": "...",
-  "keyFacts": [...]
+  "content": "... (complete updated markdown content)",
+  "considerations": ["...", ...]
 }`;
 
   const userPrompt = `EXISTING PROFILE:
 Name: ${existingProfile.name}
 
-Overview:
-${existingProfile.overview}
-
-Products:
-${existingProfile.products || "Not documented"}
-
-Challenges:
-${existingProfile.challenges || "Not documented"}
-
-Key Facts:
-${existingProfile.keyFacts.map((f) => `- ${f.label}: ${f.value}`).join("\n") || "None"}
+Content:
+${existingContent}
 
 ---
 
@@ -282,10 +279,8 @@ Return ONLY the JSON object.`;
       name: parsed.name,
       industry: parsed.industry,
       website: parsed.website,
-      overview: parsed.overview,
-      products: parsed.products,
-      challenges: parsed.challenges,
-      keyFacts: parsed.keyFacts,
+      content: parsed.content,
+      considerations: parsed.considerations || [],
     },
   };
 }

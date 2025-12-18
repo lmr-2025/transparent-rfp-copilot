@@ -80,6 +80,7 @@ const contextLabels: Record<PromptContext, string> = {
   customer_profile: "Customer Profiles",
   prompt_optimize: "Prompt Optimization",
   instruction_builder: "Instruction Builder",
+  collateral_planning: "Collateral Planning",
 };
 
 const contextColors: Record<PromptContext, { bg: string; border: string; text: string }> = {
@@ -96,6 +97,7 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
   customer_profile: { bg: "#fef3c7", border: "#fcd34d", text: "#b45309" },
   prompt_optimize: { bg: "#f0f9ff", border: "#7dd3fc", text: "#0284c7" },
   instruction_builder: { bg: "#fdf2f8", border: "#fbcfe8", text: "#db2777" },
+  collateral_planning: { bg: "#eef2ff", border: "#c7d2fe", text: "#4f46e5" },
 };
 
 export default function PromptBlocksEditor({

@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  CustomerProfileDraft,
-  CustomerProfileKeyFact,
-} from "@/types/customerProfile";
+import { CustomerProfileDraft } from "@/types/customerProfile";
 import { styles } from "./styles";
 import { TransparencyData } from "./types";
 
@@ -12,9 +9,9 @@ type DraftEditorCardProps = {
   buildTransparency: TransparencyData | null;
   isSaving: boolean;
   onUpdateDraft: (field: keyof CustomerProfileDraft, value: unknown) => void;
-  onAddKeyFact: () => void;
-  onUpdateKeyFact: (index: number, field: "label" | "value", value: string) => void;
-  onRemoveKeyFact: (index: number) => void;
+  onAddConsideration: () => void;
+  onUpdateConsideration: (index: number, value: string) => void;
+  onRemoveConsideration: (index: number) => void;
   onSave: () => void;
   onCancel: () => void;
   onViewPrompt: () => void;
@@ -25,9 +22,9 @@ export default function DraftEditorCard({
   buildTransparency,
   isSaving,
   onUpdateDraft,
-  onAddKeyFact,
-  onUpdateKeyFact,
-  onRemoveKeyFact,
+  onAddConsideration,
+  onUpdateConsideration,
+  onRemoveConsideration,
   onSave,
   onCancel,
   onViewPrompt,
@@ -81,43 +78,44 @@ export default function DraftEditorCard({
         </div>
       </div>
 
-      <label style={styles.label}>Overview *</label>
+      <label style={styles.label}>
+        Profile Content *
+        <span style={{ fontWeight: "normal", color: "#64748b", marginLeft: "8px" }}>
+          (Markdown supported)
+        </span>
+      </label>
       <textarea
-        style={{ ...styles.textarea, minHeight: "150px" }}
-        value={draft.overview}
-        onChange={(e) => onUpdateDraft("overview", e.target.value)}
+        style={{ ...styles.textarea, minHeight: "300px", fontFamily: "monospace", fontSize: "13px" }}
+        value={draft.content}
+        onChange={(e) => onUpdateDraft("content", e.target.value)}
+        placeholder={`## Overview
+Company overview and background...
+
+## Products & Services
+Their main offerings...
+
+## Key Facts
+- Founded: [year]
+- Headquarters: [location]
+- Employees: [count]
+
+## Challenges & Needs
+Known priorities and pain points...`}
       />
 
-      <label style={styles.label}>Products & Services</label>
-      <textarea
-        style={styles.textarea}
-        value={draft.products || ""}
-        onChange={(e) => onUpdateDraft("products", e.target.value)}
-        placeholder="Description of main products and services..."
-      />
-
-      <label style={styles.label}>Challenges & Needs</label>
-      <textarea
-        style={styles.textarea}
-        value={draft.challenges || ""}
-        onChange={(e) => onUpdateDraft("challenges", e.target.value)}
-        placeholder="Known business challenges, pain points, or focus areas..."
-      />
-
-      <label style={styles.label}>Key Facts</label>
-      {(draft.keyFacts || []).map((fact, idx) => (
-        <div key={idx} style={styles.keyFact}>
-          <input
-            style={{ ...styles.input, width: "150px" }}
-            value={fact.label}
-            onChange={(e) => onUpdateKeyFact(idx, "label", e.target.value)}
-            placeholder="Label"
-          />
+      <label style={styles.label}>
+        Considerations
+        <span style={{ fontWeight: "normal", color: "#64748b", marginLeft: "8px" }}>
+          (Special notes about this customer)
+        </span>
+      </label>
+      {(draft.considerations || []).map((consideration, idx) => (
+        <div key={idx} style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
           <input
             style={{ ...styles.input, flex: 1 }}
-            value={fact.value}
-            onChange={(e) => onUpdateKeyFact(idx, "value", e.target.value)}
-            placeholder="Value"
+            value={consideration}
+            onChange={(e) => onUpdateConsideration(idx, e.target.value)}
+            placeholder="e.g., Highly regulated industry - prioritize compliance topics"
           />
           <button
             style={{
@@ -125,7 +123,7 @@ export default function DraftEditorCard({
               ...styles.secondaryButton,
               padding: "8px 12px",
             }}
-            onClick={() => onRemoveKeyFact(idx)}
+            onClick={() => onRemoveConsideration(idx)}
           >
             ✕
           </button>
@@ -135,11 +133,11 @@ export default function DraftEditorCard({
         style={{
           ...styles.button,
           ...styles.secondaryButton,
-          marginTop: "8px",
+          marginTop: "4px",
         }}
-        onClick={onAddKeyFact}
+        onClick={onAddConsideration}
       >
-        + Add Fact
+        + Add Consideration
       </button>
 
       <div
@@ -160,7 +158,7 @@ export default function DraftEditorCard({
         <button
           style={{ ...styles.button, ...styles.primaryButton }}
           onClick={onSave}
-          disabled={isSaving || !draft.name.trim() || !draft.overview.trim()}
+          disabled={isSaving || !draft.name.trim() || !draft.content?.trim()}
         >
           {isSaving ? <>Saving...</> : "Save Profile"}
         </button>

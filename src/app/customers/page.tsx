@@ -7,7 +7,7 @@ import {
   updateProfile,
   deleteProfile,
 } from "@/lib/customerProfileApi";
-import { CustomerProfile, CustomerProfileKeyFact } from "@/types/customerProfile";
+import { CustomerProfile } from "@/types/customerProfile";
 import { InlineError } from "@/components/ui/status-display";
 import CustomerDocuments from "./components/CustomerDocuments";
 
@@ -175,10 +175,10 @@ export default function CustomerProfileLibraryPage() {
         name: editingProfile.name,
         industry: editingProfile.industry,
         website: editingProfile.website,
-        overview: editingProfile.overview,
-        products: editingProfile.products,
-        challenges: editingProfile.challenges,
-        keyFacts: editingProfile.keyFacts,
+        content: editingProfile.content,
+        considerations: editingProfile.considerations,
+        // Keep legacy fields in sync for backwards compatibility
+        overview: editingProfile.content || editingProfile.overview,
         isActive: editingProfile.isActive,
       });
       setProfiles((prev) =>
@@ -224,26 +224,39 @@ export default function CustomerProfileLibraryPage() {
     setEditingProfile({ ...editingProfile, [field]: value });
   };
 
-  // Key facts helpers
-  const addKeyFact = () => {
+  // Consideration helpers
+  const addConsideration = () => {
     if (!editingProfile) return;
-    const newFact: CustomerProfileKeyFact = { label: "", value: "" };
-    updateEditField("keyFacts", [...editingProfile.keyFacts, newFact]);
+    updateEditField("considerations", [...(editingProfile.considerations || []), ""]);
   };
 
-  const updateKeyFact = (idx: number, field: "label" | "value", value: string) => {
+  const updateConsideration = (idx: number, value: string) => {
     if (!editingProfile) return;
-    const facts = [...editingProfile.keyFacts];
-    facts[idx] = { ...facts[idx], [field]: value };
-    updateEditField("keyFacts", facts);
+    const considerations = [...(editingProfile.considerations || [])];
+    considerations[idx] = value;
+    updateEditField("considerations", considerations);
   };
 
-  const removeKeyFact = (idx: number) => {
+  const removeConsideration = (idx: number) => {
     if (!editingProfile) return;
     updateEditField(
-      "keyFacts",
-      editingProfile.keyFacts.filter((_, i) => i !== idx)
+      "considerations",
+      (editingProfile.considerations || []).filter((_, i) => i !== idx)
     );
+  };
+
+  // Helper to get display content (prefer new content field, fall back to legacy)
+  const getDisplayContent = (profile: CustomerProfile): string => {
+    if (profile.content) return profile.content;
+    // Build from legacy fields if content not set
+    const parts = [];
+    if (profile.overview) parts.push(`## Overview\n${profile.overview}`);
+    if (profile.products) parts.push(`## Products & Services\n${profile.products}`);
+    if (profile.challenges) parts.push(`## Challenges & Needs\n${profile.challenges}`);
+    if (profile.keyFacts?.length > 0) {
+      parts.push(`## Key Facts\n${profile.keyFacts.map(f => `- **${f.label}:** ${f.value}`).join("\n")}`);
+    }
+    return parts.join("\n\n");
   };
 
   if (loading) {
@@ -402,45 +415,31 @@ export default function CustomerProfileLibraryPage() {
                         </div>
                       </div>
 
-                      <label style={styles.label}>Overview</label>
+                      <label style={styles.label}>Profile Content</label>
+                      <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#64748b" }}>
+                        Use markdown formatting. Include sections like Overview, Products & Services, Challenges & Needs, Key Facts.
+                      </p>
                       <textarea
-                        style={{ ...styles.textarea, minHeight: "120px" }}
-                        value={editingProfile.overview}
-                        onChange={(e) => updateEditField("overview", e.target.value)}
+                        style={{ ...styles.textarea, minHeight: "300px", fontFamily: "monospace", fontSize: "13px" }}
+                        value={editingProfile.content || getDisplayContent(editingProfile)}
+                        onChange={(e) => updateEditField("content", e.target.value)}
                       />
 
-                      <label style={styles.label}>Products & Services</label>
-                      <textarea
-                        style={styles.textarea}
-                        value={editingProfile.products || ""}
-                        onChange={(e) => updateEditField("products", e.target.value)}
-                      />
-
-                      <label style={styles.label}>Challenges & Needs</label>
-                      <textarea
-                        style={styles.textarea}
-                        value={editingProfile.challenges || ""}
-                        onChange={(e) => updateEditField("challenges", e.target.value)}
-                      />
-
-                      <label style={styles.label}>Key Facts</label>
-                      {editingProfile.keyFacts.map((fact, idx) => (
+                      <label style={styles.label}>Considerations</label>
+                      <p style={{ margin: "0 0 8px 0", fontSize: "12px", color: "#64748b" }}>
+                        Special notes or caveats to keep in mind when working with this customer.
+                      </p>
+                      {(editingProfile.considerations || []).map((consideration, idx) => (
                         <div key={idx} style={{ display: "flex", gap: "8px", marginBottom: "6px" }}>
                           <input
-                            style={{ ...styles.input, width: "120px" }}
-                            value={fact.label}
-                            onChange={(e) => updateKeyFact(idx, "label", e.target.value)}
-                            placeholder="Label"
-                          />
-                          <input
                             style={{ ...styles.input, flex: 1 }}
-                            value={fact.value}
-                            onChange={(e) => updateKeyFact(idx, "value", e.target.value)}
-                            placeholder="Value"
+                            value={consideration}
+                            onChange={(e) => updateConsideration(idx, e.target.value)}
+                            placeholder="Enter a consideration..."
                           />
                           <button
                             style={{ ...styles.button, ...styles.secondaryButton }}
-                            onClick={() => removeKeyFact(idx)}
+                            onClick={() => removeConsideration(idx)}
                           >
                             ✕
                           </button>
@@ -448,9 +447,9 @@ export default function CustomerProfileLibraryPage() {
                       ))}
                       <button
                         style={{ ...styles.button, ...styles.secondaryButton, marginTop: "4px" }}
-                        onClick={addKeyFact}
+                        onClick={addConsideration}
                       >
-                        + Add Fact
+                        + Add Consideration
                       </button>
 
                       <div style={{ marginTop: "16px", display: "flex", gap: "8px", justifyContent: "flex-end" }}>
@@ -473,41 +472,99 @@ export default function CustomerProfileLibraryPage() {
                   ) : (
                     /* View Mode */
                     <>
+                      {/* Salesforce Static Fields (read-only) */}
+                      {profile.salesforceId && (
+                        <div style={{
+                          marginBottom: "16px",
+                          padding: "12px",
+                          backgroundColor: "#e0f2fe",
+                          borderRadius: "6px",
+                          border: "1px solid #7dd3fc"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                            <span style={{
+                              backgroundColor: "#0284c7",
+                              color: "#fff",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontSize: "11px",
+                              fontWeight: 600,
+                            }}>
+                              Salesforce
+                            </span>
+                            <span style={{ color: "#0369a1", fontSize: "12px" }}>
+                              Linked to Salesforce Account
+                            </span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px 16px" }}>
+                            {profile.region && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Region:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>{profile.region}</span>
+                              </div>
+                            )}
+                            {profile.tier && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Tier:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>{profile.tier}</span>
+                              </div>
+                            )}
+                            {profile.accountType && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Type:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>{profile.accountType}</span>
+                              </div>
+                            )}
+                            {profile.billingLocation && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Location:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>{profile.billingLocation}</span>
+                              </div>
+                            )}
+                            {profile.employeeCount && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Employees:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>{profile.employeeCount.toLocaleString()}</span>
+                              </div>
+                            )}
+                            {profile.annualRevenue && (
+                              <div style={{ fontSize: "13px" }}>
+                                <span style={{ color: "#64748b" }}>Revenue:</span>{" "}
+                                <span style={{ color: "#0c4a6e" }}>${(profile.annualRevenue / 1000000).toFixed(1)}M</span>
+                              </div>
+                            )}
+                          </div>
+                          {profile.lastSalesforceSync && (
+                            <div style={{ marginTop: "8px", fontSize: "11px", color: "#64748b" }}>
+                              Last synced: {new Date(profile.lastSalesforceSync).toLocaleString()}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div style={{ marginBottom: "12px" }}>
-                        <strong style={{ color: "#475569", fontSize: "13px" }}>Overview</strong>
-                        <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
-                          {profile.overview}
-                        </p>
+                        <div
+                          style={{
+                            whiteSpace: "pre-wrap",
+                            fontSize: "14px",
+                            lineHeight: "1.6",
+                          }}
+                          className="profile-content"
+                        >
+                          {getDisplayContent(profile)}
+                        </div>
                       </div>
 
-                      {profile.products && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <strong style={{ color: "#475569", fontSize: "13px" }}>Products & Services</strong>
-                          <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
-                            {profile.products}
-                          </p>
-                        </div>
-                      )}
-
-                      {profile.challenges && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <strong style={{ color: "#475569", fontSize: "13px" }}>Challenges & Needs</strong>
-                          <p style={{ margin: "4px 0", whiteSpace: "pre-wrap", fontSize: "14px" }}>
-                            {profile.challenges}
-                          </p>
-                        </div>
-                      )}
-
-                      {profile.keyFacts.length > 0 && (
-                        <div style={{ marginBottom: "12px" }}>
-                          <strong style={{ color: "#475569", fontSize: "13px" }}>Key Facts</strong>
-                          <div style={{ marginTop: "4px" }}>
-                            {profile.keyFacts.map((fact, idx) => (
-                              <div key={idx} style={{ fontSize: "14px", marginBottom: "2px" }}>
-                                <strong>{fact.label}:</strong> {fact.value}
-                              </div>
+                      {profile.considerations && profile.considerations.length > 0 && (
+                        <div style={{ marginBottom: "12px", marginTop: "16px", padding: "12px", backgroundColor: "#fffbeb", borderRadius: "6px", border: "1px solid #fde68a" }}>
+                          <strong style={{ color: "#92400e", fontSize: "13px" }}>Considerations</strong>
+                          <ul style={{ margin: "8px 0 0 0", paddingLeft: "20px" }}>
+                            {profile.considerations.map((c, idx) => (
+                              <li key={idx} style={{ fontSize: "14px", color: "#78350f", marginBottom: "4px" }}>
+                                {c}
+                              </li>
                             ))}
-                          </div>
+                          </ul>
                         </div>
                       )}
 

@@ -56,6 +56,7 @@ const navItems: NavSection[] = [
     featureFlag: "chat",
     items: [
       { href: "/chat", label: "Chat" },
+      { href: "/chat-v2", label: "Chat V2" },
       { href: "/chat/instruction-presets", label: "Instructions", adminOnly: true },
     ],
   },
@@ -72,6 +73,7 @@ const navItems: NavSection[] = [
     adminOnly: true,
     items: [
       { href: "/admin/prompt-blocks", label: "Prompt Builder" },
+      { href: "/admin/templates", label: "Templates" },
       { href: "/accuracy", label: "AI Accuracy" },
       { href: "/admin/settings", label: "Settings" },
     ],

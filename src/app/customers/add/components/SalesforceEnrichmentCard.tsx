@@ -32,16 +32,51 @@ export default function SalesforceEnrichmentCard({
 
       <div style={{ backgroundColor: "#f8fafc", borderRadius: "8px", padding: "16px", marginBottom: "16px" }}>
         <h4 style={{ margin: "0 0 8px 0", color: "#1e293b" }}>{enrichment.name}</h4>
-        {enrichment.industry && (
-          <p style={{ margin: "0 0 4px 0", fontSize: "14px", color: "#64748b" }}>
-            <strong>Industry:</strong> {enrichment.industry}
-          </p>
-        )}
-        {enrichment.website && (
-          <p style={{ margin: "0 0 4px 0", fontSize: "14px", color: "#64748b" }}>
-            <strong>Website:</strong> {enrichment.website}
-          </p>
-        )}
+
+        {/* Static fields from Salesforce */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "8px", marginBottom: "12px" }}>
+          {enrichment.industry && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Industry:</strong> {enrichment.industry}
+            </p>
+          )}
+          {enrichment.website && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Website:</strong> {enrichment.website}
+            </p>
+          )}
+          {enrichment.region && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Region:</strong> {enrichment.region}
+            </p>
+          )}
+          {enrichment.tier && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Tier:</strong> {enrichment.tier}
+            </p>
+          )}
+          {enrichment.accountType && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Type:</strong> {enrichment.accountType}
+            </p>
+          )}
+          {enrichment.billingLocation && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Location:</strong> {enrichment.billingLocation}
+            </p>
+          )}
+          {enrichment.employeeCount && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Employees:</strong> {enrichment.employeeCount.toLocaleString()}
+            </p>
+          )}
+          {enrichment.annualRevenue && (
+            <p style={{ margin: 0, fontSize: "14px", color: "#64748b" }}>
+              <strong>Revenue:</strong> ${(enrichment.annualRevenue / 1000000).toFixed(1)}M
+            </p>
+          )}
+        </div>
+
         <p style={{ margin: "12px 0 0 0", fontSize: "14px", color: "#475569" }}>
           {enrichment.overview}
         </p>
@@ -64,6 +99,10 @@ export default function SalesforceEnrichmentCard({
             </div>
           </div>
         )}
+
+        <p style={{ fontSize: "11px", color: "#94a3b8", marginTop: "8px", marginBottom: 0 }}>
+          Fields like Region, Tier, Location will be synced from Salesforce and cannot be edited directly.
+        </p>
       </div>
 
       <div style={{ display: "flex", gap: "8px" }}>

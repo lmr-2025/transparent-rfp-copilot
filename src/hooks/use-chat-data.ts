@@ -124,6 +124,10 @@ type SendMessageParams = {
     id: string;
     name: string;
     industry?: string;
+    // New unified content field
+    content?: string;
+    considerations?: string[];
+    // Legacy fields for backwards compatibility
     overview?: string;
     products?: string;
     challenges?: string;

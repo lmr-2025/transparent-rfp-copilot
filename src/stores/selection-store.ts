@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { GTMDataSelection } from "@/types/gtmData";
 
 export type SelectionItem = {
   id: string;
@@ -14,6 +15,9 @@ interface SelectionState {
   urlSelections: Map<string, boolean>;
   customerSelections: Map<string, boolean>;
 
+  // GTM Data selections (per customer)
+  gtmDataSelections: Map<string, GTMDataSelection>; // key: salesforceAccountId
+
   // Actions
   toggleSkill: (id: string) => void;
   toggleDocument: (id: string) => void;
@@ -24,6 +28,13 @@ interface SelectionState {
   setDocumentSelected: (id: string, selected: boolean) => void;
   setUrlSelected: (id: string, selected: boolean) => void;
   setCustomerSelected: (id: string, selected: boolean) => void;
+
+  // GTM Data actions
+  setGtmDataSelection: (salesforceAccountId: string, selection: GTMDataSelection) => void;
+  toggleGongCall: (salesforceAccountId: string, callId: string) => void;
+  toggleHubSpotActivity: (salesforceAccountId: string, activityId: string) => void;
+  setIncludeMetrics: (salesforceAccountId: string, include: boolean) => void;
+  clearGtmDataSelection: (salesforceAccountId: string) => void;
 
   // Bulk operations
   initializeSelections: (
@@ -46,6 +57,7 @@ interface SelectionState {
   getSelectedDocumentIds: () => string[];
   getSelectedUrlIds: () => string[];
   getSelectedCustomerIds: () => string[];
+  getGtmDataSelection: (salesforceAccountId: string) => GTMDataSelection | undefined;
 }
 
 export const useSelectionStore = create<SelectionState>((set, get) => ({
@@ -53,6 +65,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   documentSelections: new Map(),
   urlSelections: new Map(),
   customerSelections: new Map(),
+  gtmDataSelections: new Map(),
 
   toggleSkill: (id) =>
     set((state) => {
@@ -168,6 +181,63 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       ),
     })),
 
+  // GTM Data actions
+  setGtmDataSelection: (salesforceAccountId, selection) =>
+    set((state) => {
+      const newMap = new Map(state.gtmDataSelections);
+      newMap.set(salesforceAccountId, selection);
+      return { gtmDataSelections: newMap };
+    }),
+
+  toggleGongCall: (salesforceAccountId, callId) =>
+    set((state) => {
+      const newMap = new Map(state.gtmDataSelections);
+      const current = newMap.get(salesforceAccountId) || {
+        gongCallIds: [],
+        hubspotActivityIds: [],
+        includeMetrics: true,
+      };
+      const callIds = current.gongCallIds.includes(callId)
+        ? current.gongCallIds.filter((id) => id !== callId)
+        : [...current.gongCallIds, callId];
+      newMap.set(salesforceAccountId, { ...current, gongCallIds: callIds });
+      return { gtmDataSelections: newMap };
+    }),
+
+  toggleHubSpotActivity: (salesforceAccountId, activityId) =>
+    set((state) => {
+      const newMap = new Map(state.gtmDataSelections);
+      const current = newMap.get(salesforceAccountId) || {
+        gongCallIds: [],
+        hubspotActivityIds: [],
+        includeMetrics: true,
+      };
+      const activityIds = current.hubspotActivityIds.includes(activityId)
+        ? current.hubspotActivityIds.filter((id) => id !== activityId)
+        : [...current.hubspotActivityIds, activityId];
+      newMap.set(salesforceAccountId, { ...current, hubspotActivityIds: activityIds });
+      return { gtmDataSelections: newMap };
+    }),
+
+  setIncludeMetrics: (salesforceAccountId, include) =>
+    set((state) => {
+      const newMap = new Map(state.gtmDataSelections);
+      const current = newMap.get(salesforceAccountId) || {
+        gongCallIds: [],
+        hubspotActivityIds: [],
+        includeMetrics: true,
+      };
+      newMap.set(salesforceAccountId, { ...current, includeMetrics: include });
+      return { gtmDataSelections: newMap };
+    }),
+
+  clearGtmDataSelection: (salesforceAccountId) =>
+    set((state) => {
+      const newMap = new Map(state.gtmDataSelections);
+      newMap.delete(salesforceAccountId);
+      return { gtmDataSelections: newMap };
+    }),
+
   getSelectedSkillIds: () => {
     const { skillSelections } = get();
     return Array.from(skillSelections.entries())
@@ -194,5 +264,10 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
     return Array.from(customerSelections.entries())
       .filter(([, selected]) => selected)
       .map(([id]) => id);
+  },
+
+  getGtmDataSelection: (salesforceAccountId) => {
+    const { gtmDataSelections } = get();
+    return gtmDataSelections.get(salesforceAccountId);
   },
 }));

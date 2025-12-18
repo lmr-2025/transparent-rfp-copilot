@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SettingsResponse } from "./types";
 import { INTEGRATIONS } from "./constants";
+import SnowflakeExplorer from "./SnowflakeExplorer";
 
 type IntegrationsTabProps = {
   settings: SettingsResponse | null;
@@ -97,6 +98,11 @@ export default function IntegrationsTab({ settings, onSave }: IntegrationsTabPro
                     {saving === key ? "Saving..." : "Save"}
                   </button>
                 </div>
+
+                {/* Snowflake Schema Explorer - show when configured */}
+                {key === "snowflake" && integrationStatus?.configured && (
+                  <SnowflakeExplorer />
+                )}
               </div>
             )}
           </div>

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
-import { CustomerProfileDraft, CustomerProfileKeyFact } from "@/types/customerProfile";
+import { CustomerProfileDraft } from "@/types/customerProfile";
 import { logUsage } from "@/lib/usageTracking";
 import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
@@ -16,10 +16,11 @@ export const maxDuration = 120; // Allow longer for multiple docs
 type ExistingProfile = {
   id: string;
   name: string;
+  content: string | null;
+  // Legacy fields
   overview: string;
   products: string | null;
   challenges: string | null;
-  keyFacts: CustomerProfileKeyFact[];
 };
 
 // POST /api/customers/build-from-docs - Build/update customer profile from uploaded documents
@@ -109,10 +110,10 @@ export async function POST(request: NextRequest) {
         select: {
           id: true,
           name: true,
+          content: true,
           overview: true,
           products: true,
           challenges: true,
-          keyFacts: true,
         },
       }) as ExistingProfile | null;
     }
@@ -287,6 +288,13 @@ async function generateProfileUpdate(
 
   const anthropic = new Anthropic({ apiKey });
 
+  // Use content field if available, otherwise build from legacy fields
+  const existingContent = existingProfile.content || [
+    existingProfile.overview ? `## Overview\n${existingProfile.overview}` : "",
+    existingProfile.products ? `## Products & Services\n${existingProfile.products}` : "",
+    existingProfile.challenges ? `## Challenges & Needs\n${existingProfile.challenges}` : "",
+  ].filter(Boolean).join("\n\n");
+
   const systemPrompt = `${promptText}
 
 ---
@@ -312,27 +320,15 @@ OUTPUT FORMAT:
   "name": "...",
   "industry": "...",
   "website": "...",
-  "overview": "... (complete updated overview)",
-  "products": "...",
-  "challenges": "...",
-  "keyFacts": [...]
+  "content": "... (complete updated markdown content)",
+  "considerations": ["...", ...]
 }`;
 
-  const keyFacts = existingProfile.keyFacts || [];
   const userPrompt = `EXISTING PROFILE:
 Name: ${existingProfile.name}
 
-Overview:
-${existingProfile.overview}
-
-Products:
-${existingProfile.products || "Not documented"}
-
-Challenges:
-${existingProfile.challenges || "Not documented"}
-
-Key Facts:
-${keyFacts.map((f) => `- ${f.label}: ${f.value}`).join("\n") || "None"}
+Content:
+${existingContent}
 
 ---
 
@@ -398,10 +394,8 @@ Return ONLY the JSON object.`;
       name: parsed.name,
       industry: parsed.industry,
       website: parsed.website,
-      overview: parsed.overview,
-      products: parsed.products,
-      challenges: parsed.challenges,
-      keyFacts: parsed.keyFacts,
+      content: parsed.content,
+      considerations: parsed.considerations || [],
     },
     transparency: {
       systemPrompt,

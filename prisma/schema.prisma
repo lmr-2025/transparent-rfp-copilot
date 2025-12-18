@@ -277,10 +277,28 @@ model CustomerProfile {
   name            String   // Company name
   industry        String?  // e.g., "Healthcare", "FinTech"
   website         String?  // Primary company URL
+
+  // Static fields from Salesforce (read-only in app)
+  salesforceId       String?  @unique // Salesforce Account ID - used to link GTM data
+  region             String?  // e.g., "NA", "EMEA", "APAC" - from Salesforce
+  tier               String?  // e.g., "Enterprise", "Mid-Market", "SMB" - from Salesforce
+  employeeCount      Int?     // NumberOfEmployees from Salesforce
+  annualRevenue      Float?   // AnnualRevenue from Salesforce (in USD)
+  accountType        String?  // Customer, Prospect, Partner, etc. from Salesforce
+  billingLocation    String?  // Combined BillingCity, State, Country
+  lastSalesforceSync DateTime? // When static fields were last synced from Salesforce
+
+  // New unified content field (markdown-structured prose)
+  content         String?  @db.Text // Main profile content (replaces overview/products/challenges/keyFacts)
+  considerations  String[] // Special notes/caveats about this customer (like skill edgeCases)
+  sourceDocuments Json?    // Array of {id, filename, uploadedAt} - docs that built this profile
+
+  // Legacy fields (deprecated - migrate to content field)
   overview        String   @db.Text // AI-generated company overview
   products        String?  @db.Text // Products/services description
   challenges      String?  @db.Text // Known challenges/pain points
   keyFacts        Json?    // Array of {label, value} pairs
+
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -298,6 +316,7 @@ model CustomerProfile {
   @@index([isActive, updatedAt])
   @@index([industry])
   @@index([ownerId])
+  @@index([salesforceId])
 }
 
 // Customer-specific documents (only used when this customer is selected)
@@ -737,5 +756,27 @@ model AnswerFeedback {
 enum FeedbackRating {
   THUMBS_UP
   THUMBS_DOWN
+}
+
+// Document Templates - reusable templates for deliverables
+// Used by Chat V2 to generate filled documents (battlecards, proposals, etc.)
+model Template {
+  id              String         @id @default(uuid())
+  name            String         // Human-readable name, e.g., "Sales Battlecard"
+  description     String?        // Brief description of what this template is for
+  content         String         @db.Text // Markdown template with placeholders
+  category        String?        // Grouping: "Sales", "Marketing", "Technical"
+  outputFormat    String         @default("markdown") // markdown, docx (for future export)
+  placeholderHint String?        @db.Text // Guidance on available placeholders
+  isActive        Boolean        @default(true)
+  sortOrder       Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  createdBy       String?        // User email who created it
+  updatedBy       String?        // User email who last updated
+
+  @@index([category])
+  @@index([isActive])
+  @@index([sortOrder])
 }
 

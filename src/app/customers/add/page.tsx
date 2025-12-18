@@ -7,8 +7,8 @@ import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseApiData } from "@/lib/apiClient";
 import {
   CustomerProfileDraft,
-  CustomerProfileKeyFact,
   CustomerProfileSourceUrl,
+  CustomerProfileSourceDocument,
 } from "@/types/customerProfile";
 import TransparencyModal from "@/components/TransparencyModal";
 import { CLAUDE_MODEL } from "@/lib/config";
@@ -32,6 +32,7 @@ export default function CustomerProfileBuilderPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [emptyContentWarning, setEmptyContentWarning] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [draft, setDraft] = useState<CustomerProfileDraft | null>(null);
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
@@ -53,6 +54,8 @@ export default function CustomerProfileBuilderPage() {
   const [sfSearching, setSfSearching] = useState(false);
   const [sfEnrichment, setSfEnrichment] = useState<SalesforceEnrichment | null>(null);
   const [sfLoading, setSfLoading] = useState(false);
+  // Keep track of the static fields to save when profile is created from Salesforce
+  const [salesforceStaticFields, setSalesforceStaticFields] = useState<SalesforceEnrichment | null>(null);
 
   // Check if Salesforce is configured on mount
   useEffect(() => {
@@ -123,21 +126,31 @@ export default function CustomerProfileBuilderPage() {
     }
   };
 
-  // Apply Salesforce enrichment to create a draft
+  // Apply Salesforce enrichment to create a draft (convert to new content format)
   const applySalesforceEnrichment = () => {
     if (!sfEnrichment) return;
+
+    // Build content from Salesforce data
+    const contentParts = [
+      `## Overview\n${sfEnrichment.overview}`,
+    ];
+    if (sfEnrichment.keyFacts.length > 0) {
+      contentParts.push(`## Key Facts\n${sfEnrichment.keyFacts.map(f => `- ${f.label}: ${f.value}`).join("\n")}`);
+    }
 
     setDraft({
       name: sfEnrichment.name,
       industry: sfEnrichment.industry || undefined,
       website: sfEnrichment.website || undefined,
-      overview: sfEnrichment.overview,
-      keyFacts: sfEnrichment.keyFacts,
+      content: contentParts.join("\n\n"),
+      considerations: [],
     });
+    // Save static fields to include when creating the profile
+    setSalesforceStaticFields(sfEnrichment);
     setSfEnrichment(null);
   };
 
-  // Handle file upload
+  // Handle file upload - now stores File object for later attachment
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -186,6 +199,7 @@ export default function CustomerProfileBuilderPage() {
             name: file.name,
             content: contentData.content,
             size: file.size,
+            file: file, // Keep original file for attachment after save
           });
 
           await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
@@ -265,6 +279,7 @@ export default function CustomerProfileBuilderPage() {
   // Step 2: Build profile
   const handleBuild = async (forUpdate?: { profileId: string }) => {
     setError(null);
+    setEmptyContentWarning(false);
     setIsBuilding(true);
 
     try {
@@ -295,6 +310,11 @@ export default function CustomerProfileBuilderPage() {
       if (data.transparency) {
         setBuildTransparency(data.transparency);
       }
+
+      // Check if content is empty - warn user
+      if (!data.draft.content?.trim()) {
+        setEmptyContentWarning(true);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to build profile");
     } finally {
@@ -302,7 +322,7 @@ export default function CustomerProfileBuilderPage() {
     }
   };
 
-  // Step 3: Save profile
+  // Step 3: Save profile and attach documents
   const handleSave = async () => {
     if (!draft) return;
 
@@ -319,23 +339,71 @@ export default function CustomerProfileBuilderPage() {
         })
       );
 
-      await createProfile({
+      // Build sourceDocuments metadata for the profile
+      const sourceDocuments: CustomerProfileSourceDocument[] = uploadedDocs.map(doc => ({
+        id: "", // Will be filled after upload
+        filename: doc.name,
+        uploadedAt: now,
+      }));
+
+      // Create profile with new content field
+      const newProfile = await createProfile({
         name: draft.name,
         industry: draft.industry,
         website: draft.website,
-        overview: draft.overview,
-        products: draft.products,
-        challenges: draft.challenges,
-        keyFacts: draft.keyFacts || [],
+        content: draft.content,
+        considerations: draft.considerations || [],
+        // Legacy fields - set overview to content for backwards compat
+        overview: draft.content,
+        keyFacts: [],
         sourceUrls: sourceUrlsToSave,
+        sourceDocuments,
         isActive: true,
+        // Static fields from Salesforce (if imported from Salesforce)
+        ...(salesforceStaticFields && {
+          salesforceId: salesforceStaticFields.salesforceId,
+          region: salesforceStaticFields.region || undefined,
+          tier: salesforceStaticFields.tier || undefined,
+          employeeCount: salesforceStaticFields.employeeCount || undefined,
+          annualRevenue: salesforceStaticFields.annualRevenue || undefined,
+          accountType: salesforceStaticFields.accountType || undefined,
+          billingLocation: salesforceStaticFields.billingLocation || undefined,
+          lastSalesforceSync: now,
+        }),
       });
 
-      setSuccessMessage(`Profile "${draft.name}" created successfully!`);
+      // Attach uploaded documents to the new profile
+      let attachedCount = 0;
+      for (const doc of uploadedDocs) {
+        try {
+          const formData = new FormData();
+          formData.append("file", doc.file);
+          formData.append("title", doc.name.replace(/\.[^/.]+$/, "")); // Remove extension
+          if (doc.docType) {
+            formData.append("docType", doc.docType);
+          }
+
+          const attachResponse = await fetch(`/api/customers/${newProfile.id}/documents`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (attachResponse.ok) {
+            attachedCount++;
+          }
+        } catch {
+          // Continue even if one doc fails to attach
+          console.error(`Failed to attach document: ${doc.name}`);
+        }
+      }
+
+      const docMessage = attachedCount > 0 ? ` with ${attachedCount} document(s) attached` : "";
+      setSuccessMessage(`Profile "${draft.name}" created successfully${docMessage}!`);
       setDraft(null);
       setUrlInput("");
       setSourceUrls([]);
       setUploadedDocs([]);
+      setSalesforceStaticFields(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save profile");
     } finally {
@@ -349,26 +417,23 @@ export default function CustomerProfileBuilderPage() {
     setDraft({ ...draft, [field]: value });
   };
 
-  // Add key fact
-  const addKeyFact = () => {
+  // Consideration handlers
+  const addConsideration = () => {
     if (!draft) return;
-    const newFact: CustomerProfileKeyFact = { label: "", value: "" };
-    updateDraft("keyFacts", [...(draft.keyFacts || []), newFact]);
+    updateDraft("considerations", [...(draft.considerations || []), ""]);
   };
 
-  // Update key fact
-  const updateKeyFact = (index: number, field: "label" | "value", value: string) => {
+  const updateConsideration = (index: number, value: string) => {
     if (!draft) return;
-    const facts = [...(draft.keyFacts || [])];
-    facts[index] = { ...facts[index], [field]: value };
-    updateDraft("keyFacts", facts);
+    const considerations = [...(draft.considerations || [])];
+    considerations[index] = value;
+    updateDraft("considerations", considerations);
   };
 
-  // Remove key fact
-  const removeKeyFact = (index: number) => {
+  const removeConsideration = (index: number) => {
     if (!draft) return;
-    const facts = (draft.keyFacts || []).filter((_, i) => i !== index);
-    updateDraft("keyFacts", facts);
+    const considerations = (draft.considerations || []).filter((_, i) => i !== index);
+    updateDraft("considerations", considerations);
   };
 
   return (
@@ -437,22 +502,72 @@ export default function CustomerProfileBuilderPage() {
 
       {/* Step 3: Edit Draft */}
       {draft && (
-        <DraftEditorCard
-          draft={draft}
-          buildTransparency={buildTransparency}
-          isSaving={isSaving}
-          onUpdateDraft={updateDraft}
-          onAddKeyFact={addKeyFact}
-          onUpdateKeyFact={updateKeyFact}
-          onRemoveKeyFact={removeKeyFact}
-          onSave={handleSave}
-          onCancel={() => {
-            setDraft(null);
-            setSourceUrls([]);
-            setUploadedDocs([]);
-          }}
-          onViewPrompt={() => setShowTransparencyModal("build")}
-        />
+        <>
+          {/* Warning when LLM returned empty content */}
+          {emptyContentWarning && (
+            <div
+              style={{
+                ...styles.card,
+                backgroundColor: "#fef3c7",
+                border: "1px solid #f59e0b",
+                marginBottom: "16px",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                <span style={{ fontSize: "20px" }}>&#9888;</span>
+                <div style={{ flex: 1 }}>
+                  <strong style={{ color: "#92400e" }}>Content extraction failed</strong>
+                  <p style={{ margin: "4px 0 12px", color: "#78350f", fontSize: "14px" }}>
+                    The AI was unable to extract profile content from your sources. This can happen if the source URLs
+                    returned blocked content, login pages, or limited text. You can try again or manually fill in the content below.
+                  </p>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      style={{ ...styles.button, ...styles.primaryButton }}
+                      onClick={() => {
+                        setEmptyContentWarning(false);
+                        handleBuild();
+                      }}
+                      disabled={isBuilding}
+                    >
+                      {isBuilding ? "Retrying..." : "Retry Build"}
+                    </button>
+                    <button
+                      style={{ ...styles.button, ...styles.secondaryButton }}
+                      onClick={() => setShowTransparencyModal("build")}
+                    >
+                      View Prompt
+                    </button>
+                    <button
+                      style={{ ...styles.button, ...styles.secondaryButton }}
+                      onClick={() => setEmptyContentWarning(false)}
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DraftEditorCard
+            draft={draft}
+            buildTransparency={buildTransparency}
+            isSaving={isSaving}
+            onUpdateDraft={updateDraft}
+            onAddConsideration={addConsideration}
+            onUpdateConsideration={updateConsideration}
+            onRemoveConsideration={removeConsideration}
+            onSave={handleSave}
+            onCancel={() => {
+              setDraft(null);
+              setSourceUrls([]);
+              setUploadedDocs([]);
+              setEmptyContentWarning(false);
+              setSalesforceStaticFields(null);
+            }}
+            onViewPrompt={() => setShowTransparencyModal("build")}
+          />
+        </>
       )}
 
       {/* Transparency Modal */}

@@ -242,13 +242,17 @@ const customerProfileContextSchema = z.object({
   id: z.string(),
   name: z.string(),
   industry: z.string().optional(),
-  overview: z.string(),
+  // New unified content field (markdown-structured prose)
+  content: z.string().optional(),
+  considerations: z.array(z.string()).optional(),
+  // Legacy fields for backwards compatibility
+  overview: z.string().optional(), // Now optional since content replaces it
   products: z.string().optional(),
   challenges: z.string().optional(),
   keyFacts: z.array(z.object({
     label: z.string(),
     value: z.string(),
-  })),
+  })).optional(), // Now optional
 });
 
 const referenceUrlContextSchema = z.object({
@@ -271,6 +275,35 @@ const chatSectionSchema = z.object({
   enabled: z.boolean(),
 });
 
+// GTM data context schema (from Snowflake - Gong, HubSpot, Looker)
+const gtmDataContextSchema = z.object({
+  salesforceAccountId: z.string(),
+  customerName: z.string().optional(),
+  // Pre-built context string (if already fetched and formatted)
+  contextString: z.string().optional(),
+  // Or individual data for server-side formatting
+  gongCalls: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    date: z.string(),
+    duration: z.number(),
+    participants: z.array(z.string()),
+    summary: z.string().optional(),
+    transcript: z.string().optional(),
+  })).optional(),
+  hubspotActivities: z.array(z.object({
+    id: z.string(),
+    type: z.string(),
+    date: z.string(),
+    subject: z.string(),
+    content: z.string().optional(),
+  })).optional(),
+  lookerMetrics: z.array(z.object({
+    period: z.string(),
+    metrics: z.record(z.string(), z.union([z.string(), z.number()])),
+  })).optional(),
+});
+
 export const knowledgeChatSchema = z.object({
   message: z.string().min(1, "Message is required").max(50000),
   skills: z.array(skillContextSchema).default([]),
@@ -282,6 +315,8 @@ export const knowledgeChatSchema = z.object({
   userInstructions: z.string().max(50000).optional(), // User-facing behavior/persona instructions
   // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
   quickMode: z.boolean().optional(),
+  // GTM data from Snowflake (Gong, HubSpot, Looker)
+  gtmData: gtmDataContextSchema.optional(),
 });
 
 // Legacy chat message schema (for other uses)

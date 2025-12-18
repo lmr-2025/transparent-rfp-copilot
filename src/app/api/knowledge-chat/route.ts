@@ -12,6 +12,7 @@ import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { CONTEXT_LIMITS } from "@/lib/constants";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { buildGTMContextString, type CustomerGTMData } from "@/types/gtmData";
 
 export const maxDuration = 60;
 
@@ -43,6 +44,7 @@ type ChatResponse = {
     customerContext: string;
     documentContext: string;
     urlContext: string;
+    gtmContext?: string; // GTM data from Snowflake (Gong, HubSpot, Looker)
     model: string;
     maxTokens: number;
     temperature: number;
@@ -82,6 +84,7 @@ export async function POST(request: NextRequest) {
   const conversationHistory = data.conversationHistory || [];
   const userInstructions = data.userInstructions || "";
   const quickMode = data.quickMode;
+  const gtmData = data.gtmData;
 
   // Determine model speed (request override > user preference > system default)
   const speed = getEffectiveSpeed("chat", quickMode);
@@ -121,6 +124,46 @@ export async function POST(request: NextRequest) {
         ).join("\n\n---\n\n")
       : "";
 
+    // Build GTM context from Snowflake data (Gong, HubSpot, Looker)
+    let gtmContext = "";
+    if (gtmData) {
+      // Use pre-built context string if provided, otherwise build from data
+      if (gtmData.contextString) {
+        gtmContext = gtmData.contextString;
+      } else {
+        // Build CustomerGTMData from the request data
+        const gtmDataForContext: CustomerGTMData = {
+          salesforceAccountId: gtmData.salesforceAccountId,
+          customerName: gtmData.customerName,
+          gongCalls: (gtmData.gongCalls || []).map(call => ({
+            id: call.id,
+            salesforceAccountId: gtmData.salesforceAccountId,
+            title: call.title,
+            date: call.date,
+            duration: call.duration,
+            participants: call.participants,
+            summary: call.summary,
+            transcript: call.transcript,
+          })),
+          hubspotActivities: (gtmData.hubspotActivities || []).map(activity => ({
+            id: activity.id,
+            salesforceAccountId: gtmData.salesforceAccountId,
+            type: activity.type as "email" | "call" | "meeting" | "note" | "task",
+            date: activity.date,
+            subject: activity.subject,
+            content: activity.content,
+          })),
+          lookerMetrics: (gtmData.lookerMetrics || []).map(metric => ({
+            salesforceAccountId: gtmData.salesforceAccountId,
+            period: metric.period,
+            metrics: metric.metrics as Record<string, string | number>,
+          })),
+          lastUpdated: new Date().toISOString(),
+        };
+        gtmContext = buildGTMContextString(gtmDataForContext);
+      }
+    }
+
     // Fetch customer documents if customer profiles are selected
     let customerDocuments: { id: string; customerId: string; title: string; content: string; docType: string | null }[] = [];
     if (customerProfiles.length > 0) {
@@ -134,28 +177,40 @@ export async function POST(request: NextRequest) {
     // Build customer context from profiles (including their documents)
     const customerContext = customerProfiles.length > 0
       ? customerProfiles.map((profile) => {
-          const keyFactsText = profile.keyFacts.length > 0
-            ? `Key Facts:\n${profile.keyFacts.map(f => `  - ${f.label}: ${f.value}`).join("\n")}`
-            : "";
-
           // Get documents for this customer
           const customerDocs = customerDocuments.filter(d => d.customerId === profile.id);
           const customerDocsText = customerDocs.length > 0
-            ? `\nCustomer Documents:\n${customerDocs.map(d =>
-                `--- ${d.title}${d.docType ? ` (${d.docType})` : ""} ---\n${d.content}`
+            ? `\n\n## Customer Documents\n${customerDocs.map(d =>
+                `### ${d.title}${d.docType ? ` (${d.docType})` : ""}\n${d.content}`
               ).join("\n\n")}`
+            : "";
+
+          // Use new content field if available, fall back to legacy fields
+          const profileContent = profile.content || buildLegacyContent(profile);
+
+          // Build considerations section if available
+          const considerationsText = profile.considerations && profile.considerations.length > 0
+            ? `\n\n## Considerations\n${profile.considerations.map(c => `- ${c}`).join("\n")}`
             : "";
 
           return `=== CUSTOMER PROFILE: ${profile.name} ===
 Industry: ${profile.industry || "Not specified"}
 
-Overview:
-${profile.overview}
-${profile.products ? `\nProducts & Services:\n${profile.products}` : ""}
-${profile.challenges ? `\nChallenges & Needs:\n${profile.challenges}` : ""}
-${keyFactsText}${customerDocsText}`;
+${profileContent}${considerationsText}${customerDocsText}`;
         }).join("\n\n---\n\n")
       : "";
+
+    // Helper function to build content from legacy fields
+    function buildLegacyContent(profile: { overview?: string; products?: string; challenges?: string; keyFacts?: { label: string; value: string }[] }): string {
+      const parts = [];
+      if (profile.overview) parts.push(`## Overview\n${profile.overview}`);
+      if (profile.products) parts.push(`## Products & Services\n${profile.products}`);
+      if (profile.challenges) parts.push(`## Challenges & Needs\n${profile.challenges}`);
+      if (profile.keyFacts && profile.keyFacts.length > 0) {
+        parts.push(`## Key Facts\n${profile.keyFacts.map(f => `- **${f.label}:** ${f.value}`).join("\n")}`);
+      }
+      return parts.join("\n\n");
+    }
 
     // Build combined knowledge context (skills, documents, URLs - NOT customer profiles)
     let combinedKnowledgeContext = "";
@@ -175,6 +230,12 @@ ${keyFactsText}${customerDocsText}`;
     if (urlContext) {
       if (combinedKnowledgeContext) combinedKnowledgeContext += "\n\n";
       combinedKnowledgeContext += `=== REFERENCE URLS ===\n\n${urlContext}`;
+    }
+
+    // 4. GTM Data (Gong, HubSpot, Looker from Snowflake)
+    if (gtmContext) {
+      if (combinedKnowledgeContext) combinedKnowledgeContext += "\n\n";
+      combinedKnowledgeContext += `=== GTM DATA (Sales Intelligence) ===\n\n${gtmContext}`;
     }
 
     if (!combinedKnowledgeContext) {
@@ -251,6 +312,9 @@ ${keyFactsText}${customerDocsText}`;
         urlCount: referenceUrls.length,
         conversationLength: conversationHistory.length,
         quickMode: quickMode || false,
+        hasGtmData: !!gtmData,
+        gtmGongCallCount: gtmData?.gongCalls?.length || 0,
+        gtmHubSpotActivityCount: gtmData?.hubspotActivities?.length || 0,
       },
     });
 
@@ -299,6 +363,7 @@ ${keyFactsText}${customerDocsText}`;
         customerContext: finalCustomerContext,
         documentContext,
         urlContext,
+        gtmContext: gtmContext || undefined,
         model,
         maxTokens: 4000,
         temperature: 0.3,
