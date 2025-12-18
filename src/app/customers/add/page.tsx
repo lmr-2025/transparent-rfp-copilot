@@ -183,13 +183,13 @@ export default function CustomerProfileBuilderPage() {
           body: formData,
         });
 
+        const json = await response.json();
+
         if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Failed to process ${file.name}`);
+          throw new Error(json.error || `Failed to process ${file.name}`);
         }
 
-        const json3 = await response.json();
-        const data = parseApiData<{ document: { id: string; content: string } }>(json3);
+        const data = parseApiData<{ document: { id: string; content: string } }>(json);
 
         // Content is returned directly in the response now
         if (data.document.content) {
