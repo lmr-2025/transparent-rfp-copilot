@@ -25,7 +25,7 @@ All subtasks are tracked in Linear under the Security team.
 |-------|--------------|--------|
 | **0. AWS Account** | [SEC-1063](https://linear.app/montecarlodata/issue/SEC-1063) | 🔴 Not Started |
 | **1.1 AWS SSO** | [SEC-1045](https://linear.app/montecarlodata/issue/SEC-1045) | 🔴 Not Started |
-| **1.2 IAM Roles** | [SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046) | 🔴 Not Started |
+| **1.2 IAM Roles** | [SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046) | ✅ Complete |
 | **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | 🔴 Not Started |
 | **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
@@ -139,15 +139,51 @@ All subtasks are tracked in Linear under the Security team.
 - [ ] Document access procedures
 
 #### 1.2 IAM Roles for Application Services (SEC-1046)
-- [ ] ECS/Fargate task execution role
-- [ ] Application runtime role with access to:
+- [x] ECS/Fargate task execution role
+- [x] Application runtime role with access to:
   - RDS (database connections)
   - S3 (file uploads/downloads)
   - Secrets Manager (secret retrieval)
   - CloudWatch Logs (logging)
-- [ ] Lambda execution roles (if needed)
-- [ ] RDS enhanced monitoring role
-- [ ] Document all roles and policies
+  - CloudWatch Metrics (custom metrics)
+  - X-Ray (optional tracing)
+- [x] Lambda execution roles (optional, configurable)
+- [x] RDS enhanced monitoring role
+- [x] Document all roles and policies
+
+**Implementation Details**:
+- **Location**: `infrastructure/iam/`
+- **Terraform Modules**:
+  - `ecs-task-execution-role.tf` - ECS execution role with ECR, Secrets Manager, CloudWatch access
+  - `app-runtime-role.tf` - Application runtime role with S3, RDS, Secrets Manager, CloudWatch access
+  - `lambda-execution-roles.tf` - Optional Lambda roles for async processing (disabled by default)
+  - `rds-monitoring-role.tf` - RDS enhanced monitoring role
+  - `variables.tf` - Configurable variables for environments and features
+  - `README.md` - Complete documentation with usage examples
+
+**Key Features**:
+- Follows principle of least privilege
+- Resource-scoped policies (no wildcards except where required)
+- Separate execution and runtime roles for ECS
+- KMS integration for secret decryption
+- Optional X-Ray tracing support
+- Environment-specific resource naming
+
+**Outputs Available**:
+- `ecs_task_execution_role_arn` - For ECS task definitions
+- `app_runtime_role_arn` - For ECS task definitions
+- `rds_enhanced_monitoring_role_arn` - For RDS instance configuration
+- `lambda_execution_role_arn` - For Lambda functions (if enabled)
+
+**Usage**:
+```bash
+cd infrastructure/iam
+terraform init
+terraform plan -var="environment=production" -var="enable_lambda=false"
+terraform apply -var="environment=production"
+```
+
+See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete documentation.
 
 ### Phase 2: Networking Foundation
 
