@@ -117,13 +117,14 @@ export async function POST(request: NextRequest) {
     try {
       content = await extractTextContent(buffer, fileType);
     } catch (extractError) {
-      logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType });
+      const errorMessage = extractError instanceof Error ? extractError.message : "Unknown error";
+      logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType, errorMessage });
       // If saving as template, text extraction is required
       if (saveAsTemplate) {
-        return errors.badRequest("Failed to extract text from document. Text extraction is required for templates.");
+        return errors.badRequest(`Failed to extract text from document: ${errorMessage}`);
       }
       // Otherwise, store with placeholder - document is still useful as a reference
-      content = `[Text extraction failed for ${fileType.toUpperCase()} file. Document stored for reference only.]`;
+      content = `[Text extraction failed for ${fileType.toUpperCase()} file: ${errorMessage}. Document stored for reference only.]`;
     }
 
     // For templates, we need actual content
@@ -188,11 +189,31 @@ export async function POST(request: NextRequest) {
 async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
   switch (fileType) {
     case "pdf": {
-      // Dynamic import for pdf-parse (new API)
+      // Dynamic import for pdf-parse (v2 API)
       const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      return textResult.text;
+      let parser: InstanceType<typeof PDFParse> | null = null;
+      try {
+        parser = new PDFParse({ data: buffer });
+        const textResult = await parser.getText();
+        if (!textResult.text || textResult.text.trim().length === 0) {
+          throw new Error("PDF appears to be image-based or contains no extractable text");
+        }
+        return textResult.text;
+      } catch (pdfError) {
+        const msg = pdfError instanceof Error ? pdfError.message : "Unknown PDF parsing error";
+        // Provide more helpful error messages for common issues
+        if (msg.includes("password") || msg.includes("encrypted")) {
+          throw new Error("PDF is password-protected. Please provide an unencrypted version.");
+        }
+        if (msg.includes("Invalid PDF") || msg.includes("not a PDF")) {
+          throw new Error("File does not appear to be a valid PDF.");
+        }
+        throw new Error(`PDF parsing failed: ${msg}`);
+      } finally {
+        if (parser) {
+          await parser.destroy().catch(() => {});
+        }
+      }
     }
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });

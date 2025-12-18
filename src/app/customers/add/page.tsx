@@ -189,21 +189,20 @@ export default function CustomerProfileBuilderPage() {
         }
 
         const json3 = await response.json();
-        const data = parseApiData<{ document: { id: string } }>(json3);
+        const data = parseApiData<{ document: { id: string; content: string } }>(json3);
 
-        const contentResponse = await fetch(`/api/documents/${data.document.id}`);
-        if (contentResponse.ok) {
-          const contentJson = await contentResponse.json();
-          const contentData = parseApiData<{ content: string }>(contentJson, "document");
+        // Content is returned directly in the response now
+        if (data.document.content) {
           newDocs.push({
             name: file.name,
-            content: contentData.content,
+            content: data.document.content,
             size: file.size,
             file: file, // Keep original file for attachment after save
           });
-
-          await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
         }
+
+        // Delete the temporary document
+        await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
       } catch (err) {
         setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
       }
