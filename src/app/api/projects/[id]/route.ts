@@ -44,6 +44,13 @@ export async function GET(request: NextRequest, context: RouteContext) {
         owner: {
           select: { id: true, name: true, email: true },
         },
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            industry: true,
+          },
+        },
         customerProfiles: {
           include: {
             profile: {
@@ -88,7 +95,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const body = await request.json();
 
     const {
-      name, sheetName, columns, rows, ownerId, ownerName, customerName, notes, status,
+      name, sheetName, columns, rows, ownerId, ownerName, customerName, customerId, notes, status,
       reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy,
       customerProfileIds
     } = body;
@@ -141,6 +148,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       if (ownerId !== undefined) updateData.ownerId = ownerId || null;
       if (ownerName !== undefined) updateData.ownerName = ownerName;
       if (customerName !== undefined) updateData.customerName = customerName;
+      if (customerId !== undefined) updateData.customerId = customerId || null;
       if (notes !== undefined) updateData.notes = notes;
       if (projectStatus) updateData.status = projectStatus;
       if (reviewRequestedAt !== undefined) updateData.reviewRequestedAt = reviewRequestedAt ? new Date(reviewRequestedAt) : null;
@@ -225,6 +233,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         where: { id },
         include: {
           rows: { orderBy: { rowNumber: "asc" } },
+          customer: {
+            select: { id: true, name: true, industry: true },
+          },
           customerProfiles: {
             include: {
               profile: {

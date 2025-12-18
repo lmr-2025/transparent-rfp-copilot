@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 
-// GET /api/reviews - Get pending reviews across all projects and questions
+// GET /api/reviews - Get pending reviews across all projects, questions, collateral, and chat
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get("limit") || "50", 10);
     const assignedTo = searchParams.get("assignedTo"); // Filter by assigned reviewer ID
     const includeUnassigned = searchParams.get("includeUnassigned") !== "false"; // Include unassigned by default
-    const source = searchParams.get("source"); // "projects", "questions", or null for both
+    const source = searchParams.get("source"); // "projects", "questions", "collateral", "chat", or null for all
     const type = searchParams.get("type"); // "review", "flagged", or null for both
 
     // Build base where clause for assignedTo filtering
@@ -68,9 +68,27 @@ export async function GET(request: NextRequest) {
       ];
     }
 
-    // Fetch from both sources based on filter
+    // Build where clause for CollateralOutput (same pattern)
+    let collateralWhereClause: Record<string, unknown> = { ...assignedToClause };
+    if (type === "flagged") {
+      collateralWhereClause.flaggedForReview = true;
+      collateralWhereClause.flagResolved = { not: true };
+    } else if (type === "resolved") {
+      collateralWhereClause.flaggedForReview = true;
+      collateralWhereClause.flagResolved = true;
+    } else if (type === "review") {
+      collateralWhereClause.reviewStatus = status as "REQUESTED" | "APPROVED" | "CORRECTED";
+    } else {
+      collateralWhereClause.OR = [
+        { reviewStatus: status as "REQUESTED" | "APPROVED" | "CORRECTED" },
+        { flaggedForReview: true, flagResolved: { not: true } },
+      ];
+    }
+
+    // Fetch from sources based on filter
     const shouldFetchRows = !source || source === "projects";
     const shouldFetchQuestions = !source || source === "questions";
+    const shouldFetchCollateral = !source || source === "collateral";
 
     // Get rows that need review (from Projects)
     const pendingRows = shouldFetchRows
@@ -96,6 +114,32 @@ export async function GET(request: NextRequest) {
     const pendingQuestions = shouldFetchQuestions
       ? await prisma.questionHistory.findMany({
           where: questionWhereClause,
+          orderBy: {
+            reviewRequestedAt: "desc",
+          },
+          take: limit,
+        })
+      : [];
+
+    // Get collateral that needs review (from Collateral Builder)
+    const pendingCollateral = shouldFetchCollateral
+      ? await prisma.collateralOutput.findMany({
+          where: collateralWhereClause,
+          include: {
+            owner: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+            customer: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
           orderBy: {
             reviewRequestedAt: "desc",
           },
@@ -165,8 +209,43 @@ export async function GET(request: NextRequest) {
       userEmail: q.userEmail,
     }));
 
+    // Transform collateral to a cleaner format
+    const collateralReviews = pendingCollateral.map((c) => ({
+      id: c.id,
+      rowNumber: null,
+      title: c.name,
+      content: c.generatedMarkdown || "",
+      reviewStatus: c.reviewStatus,
+      // Review workflow fields
+      reviewRequestedAt: c.reviewRequestedAt?.toISOString(),
+      reviewRequestedBy: c.reviewRequestedBy,
+      reviewNote: c.reviewNote,
+      assignedReviewerId: c.assignedReviewerId,
+      assignedReviewerName: c.assignedReviewerName,
+      reviewedAt: c.reviewedAt?.toISOString(),
+      reviewedBy: c.reviewedBy,
+      // Flagging fields
+      flaggedForReview: c.flaggedForReview,
+      flaggedAt: c.flaggedAt?.toISOString(),
+      flaggedBy: c.flaggedBy,
+      flagNote: c.flagNote,
+      // Flag resolution fields
+      flagResolved: c.flagResolved,
+      flagResolvedAt: c.flagResolvedAt?.toISOString(),
+      flagResolvedBy: c.flagResolvedBy,
+      flagResolutionNote: c.flagResolutionNote,
+      // Additional context
+      templateName: c.templateName,
+      customerName: c.customerName,
+      owner: c.owner,
+      customer: c.customer,
+      project: null,
+      source: "collateral" as const,
+      createdAt: c.createdAt?.toISOString(),
+    }));
+
     // Combine and sort by most recent date (reviewRequestedAt or flaggedAt)
-    const reviews = [...projectReviews, ...questionReviews]
+    const reviews = [...projectReviews, ...questionReviews, ...collateralReviews]
       .sort((a, b) => {
         const dateA = Math.max(
           a.reviewRequestedAt ? new Date(a.reviewRequestedAt).getTime() : 0,
@@ -204,6 +283,17 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const collateralReviewCounts = await prisma.collateralOutput.groupBy({
+      by: ["reviewStatus"],
+      _count: true,
+      where: {
+        ...assignedToClause,
+        reviewStatus: {
+          in: ["REQUESTED", "APPROVED", "CORRECTED"],
+        },
+      },
+    });
+
     // Flagged counts (exclude resolved flags)
     const rowFlaggedCount = await prisma.bulkRow.count({
       where: {
@@ -214,6 +304,14 @@ export async function GET(request: NextRequest) {
     });
 
     const questionFlaggedCount = await prisma.questionHistory.count({
+      where: {
+        ...assignedToClause,
+        flaggedForReview: true,
+        flagResolved: { not: true },
+      },
+    });
+
+    const collateralFlaggedCount = await prisma.collateralOutput.count({
       where: {
         ...assignedToClause,
         flaggedForReview: true,
@@ -238,18 +336,29 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const collateralResolvedCount = await prisma.collateralOutput.count({
+      where: {
+        ...assignedToClause,
+        flaggedForReview: true,
+        flagResolved: true,
+      },
+    });
+
     const countMap = {
       pending:
         (rowReviewCounts.find((c) => c.reviewStatus === "REQUESTED")?._count || 0) +
-        (questionReviewCounts.find((c) => c.reviewStatus === "REQUESTED")?._count || 0),
+        (questionReviewCounts.find((c) => c.reviewStatus === "REQUESTED")?._count || 0) +
+        (collateralReviewCounts.find((c) => c.reviewStatus === "REQUESTED")?._count || 0),
       approved:
         (rowReviewCounts.find((c) => c.reviewStatus === "APPROVED")?._count || 0) +
-        (questionReviewCounts.find((c) => c.reviewStatus === "APPROVED")?._count || 0),
+        (questionReviewCounts.find((c) => c.reviewStatus === "APPROVED")?._count || 0) +
+        (collateralReviewCounts.find((c) => c.reviewStatus === "APPROVED")?._count || 0),
       corrected:
         (rowReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0) +
-        (questionReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0),
-      flagged: rowFlaggedCount + questionFlaggedCount,
-      resolved: rowResolvedCount + questionResolvedCount,
+        (questionReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0) +
+        (collateralReviewCounts.find((c) => c.reviewStatus === "CORRECTED")?._count || 0),
+      flagged: rowFlaggedCount + questionFlaggedCount + collateralFlaggedCount,
+      resolved: rowResolvedCount + questionResolvedCount + collateralResolvedCount,
     };
 
     return apiSuccess({

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { createProfile } from "@/lib/customerProfileApi";
+import { createProfile, updateProfile } from "@/lib/customerProfileApi";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseApiData } from "@/lib/apiClient";
 import {
@@ -36,6 +36,7 @@ export default function CustomerProfileBuilderPage() {
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [draft, setDraft] = useState<CustomerProfileDraft | null>(null);
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
+  const [updateProfileId, setUpdateProfileId] = useState<string | null>(null); // Track profile ID for updates
 
   // Document upload state
   const [uploadedDocs, setUploadedDocs] = useState<UploadedDocument[]>([]);
@@ -166,26 +167,18 @@ export default function CustomerProfileBuilderPage() {
     setSfEnrichment(null);
   };
 
-  // Handle file upload - now stores File object for later attachment
+  // Handle file upload - now just adds files to the list without processing
+  // Processing happens later when creating the profile
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     setError(null);
-    setIsUploading(true);
-
     const fileArray = Array.from(files);
     const newDocs: UploadedDocument[] = [];
 
-    // Create abort controller for this upload session
-    uploadAbortControllerRef.current = new AbortController();
-
-    for (let i = 0; i < fileArray.length; i++) {
-      const file = fileArray[i];
+    for (const file of fileArray) {
       const filename = file.name.toLowerCase();
-
-      // Update progress
-      setUploadProgress({ current: i + 1, total: fileArray.length, currentFileName: file.name });
 
       if (
         !filename.endsWith(".pdf") &&
@@ -197,60 +190,26 @@ export default function CustomerProfileBuilderPage() {
         continue;
       }
 
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("title", file.name);
-
-        // Use AbortController with 3 minute timeout for PDF processing (Claude extraction can take time)
-        const timeoutId = setTimeout(() => {
-          uploadAbortControllerRef.current?.abort();
-        }, 180000); // 3 minutes
-
-        const response = await fetch("/api/documents", {
-          method: "POST",
-          body: formData,
-          signal: uploadAbortControllerRef.current.signal,
-        });
-
-        clearTimeout(timeoutId);
-
-        const json = await response.json();
-
-        if (!response.ok) {
-          throw new Error(json.error || `Failed to process ${file.name}`);
-        }
-
-        const data = parseApiData<{ document: { id: string; content: string } }>(json);
-
-        // Content is returned directly in the response now
-        if (data.document.content) {
-          newDocs.push({
-            name: file.name,
-            content: data.document.content,
-            size: file.size,
-            file: file, // Keep original file for attachment after save
-          });
-        }
-
-        // Delete the temporary document
-        await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          setError(`Upload timed out for ${file.name}. Please try again with a smaller file.`);
-        } else {
-          setError(err instanceof Error ? err.message : `Failed to process ${file.name}`);
-        }
+      // Check file size (20MB limit)
+      const MAX_FILE_SIZE = 20 * 1024 * 1024;
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`File ${file.name} exceeds 20MB limit`);
+        continue;
       }
+
+      // Just add to list - no processing yet
+      newDocs.push({
+        name: file.name,
+        content: "", // Will be populated when profile is created
+        size: file.size,
+        file: file,
+        processForContent: true, // Default to processing for content
+      });
     }
 
     if (newDocs.length > 0) {
       setUploadedDocs((prev) => [...prev, ...newDocs]);
     }
-
-    setIsUploading(false);
-    setUploadProgress(null);
-    uploadAbortControllerRef.current = null;
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -259,6 +218,14 @@ export default function CustomerProfileBuilderPage() {
 
   const removeDocument = (index: number) => {
     setUploadedDocs((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const toggleProcessContent = (index: number) => {
+    setUploadedDocs((prev) =>
+      prev.map((doc, i) =>
+        i === index ? { ...doc, processForContent: !doc.processForContent } : doc
+      )
+    );
   };
 
   // Step 1: Analyze URLs and Documents
@@ -280,8 +247,64 @@ export default function CustomerProfileBuilderPage() {
 
     setIsAnalyzing(true);
     try {
-      const documentContent = uploadedDocs.length > 0
-        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
+      // First, extract content from documents marked for processing
+      const docsToProcess = uploadedDocs.filter(doc => doc.processForContent);
+      if (docsToProcess.length > 0 && !docsToProcess.every(doc => doc.content)) {
+        // Extract content from documents that need it
+        setIsUploading(true);
+        for (let i = 0; i < docsToProcess.length; i++) {
+          const doc = docsToProcess[i];
+          if (doc.content) continue; // Skip if already has content
+
+          setUploadProgress({ current: i + 1, total: docsToProcess.length, currentFileName: doc.name });
+
+          try {
+            const formData = new FormData();
+            formData.append("file", doc.file);
+            formData.append("title", doc.name);
+
+            const response = await fetch("/api/documents", {
+              method: "POST",
+              body: formData,
+            });
+
+            const json = await response.json();
+            if (!response.ok) {
+              throw new Error(json.error || `Failed to process ${doc.name}`);
+            }
+
+            const data = parseApiData<{ document: { id: string; content: string } }>(json);
+
+            // Update document with extracted content
+            const docIndex = uploadedDocs.findIndex(d => d.name === doc.name);
+            if (docIndex >= 0) {
+              setUploadedDocs(prev => {
+                const updated = [...prev];
+                updated[docIndex] = { ...updated[docIndex], content: data.document.content };
+                return updated;
+              });
+            }
+
+            // Delete temporary document
+            await fetch(`/api/documents/${data.document.id}`, { method: "DELETE" });
+          } catch (err) {
+            setError(err instanceof Error ? err.message : `Failed to process ${doc.name}`);
+            setIsUploading(false);
+            setUploadProgress(null);
+            setIsAnalyzing(false);
+            return;
+          }
+        }
+        setIsUploading(false);
+        setUploadProgress(null);
+      }
+
+      // Now analyze with extracted content
+      const documentContent = uploadedDocs.filter(doc => doc.processForContent && doc.content).length > 0
+        ? uploadedDocs
+            .filter(doc => doc.processForContent && doc.content)
+            .map((doc) => `[Document: ${doc.name}]\n${doc.content}`)
+            .join("\n\n---\n\n")
         : undefined;
 
       const response = await fetch("/api/customers/analyze", {
@@ -290,7 +313,7 @@ export default function CustomerProfileBuilderPage() {
         body: JSON.stringify({
           sourceUrls: urls,
           documentContent,
-          documentNames: uploadedDocs.map((d) => d.name),
+          documentNames: uploadedDocs.filter(doc => doc.processForContent).map((d) => d.name),
         }),
       });
 
@@ -320,8 +343,27 @@ export default function CustomerProfileBuilderPage() {
     setIsBuilding(true);
 
     try {
-      const documentContent = uploadedDocs.length > 0
-        ? uploadedDocs.map((doc) => `[Document: ${doc.name}]\n${doc.content}`).join("\n\n---\n\n")
+      // If updating, fetch the existing profile data first
+      let existingProfileData = null;
+      if (forUpdate) {
+        const profileResponse = await fetch(`/api/customers/${forUpdate.profileId}`);
+        if (!profileResponse.ok) {
+          throw new Error("Failed to fetch existing profile");
+        }
+        const profileJson = await profileResponse.json();
+        const profile = parseApiData<{ profile: any }>(profileJson);
+        existingProfileData = {
+          name: profile.profile.name,
+          content: profile.profile.content || profile.profile.overview || "",
+        };
+        setUpdateProfileId(forUpdate.profileId); // Save the ID for later save operation
+      }
+
+      const documentContent = uploadedDocs.filter(doc => doc.processForContent && doc.content).length > 0
+        ? uploadedDocs
+            .filter(doc => doc.processForContent && doc.content)
+            .map((doc) => `[Document: ${doc.name}]\n${doc.content}`)
+            .join("\n\n---\n\n")
         : undefined;
 
       const response = await fetch("/api/customers/suggest", {
@@ -330,8 +372,8 @@ export default function CustomerProfileBuilderPage() {
         body: JSON.stringify({
           sourceUrls,
           documentContent,
-          documentNames: uploadedDocs.map((d) => d.name),
-          ...(forUpdate && { existingProfile: {} }),
+          documentNames: uploadedDocs.filter(doc => doc.processForContent).map((d) => d.name),
+          ...(existingProfileData && { existingProfile: existingProfileData }),
         }),
       });
 
@@ -383,64 +425,90 @@ export default function CustomerProfileBuilderPage() {
         uploadedAt: now,
       }));
 
-      // Create profile with new content field
-      const newProfile = await createProfile({
-        name: draft.name,
-        industry: draft.industry,
-        website: draft.website,
-        content: draft.content,
-        considerations: draft.considerations || [],
-        // Legacy fields - set overview to content for backwards compat
-        overview: draft.content,
-        keyFacts: [],
-        sourceUrls: sourceUrlsToSave,
-        sourceDocuments,
-        isActive: true,
-        // Static fields from Salesforce (if imported from Salesforce)
-        ...(salesforceStaticFields && {
-          salesforceId: salesforceStaticFields.salesforceId,
-          region: salesforceStaticFields.region || undefined,
-          tier: salesforceStaticFields.tier || undefined,
-          employeeCount: salesforceStaticFields.employeeCount || undefined,
-          annualRevenue: salesforceStaticFields.annualRevenue || undefined,
-          accountType: salesforceStaticFields.accountType || undefined,
-          billingLocation: salesforceStaticFields.billingLocation || undefined,
-          lastSalesforceSync: now,
-        }),
-      });
+      let savedProfile;
 
-      // Attach uploaded documents to the new profile
+      if (updateProfileId) {
+        // Update existing profile
+        savedProfile = await updateProfile(updateProfileId, {
+          name: draft.name,
+          industry: draft.industry,
+          website: draft.website,
+          content: draft.content,
+          considerations: draft.considerations || [],
+          // Legacy fields - set overview to content for backwards compat
+          overview: draft.content,
+          sourceUrls: sourceUrlsToSave,
+          sourceDocuments,
+        });
+      } else {
+        // Create new profile
+        savedProfile = await createProfile({
+          name: draft.name,
+          industry: draft.industry,
+          website: draft.website,
+          content: draft.content,
+          considerations: draft.considerations || [],
+          // Legacy fields - set overview to content for backwards compat
+          overview: draft.content,
+          keyFacts: [],
+          sourceUrls: sourceUrlsToSave,
+          sourceDocuments,
+          isActive: true,
+          // Static fields from Salesforce (if imported from Salesforce)
+          ...(salesforceStaticFields && {
+            salesforceId: salesforceStaticFields.salesforceId,
+            region: salesforceStaticFields.region || undefined,
+            tier: salesforceStaticFields.tier || undefined,
+            employeeCount: salesforceStaticFields.employeeCount || undefined,
+            annualRevenue: salesforceStaticFields.annualRevenue || undefined,
+            accountType: salesforceStaticFields.accountType || undefined,
+            billingLocation: salesforceStaticFields.billingLocation || undefined,
+            lastSalesforceSync: now,
+          }),
+        });
+      }
+
+      // Attach uploaded documents to the profile using batch upload
       let attachedCount = 0;
-      for (const doc of uploadedDocs) {
+      if (uploadedDocs.length > 0) {
         try {
           const formData = new FormData();
-          formData.append("file", doc.file);
-          formData.append("title", doc.name.replace(/\.[^/.]+$/, "")); // Remove extension
-          if (doc.docType) {
-            formData.append("docType", doc.docType);
-          }
 
-          const attachResponse = await fetch(`/api/customers/${newProfile.id}/documents`, {
+          // Add all files
+          uploadedDocs.forEach((doc) => {
+            formData.append("files", doc.file);
+          });
+
+          // Add array of booleans indicating which files to process for content
+          formData.append("processForContent", JSON.stringify(uploadedDocs.map(doc => doc.processForContent)));
+
+          const batchResponse = await fetch(`/api/customers/${savedProfile.id}/documents/batch`, {
             method: "POST",
             body: formData,
           });
 
-          if (attachResponse.ok) {
-            attachedCount++;
+          if (batchResponse.ok) {
+            const batchData = parseApiData<{ summary: { successful: number; failed: number } }>(await batchResponse.json());
+            attachedCount = batchData.summary.successful;
+
+            if (batchData.summary.failed > 0) {
+              console.warn(`${batchData.summary.failed} document(s) failed to upload`);
+            }
           }
-        } catch {
-          // Continue even if one doc fails to attach
-          console.error(`Failed to attach document: ${doc.name}`);
+        } catch (err) {
+          console.error("Failed to batch upload documents:", err);
         }
       }
 
       const docMessage = attachedCount > 0 ? ` with ${attachedCount} document(s) attached` : "";
-      setSuccessMessage(`Profile "${draft.name}" created successfully${docMessage}!`);
+      const actionVerb = updateProfileId ? "updated" : "created";
+      setSuccessMessage(`Profile "${draft.name}" ${actionVerb} successfully${docMessage}!`);
       setDraft(null);
       setUrlInput("");
       setSourceUrls([]);
       setUploadedDocs([]);
       setSalesforceStaticFields(null);
+      setUpdateProfileId(null); // Clear update mode
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save profile");
     } finally {
@@ -504,6 +572,7 @@ export default function CustomerProfileBuilderPage() {
           uploadedDocs={uploadedDocs}
           onFileUpload={handleFileUpload}
           onRemoveDocument={removeDocument}
+          onToggleProcessContent={toggleProcessContent}
           onAnalyze={handleAnalyze}
           onViewPrompt={() => setShowTransparencyModal("preview")}
           salesforceConfigured={salesforceConfigured}
@@ -533,7 +602,10 @@ export default function CustomerProfileBuilderPage() {
           analyzeTransparency={analyzeTransparency}
           isBuilding={isBuilding}
           onBuild={handleBuild}
-          onCancel={() => setAnalysisResult(null)}
+          onCancel={() => {
+            setAnalysisResult(null);
+            setUpdateProfileId(null); // Clear update mode
+          }}
           onViewPrompt={() => setShowTransparencyModal("analyze")}
         />
       )}
@@ -602,6 +674,7 @@ export default function CustomerProfileBuilderPage() {
               setUploadedDocs([]);
               setEmptyContentWarning(false);
               setSalesforceStaticFields(null);
+              setUpdateProfileId(null); // Clear update mode
             }}
             onViewPrompt={() => setShowTransparencyModal("build")}
           />

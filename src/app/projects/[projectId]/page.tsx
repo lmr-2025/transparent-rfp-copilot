@@ -845,20 +845,24 @@ export default function BulkResponsesPage() {
 
     setSavingCustomers(true);
     try {
+      // Use the first selected ID as the primary customer (single select)
+      const customerId = selectedIds.length > 0 ? selectedIds[0] : null;
+
       const response = await fetch(`/api/projects/${project.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerProfileIds: selectedIds }),
+        body: JSON.stringify({ customerId }),
       });
 
-      if (!response.ok) throw new Error("Failed to save customer profiles");
+      if (!response.ok) throw new Error("Failed to save customer");
 
       const json = await response.json();
       const data = parseApiData<{ project: BulkProject }>(json);
       setProject(data.project);
       setShowCustomerSelector(false);
+      toast.success("Customer updated!");
     } catch {
-      toast.error("Failed to save customer profiles. Please try again.");
+      toast.error("Failed to save customer. Please try again.");
     } finally {
       setSavingCustomers(false);
     }
@@ -932,6 +936,66 @@ export default function BulkResponsesPage() {
         onEditCustomers={() => setShowCustomerSelector(true)}
         onEditOwner={() => setShowOwnerSelector(true)}
       />
+
+      {/* Customer Profile Info Section */}
+      {project.customer && (
+        <div style={{
+          ...styles.card,
+          backgroundColor: "#fafaf9",
+          borderColor: "#e7e5e4",
+          marginBottom: "16px",
+        }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+            <div style={{
+              backgroundColor: "#e0e7ff",
+              color: "#4338ca",
+              padding: "8px",
+              borderRadius: "6px",
+              fontSize: "1.2rem",
+            }}>
+              🏢
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 600 }}>
+                  {project.customer.name}
+                </h3>
+                {project.customer.industry && (
+                  <span style={{
+                    fontSize: "0.75rem",
+                    padding: "2px 6px",
+                    backgroundColor: "#dbeafe",
+                    color: "#1e40af",
+                    borderRadius: "3px",
+                  }}>
+                    {project.customer.industry}
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: "4px 0 0 0", fontSize: "0.85rem", color: "#64748b" }}>
+                Customer profile linked to this RFP • Profile content available for reference
+              </p>
+            </div>
+            <a
+              href={`/customers/${project.customer.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                padding: "6px 12px",
+                fontSize: "0.85rem",
+                backgroundColor: "#fff",
+                border: "1px solid #e2e8f0",
+                borderRadius: "4px",
+                color: "#475569",
+                textDecoration: "none",
+                cursor: "pointer",
+              }}
+            >
+              View Profile →
+            </a>
+          </div>
+        </div>
+      )}
 
       <FilterBar
         statusFilter={statusFilter}
@@ -1124,13 +1188,13 @@ export default function BulkResponsesPage() {
             }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 style={{ margin: "0 0 8px 0" }}>Link Customer Profiles</h3>
+            <h3 style={{ margin: "0 0 8px 0" }}>Select Customer Profile</h3>
             <p style={{ color: "#64748b", fontSize: "14px", margin: "0 0 16px 0" }}>
-              Select which customer profiles are associated with this project.
+              Choose the primary customer profile for this RFP project.
             </p>
             <CustomerProfileSelector
               profiles={allCustomerProfiles}
-              selectedIds={(project.customerProfiles || []).map((cp) => cp.id)}
+              selectedIds={project.customer ? [project.customer.id] : []}
               onSave={handleSaveCustomerProfiles}
               onCancel={() => setShowCustomerSelector(false)}
               saving={savingCustomers}

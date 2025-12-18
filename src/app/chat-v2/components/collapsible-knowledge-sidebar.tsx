@@ -118,10 +118,12 @@ export function CollapsibleKnowledgeSidebar({
     documentSelections,
     urlSelections,
     customerSelections,
+    customerDocumentSelections,
     toggleSkill,
     toggleDocument,
     toggleUrl,
     toggleCustomer,
+    toggleCustomerDocument,
     selectAllSkills,
     selectNoSkills,
     selectAllDocuments,
@@ -130,6 +132,8 @@ export function CollapsibleKnowledgeSidebar({
     selectNoUrls,
     selectAllCustomers,
     selectNoCustomers,
+    selectAllCustomerDocuments,
+    selectNoCustomerDocuments,
   } = useSelectionStore();
 
   // Extract library URLs from selected skills
@@ -415,19 +419,6 @@ export function CollapsibleKnowledgeSidebar({
           </CardHeader>
           {expandedSections.customer && (
             <CardContent className="py-2 px-3 space-y-3">
-              {/* Customer selector (for context injection) */}
-              <KnowledgeSourceList
-                title="Customer Profiles"
-                icon={<FileText className="h-4 w-4" />}
-                items={customers.map((c) => ({ id: c.id, label: c.name }))}
-                selections={customerSelections}
-                onToggle={toggleCustomer}
-                onSelectAll={selectAllCustomers}
-                onSelectNone={selectNoCustomers}
-                emptyMessage="No customers available"
-                compact
-              />
-
               {selectedCustomer ? (
                 <>
                   {/* Customer documents */}
@@ -445,15 +436,40 @@ export function CollapsibleKnowledgeSidebar({
                       {/* Proposals */}
                       {groupedDocs.proposal.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <FileCheck className="h-3 w-3" />
-                            Proposals ({groupedDocs.proposal.length})
+                          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <FileCheck className="h-3 w-3" />
+                              Proposals ({groupedDocs.proposal.length})
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => selectAllCustomerDocuments(groupedDocs.proposal.map(d => d.id))}
+                                className="text-[10px] text-primary hover:underline"
+                              >
+                                All
+                              </button>
+                              <span className="text-muted-foreground">|</span>
+                              <button
+                                onClick={() => groupedDocs.proposal.forEach(d => customerDocumentSelections.set(d.id, false))}
+                                className="text-[10px] text-primary hover:underline"
+                              >
+                                None
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {groupedDocs.proposal.map((doc) => (
-                              <div key={doc.id} className="text-xs truncate" title={doc.filename}>
-                                {doc.title}
-                              </div>
+                              <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={customerDocumentSelections.get(doc.id) || false}
+                                  onChange={() => toggleCustomerDocument(doc.id)}
+                                  className="h-3 w-3 rounded cursor-pointer"
+                                />
+                                <span className="text-xs truncate flex-1" title={doc.filename}>
+                                  {doc.title}
+                                </span>
+                              </label>
                             ))}
                           </div>
                         </div>
@@ -462,15 +478,40 @@ export function CollapsibleKnowledgeSidebar({
                       {/* Meeting Notes */}
                       {groupedDocs.meeting_notes.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <StickyNote className="h-3 w-3" />
-                            Meeting Notes ({groupedDocs.meeting_notes.length})
+                          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <StickyNote className="h-3 w-3" />
+                              Meeting Notes ({groupedDocs.meeting_notes.length})
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => selectAllCustomerDocuments(groupedDocs.meeting_notes.map(d => d.id))}
+                                className="text-[10px] text-primary hover:underline"
+                              >
+                                All
+                              </button>
+                              <span className="text-muted-foreground">|</span>
+                              <button
+                                onClick={selectNoCustomerDocuments}
+                                className="text-[10px] text-primary hover:underline"
+                              >
+                                None
+                              </button>
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {groupedDocs.meeting_notes.map((doc) => (
-                              <div key={doc.id} className="text-xs truncate" title={doc.filename}>
-                                {doc.title}
-                              </div>
+                              <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={customerDocumentSelections.get(doc.id) || false}
+                                  onChange={() => toggleCustomerDocument(doc.id)}
+                                  className="h-3 w-3 rounded cursor-pointer"
+                                />
+                                <span className="text-xs truncate flex-1" title={doc.filename}>
+                                  {doc.title}
+                                </span>
+                              </label>
                             ))}
                           </div>
                         </div>
@@ -479,15 +520,25 @@ export function CollapsibleKnowledgeSidebar({
                       {/* Requirements */}
                       {groupedDocs.requirements.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <FileText className="h-3 w-3" />
-                            Requirements ({groupedDocs.requirements.length})
+                          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-3 w-3" />
+                              Requirements ({groupedDocs.requirements.length})
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {groupedDocs.requirements.map((doc) => (
-                              <div key={doc.id} className="text-xs truncate" title={doc.filename}>
-                                {doc.title}
-                              </div>
+                              <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={customerDocumentSelections.get(doc.id) || false}
+                                  onChange={() => toggleCustomerDocument(doc.id)}
+                                  className="h-3 w-3 rounded cursor-pointer"
+                                />
+                                <span className="text-xs truncate flex-1" title={doc.filename}>
+                                  {doc.title}
+                                </span>
+                              </label>
                             ))}
                           </div>
                         </div>
@@ -496,15 +547,25 @@ export function CollapsibleKnowledgeSidebar({
                       {/* Contracts */}
                       {groupedDocs.contract.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <FileCheck className="h-3 w-3" />
-                            Contracts ({groupedDocs.contract.length})
+                          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <FileCheck className="h-3 w-3" />
+                              Contracts ({groupedDocs.contract.length})
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {groupedDocs.contract.map((doc) => (
-                              <div key={doc.id} className="text-xs truncate" title={doc.filename}>
-                                {doc.title}
-                              </div>
+                              <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={customerDocumentSelections.get(doc.id) || false}
+                                  onChange={() => toggleCustomerDocument(doc.id)}
+                                  className="h-3 w-3 rounded cursor-pointer"
+                                />
+                                <span className="text-xs truncate flex-1" title={doc.filename}>
+                                  {doc.title}
+                                </span>
+                              </label>
                             ))}
                           </div>
                         </div>
@@ -513,15 +574,25 @@ export function CollapsibleKnowledgeSidebar({
                       {/* Other */}
                       {groupedDocs.other.length > 0 && (
                         <div className="space-y-1">
-                          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                            <FileText className="h-3 w-3" />
-                            Other Documents ({groupedDocs.other.length})
+                          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-3 w-3" />
+                              Other Documents ({groupedDocs.other.length})
+                            </div>
                           </div>
                           <div className="space-y-0.5 pl-5">
                             {groupedDocs.other.map((doc) => (
-                              <div key={doc.id} className="text-xs truncate" title={doc.filename}>
-                                {doc.title}
-                              </div>
+                              <label key={doc.id} className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5">
+                                <input
+                                  type="checkbox"
+                                  checked={customerDocumentSelections.get(doc.id) || false}
+                                  onChange={() => toggleCustomerDocument(doc.id)}
+                                  className="h-3 w-3 rounded cursor-pointer"
+                                />
+                                <span className="text-xs truncate flex-1" title={doc.filename}>
+                                  {doc.title}
+                                </span>
+                              </label>
                             ))}
                           </div>
                         </div>

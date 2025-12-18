@@ -130,23 +130,22 @@ export default function ProjectHeader({
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "10px", fontSize: "0.9rem" }}>
           <span>
-            <strong>Customers:</strong>{" "}
-            {project.customerProfiles && project.customerProfiles.length > 0 ? (
-              <span>
-                {project.customerProfiles.map((cp: ProjectCustomerProfileRef) => (
-                  <span key={cp.id} style={{
-                    display: "inline-block",
-                    padding: "2px 8px",
-                    backgroundColor: "#e0e7ff",
-                    color: "#4338ca",
-                    borderRadius: "4px",
-                    fontSize: "0.8rem",
-                    fontWeight: 500,
-                    marginRight: "4px",
-                  }}>
-                    {cp.name}
-                  </span>
-                ))}
+            <strong>Customer:</strong>{" "}
+            {project.customer ? (
+              <span style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                backgroundColor: "#e0e7ff",
+                color: "#4338ca",
+                borderRadius: "4px",
+                fontSize: "0.8rem",
+                fontWeight: 500,
+                marginRight: "4px",
+              }}>
+                {project.customer.name}
+                {project.customer.industry && (
+                  <span style={{ color: "#6366f1", marginLeft: "4px" }}>({project.customer.industry})</span>
+                )}
               </span>
             ) : (
               <span style={{ color: "#94a3b8" }}>None linked</span>
@@ -164,7 +163,7 @@ export default function ProjectHeader({
                 cursor: "pointer",
               }}
             >
-              Edit
+              {project.customer ? "Change" : "Select"}
             </button>
           </span>
           <span style={{ color: "#64748b" }}>
