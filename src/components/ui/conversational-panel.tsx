@@ -328,6 +328,8 @@ export function ConversationalPanel({
         flexDirection: "column",
         backgroundColor: "#fff",
         minWidth: 0,
+        minHeight: 0,
+        overflow: "hidden",
       }}
     >
       {/* Optional Header */}
@@ -342,6 +344,7 @@ export function ConversationalPanel({
           flex: 1,
           overflowY: "auto",
           padding: "24px",
+          minHeight: 0,
         }}
       >
         {messages.map((msg, idx) => (

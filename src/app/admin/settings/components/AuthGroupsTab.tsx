@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, X, Check, AlertCircle, Shield } from "lucide-react";
 import { Capability } from "@prisma/client";
 import { InlineLoader } from "@/components/ui/loading";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface AuthGroupMapping {
   id: string;
@@ -27,11 +29,10 @@ const ALL_CAPABILITIES: { value: Capability; label: string; description: string 
 ];
 
 export default function AuthGroupsTab() {
-  const [mappings, setMappings] = useState<AuthGroupMapping[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   // Form state
   const [formProvider, setFormProvider] = useState("okta");
@@ -39,40 +40,47 @@ export default function AuthGroupsTab() {
   const [formGroupName, setFormGroupName] = useState("");
   const [formCapabilities, setFormCapabilities] = useState<Capability[]>([]);
 
-  useEffect(() => {
-    fetchMappings();
-  }, []);
+  // Fetch mappings
+  const {
+    data: mappings = [],
+    isLoading: loading,
+  } = useApiQuery<AuthGroupMapping[]>({
+    queryKey: ["auth-groups"],
+    url: "/api/auth-groups",
+    responseKey: "mappings",
+    transform: (data) => (Array.isArray(data) ? data : []),
+  });
 
-  const fetchMappings = async () => {
-    try {
-      const res = await fetch("/api/auth-groups");
-      if (!res.ok) throw new Error("Failed to fetch auth groups");
-      const json = await res.json();
-      // API returns { data: { mappings: [...] } }
-      setMappings(json.data?.mappings || []);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load auth groups");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Seed defaults mutation
+  const seedMutation = useApiMutation<{ message: string }, void>({
+    url: "/api/auth-groups/seed",
+    method: "POST",
+    invalidateKeys: [["auth-groups"]],
+    onSuccess: (data) => {
+      toast.success(data?.message || "Default groups seeded");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to seed defaults");
+    },
+  });
 
-  const handleSeedDefaults = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/auth-groups/seed", { method: "POST" });
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error?.message || "Failed to seed defaults");
-      }
-      const json = await res.json();
-      toast.success(json.data?.message || "Default groups seeded");
-      fetchMappings();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to seed defaults");
-    } finally {
-      setSaving(false);
-    }
+  // Delete mutation
+  const deleteMutation = useApiMutation<void, string>({
+    url: (id) => `/api/auth-groups?id=${id}`,
+    method: "DELETE",
+    invalidateKeys: [["auth-groups"]],
+    onSuccess: () => {
+      toast.success("Group deleted");
+    },
+    onError: (err) => {
+      toast.error(err.message || "Failed to delete");
+    },
+  });
+
+  const saving = seedMutation.isPending || isSaving || deleteMutation.isPending;
+
+  const handleSeedDefaults = () => {
+    seedMutation.mutate();
   };
 
   const resetForm = () => {
@@ -103,7 +111,7 @@ export default function AuthGroupsTab() {
       return;
     }
 
-    setSaving(true);
+    setIsSaving(true);
     try {
       const body = {
         id: editingId,
@@ -126,31 +134,17 @@ export default function AuthGroupsTab() {
 
       toast.success(editingId ? "Group updated" : "Group created");
       resetForm();
-      fetchMappings();
+      await queryClient.invalidateQueries({ queryKey: ["auth-groups"] });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     } finally {
-      setSaving(false);
+      setIsSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = (id: string) => {
     if (!confirm("Are you sure you want to delete this group mapping?")) return;
-
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/auth-groups?id=${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error?.message || "Failed to delete");
-      }
-      toast.success("Group deleted");
-      fetchMappings();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete");
-    } finally {
-      setSaving(false);
-    }
+    deleteMutation.mutate(id);
   };
 
   const toggleCapability = (cap: Capability) => {

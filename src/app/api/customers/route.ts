@@ -141,6 +141,20 @@ export async function POST(request: NextRequest) {
         challenges: data.challenges || null,
         keyFacts: data.keyFacts,
         sourceUrls: data.sourceUrls,
+        // New fields
+        content: data.content || null,
+        considerations: data.considerations || [],
+        sourceDocuments: data.sourceDocuments || [],
+        // Salesforce static fields
+        salesforceId: data.salesforceId || null,
+        region: data.region || null,
+        tier: data.tier || null,
+        employeeCount: data.employeeCount || null,
+        annualRevenue: data.annualRevenue || null,
+        accountType: data.accountType || null,
+        billingLocation: data.billingLocation || null,
+        lastSalesforceSync: data.lastSalesforceSync || null,
+        // Metadata
         isActive: data.isActive,
         createdBy: auth.session.user.email || null,
         ownerId: auth.session.user.id,

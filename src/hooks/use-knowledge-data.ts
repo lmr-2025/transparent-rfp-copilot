@@ -4,10 +4,9 @@ import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { Skill } from "@/types/skill";
 import { KnowledgeDocument } from "@/types/document";
 import { ReferenceUrl } from "@/types/referenceUrl";
-import { CustomerProfile } from "@/types/customerProfile";
 import { ContextSnippet } from "@/types/contextSnippet";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
-import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 // Define types locally to avoid Turbopack export issues with `export type`
 export interface SkillOwner {
@@ -73,30 +72,21 @@ export function useAllSkills() {
 
 // Fetch documents
 export function useAllDocuments() {
-  return useQuery({
+  return useApiQuery<KnowledgeDocument[]>({
     queryKey: knowledgeQueryKeys.documents,
-    queryFn: async (): Promise<KnowledgeDocument[]> => {
-      const res = await fetch("/api/documents");
-      if (!res.ok) throw new Error("Failed to fetch documents");
-      const json = await res.json();
-      const data = parseApiData<KnowledgeDocument[]>(json, "documents");
-      return Array.isArray(data) ? data : [];
-    },
+    url: "/api/documents",
+    responseKey: "documents",
+    transform: (data) => (Array.isArray(data) ? data : []),
     staleTime: STALE_TIMES.documents,
   });
 }
 
 // Fetch reference URLs
 export function useAllReferenceUrls() {
-  return useQuery({
+  return useApiQuery<ReferenceUrl[]>({
     queryKey: knowledgeQueryKeys.urls,
-    queryFn: async (): Promise<ReferenceUrl[]> => {
-      const res = await fetch("/api/reference-urls");
-      if (!res.ok) throw new Error("Failed to fetch URLs");
-      const json = await res.json();
-      const data = parseApiData<ReferenceUrl[]>(json);
-      return Array.isArray(data) ? data : [];
-    },
+    url: "/api/reference-urls",
+    transform: (data) => (Array.isArray(data) ? data : []),
     staleTime: STALE_TIMES.urls,
   });
 }
@@ -112,15 +102,11 @@ export function useAllCustomers() {
 
 // Fetch context snippets
 export function useAllSnippets() {
-  return useQuery({
+  return useApiQuery<ContextSnippet[]>({
     queryKey: knowledgeQueryKeys.snippets,
-    queryFn: async (): Promise<ContextSnippet[]> => {
-      const res = await fetch("/api/context-snippets");
-      if (!res.ok) throw new Error("Failed to fetch snippets");
-      const json = await res.json();
-      const data = parseApiData<ContextSnippet[]>(json, "snippets");
-      return Array.isArray(data) ? data : [];
-    },
+    url: "/api/context-snippets",
+    responseKey: "snippets",
+    transform: (data) => (Array.isArray(data) ? data : []),
     staleTime: STALE_TIMES.snippets,
   });
 }
@@ -136,15 +122,11 @@ export function useAllCategories() {
 
 // Fetch users (for owner management)
 export function useAllUsers() {
-  return useQuery({
+  return useApiQuery<AppUser[]>({
     queryKey: knowledgeQueryKeys.users,
-    queryFn: async (): Promise<AppUser[]> => {
-      const res = await fetch("/api/users");
-      if (!res.ok) throw new Error("Failed to fetch users");
-      const json = await res.json();
-      const data = parseApiData<AppUser[]>(json, "users");
-      return Array.isArray(data) ? data : [];
-    },
+    url: "/api/users",
+    responseKey: "users",
+    transform: (data) => (Array.isArray(data) ? data : []),
     staleTime: STALE_TIMES.users,
   });
 }
@@ -176,46 +158,28 @@ export function useDeleteSkill() {
 
 // Delete document mutation
 export function useDeleteDocument() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete document");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.documents });
-    },
+  return useApiMutation<void, string>({
+    url: (id) => `/api/documents/${id}`,
+    method: "DELETE",
+    invalidateKeys: [knowledgeQueryKeys.documents],
   });
 }
 
 // Delete URL mutation
 export function useDeleteUrl() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/reference-urls/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete URL");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.urls });
-    },
+  return useApiMutation<void, string>({
+    url: (id) => `/api/reference-urls/${id}`,
+    method: "DELETE",
+    invalidateKeys: [knowledgeQueryKeys.urls],
   });
 }
 
 // Delete snippet mutation
 export function useDeleteSnippet() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/context-snippets/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete snippet");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.snippets });
-    },
+  return useApiMutation<void, string>({
+    url: (id) => `/api/context-snippets/${id}`,
+    method: "DELETE",
+    invalidateKeys: [knowledgeQueryKeys.snippets],
   });
 }
 
@@ -234,53 +198,26 @@ export type RefreshResult = {
 };
 
 export function useRefreshSkill() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (id: string): Promise<RefreshResult> => {
-      const res = await fetch(`/api/skills/${id}/refresh`, { method: "POST" });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to refresh skill");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.skills });
-    },
+  return useApiMutation<RefreshResult, string>({
+    url: (id) => `/api/skills/${id}/refresh`,
+    method: "POST",
+    invalidateKeys: [knowledgeQueryKeys.skills],
   });
 }
 
 // Apply refresh changes after user review
-export function useApplyRefreshChanges() {
-  const queryClient = useQueryClient();
+export type ApplyRefreshInput = {
+  id: string;
+  title: string;
+  content: string;
+  changeHighlights?: string[];
+};
 
-  return useMutation({
-    mutationFn: async ({
-      id,
-      title,
-      content,
-      changeHighlights,
-    }: {
-      id: string;
-      title: string;
-      content: string;
-      changeHighlights?: string[];
-    }) => {
-      const res = await fetch(`/api/skills/${id}/refresh`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content, changeHighlights }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to apply changes");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: knowledgeQueryKeys.skills });
-    },
+export function useApplyRefreshChanges() {
+  return useApiMutation<RefreshResult, ApplyRefreshInput>({
+    url: (vars) => `/api/skills/${vars.id}/refresh`,
+    method: "PUT",
+    invalidateKeys: [knowledgeQueryKeys.skills],
   });
 }
 

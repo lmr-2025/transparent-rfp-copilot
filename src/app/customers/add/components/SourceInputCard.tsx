@@ -5,12 +5,19 @@ import Link from "next/link";
 import { styles } from "./styles";
 import { UploadedDocument, SalesforceSearchResult, SalesforceEnrichment } from "./types";
 
+type UploadProgress = {
+  current: number;
+  total: number;
+  currentFileName: string;
+};
+
 type SourceInputCardProps = {
   urlInput: string;
   setUrlInput: (value: string) => void;
   isAnalyzing: boolean;
   isBuilding: boolean;
   isUploading: boolean;
+  uploadProgress: UploadProgress | null;
   uploadedDocs: UploadedDocument[];
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onRemoveDocument: (index: number) => void;
@@ -33,6 +40,7 @@ export default function SourceInputCard({
   isAnalyzing,
   isBuilding,
   isUploading,
+  uploadProgress,
   uploadedDocs,
   onFileUpload,
   onRemoveDocument,
@@ -89,6 +97,52 @@ export default function SourceInputCard({
         >
           {isUploading ? "Processing..." : "Upload Documents"}
         </button>
+
+        {/* Upload Progress Indicator */}
+        {isUploading && uploadProgress && (
+          <div style={{
+            marginTop: "12px",
+            padding: "12px",
+            backgroundColor: "#f0f9ff",
+            border: "1px solid #bae6fd",
+            borderRadius: "6px",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div style={{
+                width: "16px",
+                height: "16px",
+                border: "2px solid #0ea5e9",
+                borderTopColor: "transparent",
+                borderRadius: "50%",
+                animation: "spin 1s linear infinite",
+              }} />
+              <span style={{ fontSize: "14px", fontWeight: 500, color: "#0369a1" }}>
+                Processing file {uploadProgress.current} of {uploadProgress.total}
+              </span>
+            </div>
+            <div style={{ fontSize: "13px", color: "#0c4a6e", marginBottom: "8px" }}>
+              {uploadProgress.currentFileName}
+            </div>
+            <div style={{
+              height: "4px",
+              backgroundColor: "#e0f2fe",
+              borderRadius: "2px",
+              overflow: "hidden",
+            }}>
+              <div style={{
+                height: "100%",
+                width: `${(uploadProgress.current / uploadProgress.total) * 100}%`,
+                backgroundColor: "#0ea5e9",
+                transition: "width 0.3s ease",
+              }} />
+            </div>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
 
         {/* Show uploaded documents */}
         {uploadedDocs.length > 0 && (

@@ -78,7 +78,11 @@ function SignInContent() {
                 ? "This email is already associated with another account."
                 : error === "CredentialsSignin"
                 ? "Invalid credentials."
-                : "An error occurred during sign in."
+                : error === "OAuthCallback"
+                ? "OAuth callback error. Check server logs."
+                : error === "OAuthSignin"
+                ? "OAuth sign-in error. Check Google OAuth config."
+                : `Sign in error: ${error}`
             }
           />
         )}

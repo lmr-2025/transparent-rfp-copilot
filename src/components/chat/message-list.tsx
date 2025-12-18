@@ -7,13 +7,16 @@ import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "@/stores/chat-store";
 import TransparencyDetails from "@/components/TransparencyDetails";
+import { MessageFeedback } from "./message-feedback";
 
 interface MessageListProps {
   messages: ChatMessage[];
+  sessionId?: string | null;
   onViewTransparency?: (message: ChatMessage) => void;
+  onFeedbackChange?: (messageId: string, feedback: ChatMessage["feedback"]) => void;
 }
 
-export function MessageList({ messages, onViewTransparency }: MessageListProps) {
+export function MessageList({ messages, sessionId, onViewTransparency, onFeedbackChange }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
@@ -41,7 +44,9 @@ export function MessageList({ messages, onViewTransparency }: MessageListProps) 
         <MessageBubble
           key={message.id}
           message={message}
+          sessionId={sessionId}
           onViewTransparency={onViewTransparency}
+          onFeedbackChange={onFeedbackChange}
         />
       ))}
       <div ref={messagesEndRef} />
@@ -51,10 +56,12 @@ export function MessageList({ messages, onViewTransparency }: MessageListProps) 
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  sessionId?: string | null;
   onViewTransparency?: (message: ChatMessage) => void;
+  onFeedbackChange?: (messageId: string, feedback: ChatMessage["feedback"]) => void;
 }
 
-function MessageBubble({ message, onViewTransparency }: MessageBubbleProps) {
+function MessageBubble({ message, sessionId, onViewTransparency, onFeedbackChange }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   return (
@@ -154,6 +161,16 @@ function MessageBubble({ message, onViewTransparency }: MessageBubbleProps) {
               </span>
             ))}
           </div>
+        )}
+
+        {/* Feedback for assistant messages */}
+        {!isUser && onFeedbackChange && (
+          <MessageFeedback
+            messageId={message.id}
+            sessionId={sessionId || null}
+            feedback={message.feedback}
+            onFeedbackChange={(feedback) => onFeedbackChange(message.id, feedback)}
+          />
         )}
       </div>
     </div>

@@ -11,6 +11,7 @@ import ReviewInbox from "./ReviewInbox";
 type NavItem = {
   href: string;
   label: string;
+  hint?: string;
   adminOnly?: boolean;
   featureFlag?: keyof typeof features;
 };
@@ -26,54 +27,55 @@ const navItems: NavSection[] = [
   {
     section: "Home",
     items: [
-      { href: "/", label: "Dashboard" },
+      { href: "/", label: "Dashboard", hint: "Overview & activity" },
     ],
   },
   {
     section: "RFP Projects",
     items: [
-      { href: "/projects/questions", label: "Quick Questions" },
-      { href: "/projects", label: "All Projects" },
+      { href: "/projects/questions", label: "Quick Questions", hint: "One-off Q&A" },
+      { href: "/projects", label: "All Projects", hint: "Manage RFP responses" },
     ],
   },
   {
     section: "Knowledge Base",
     items: [
-      { href: "/knowledge", label: "Library" },
-      { href: "/knowledge/add", label: "Add Knowledge" },
+      { href: "/knowledge", label: "Library", hint: "Browse all skills" },
+      { href: "/knowledge/add", label: "Add Knowledge", hint: "Create new skills" },
     ],
   },
   {
     section: "The Rolodex",
     featureFlag: "customerProfiles",
     items: [
-      { href: "/customers", label: "Customer Profiles" },
-      { href: "/customers/add", label: "Build Profile" },
+      { href: "/customers", label: "Customer Profiles", hint: "View all customers" },
+      { href: "/customers/add", label: "Build Profile", hint: "Create with AI" },
     ],
   },
   {
     section: "Oracle",
     featureFlag: "chat",
     items: [
-      { href: "/chat", label: "Chat" },
-      { href: "/chat/instruction-presets", label: "Instructions", adminOnly: true },
+      { href: "/chat-v2", label: "Chat", hint: "AI-powered conversations" },
+      { href: "/collateral", label: "Collateral Builder", hint: "Build slide decks & more" },
     ],
   },
   {
     section: "Contract Review",
     featureFlag: "contracts",
     items: [
-      { href: "/contracts", label: "Library" },
-      { href: "/contracts/upload", label: "Upload" },
+      { href: "/contracts", label: "Library", hint: "View contracts" },
+      { href: "/contracts/upload", label: "Upload", hint: "Add new contracts" },
     ],
   },
   {
     section: "Backstage",
     adminOnly: true,
     items: [
-      { href: "/admin/prompt-blocks", label: "Prompt Builder" },
-      { href: "/accuracy", label: "AI Accuracy" },
-      { href: "/admin/settings", label: "Settings" },
+      { href: "/admin/content-manager", label: "Content Manager", hint: "Personas, templates & feedback" },
+      { href: "/admin/prompt-blocks", label: "Prompt Builder", hint: "Configure AI prompts" },
+      { href: "/accuracy", label: "AI Accuracy", hint: "Track performance" },
+      { href: "/admin/settings", label: "Settings", hint: "App configuration" },
     ],
   },
 ];
@@ -162,7 +164,7 @@ export default function Sidebar() {
                   href={item.href}
                   style={{
                     display: "block",
-                    padding: "10px 20px",
+                    padding: item.hint ? "8px 20px 10px" : "10px 20px",
                     color: isActive ? "#fff" : "#cbd5e1",
                     backgroundColor: isActive ? "#334155" : "transparent",
                     textDecoration: "none",
@@ -184,7 +186,17 @@ export default function Sidebar() {
                     }
                   }}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {item.hint && (
+                    <span style={{
+                      display: "block",
+                      fontSize: "11px",
+                      color: "#64748b",
+                      marginTop: "2px",
+                    }}>
+                      {item.hint}
+                    </span>
+                  )}
                 </Link>
               );
             })}

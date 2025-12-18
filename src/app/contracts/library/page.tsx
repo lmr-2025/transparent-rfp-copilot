@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { ContractReviewSummary } from "@/types/contractReview";
-import { parseApiData } from "@/lib/apiClient";
 import { InlineError } from "@/components/ui/status-display";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 const styles = {
   container: {
@@ -92,43 +92,37 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 
 export default function ContractLibraryPage() {
   const router = useRouter();
-  const [contracts, setContracts] = useState<ContractReviewSummary[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [ratingFilter, setRatingFilter] = useState<string>("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchContracts();
-  }, []);
+  // Fetch contracts
+  const {
+    data: contracts = [],
+    isLoading: loading,
+    error: queryError,
+  } = useApiQuery<ContractReviewSummary[]>({
+    queryKey: ["contracts"],
+    url: "/api/contracts",
+    responseKey: "contracts",
+    transform: (data) => (Array.isArray(data) ? data : []),
+  });
 
-  const fetchContracts = async () => {
-    try {
-      const response = await fetch("/api/contracts");
-      if (!response.ok) throw new Error("Failed to fetch contracts");
-      const json = await response.json();
-      const contracts = parseApiData<ContractReviewSummary[]>(json, "contracts");
-      setContracts(Array.isArray(contracts) ? contracts : []);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load contracts");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const error = queryError?.message || null;
 
-  const handleDelete = async (id: string) => {
-    try {
-      const response = await fetch(`/api/contracts/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) throw new Error("Failed to delete");
-      setContracts(contracts.filter((c) => c.id !== id));
+  // Delete mutation
+  const deleteMutation = useApiMutation<void, string>({
+    url: (id) => `/api/contracts/${id}`,
+    method: "DELETE",
+    invalidateKeys: [["contracts"]],
+    onSuccess: () => {
       setDeleteConfirm(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete");
-    }
+    },
+  });
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
   };
 
   const filteredContracts = contracts.filter((c) => {
@@ -183,7 +177,12 @@ export default function ContractLibraryPage() {
 
       {error && (
         <div style={{ marginBottom: "16px" }}>
-          <InlineError message={error} onDismiss={() => setError(null)} />
+          <InlineError message={error} />
+        </div>
+      )}
+      {deleteMutation.error && (
+        <div style={{ marginBottom: "16px" }}>
+          <InlineError message={deleteMutation.error.message} />
         </div>
       )}
 

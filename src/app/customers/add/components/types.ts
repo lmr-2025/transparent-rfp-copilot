@@ -2,6 +2,8 @@ export type UploadedDocument = {
   name: string;
   content: string;
   size: number;
+  file: File; // Keep original file for attaching to profile after save
+  docType?: string; // Optional document type (proposal, meeting_notes, etc.)
 };
 
 export type SalesforceSearchResult = {
@@ -19,6 +21,13 @@ export type SalesforceEnrichment = {
   overview: string;
   keyFacts: { label: string; value: string }[];
   salesforceId: string;
+  // Static fields from Salesforce
+  region: string | null;
+  tier: string | null;
+  employeeCount: number | null;
+  annualRevenue: number | null;
+  accountType: string | null;
+  billingLocation: string | null;
 };
 
 export type TransparencyData = {

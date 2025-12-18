@@ -57,6 +57,7 @@ model User {
   ownedCustomers   CustomerProfile[]   @relation("CustomerOwner")
   ownedDocuments   KnowledgeDocument[] @relation("DocumentOwner")
   ownedUrls        ReferenceUrl[]      @relation("UrlOwner")
+  collateralOutputs CollateralOutput[]
   createdAt        DateTime            @default(now())
   updatedAt        DateTime            @updatedAt
 }
@@ -224,6 +225,10 @@ model BulkRow {
   @@index([queuedForReview])
   @@index([askedById])
   @@index([createdAt])
+  // Composite indexes for common queries
+  @@index([projectId, status])
+  @@index([reviewStatus, createdAt])
+  @@index([flagResolved, flaggedForReview])
 }
 
 enum ProjectStatus {
@@ -252,6 +257,7 @@ model KnowledgeDocument {
   filename        String
   fileType        String   // pdf, doc, docx, txt
   content         String   @db.Text // Extracted text content
+  fileData        Bytes?   // Original file data for native document support (PDFs sent directly to Claude)
   fileSize        Int      // bytes
   categories      String[] // Uses same categories as Skills
   uploadedAt      DateTime @default(now())
@@ -277,10 +283,28 @@ model CustomerProfile {
   name            String   // Company name
   industry        String?  // e.g., "Healthcare", "FinTech"
   website         String?  // Primary company URL
+
+  // Static fields from Salesforce (read-only in app)
+  salesforceId       String?  @unique // Salesforce Account ID - used to link GTM data
+  region             String?  // e.g., "NA", "EMEA", "APAC" - from Salesforce
+  tier               String?  // e.g., "Enterprise", "Mid-Market", "SMB" - from Salesforce
+  employeeCount      Int?     // NumberOfEmployees from Salesforce
+  annualRevenue      Float?   // AnnualRevenue from Salesforce (in USD)
+  accountType        String?  // Customer, Prospect, Partner, etc. from Salesforce
+  billingLocation    String?  // Combined BillingCity, State, Country
+  lastSalesforceSync DateTime? // When static fields were last synced from Salesforce
+
+  // New unified content field (markdown-structured prose)
+  content         String?  @db.Text // Main profile content (replaces overview/products/challenges/keyFacts)
+  considerations  String[] // Special notes/caveats about this customer (like skill edgeCases)
+  sourceDocuments Json?    // Array of {id, filename, uploadedAt} - docs that built this profile
+
+  // Legacy fields (deprecated - migrate to content field)
   overview        String   @db.Text // AI-generated company overview
   products        String?  @db.Text // Products/services description
   challenges      String?  @db.Text // Known challenges/pain points
   keyFacts        Json?    // Array of {label, value} pairs
+
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
   isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
@@ -294,10 +318,12 @@ model CustomerProfile {
 
   projects        ProjectCustomerProfile[]
   documents       CustomerDocument[]
+  collateralOutputs CollateralOutput[]
 
   @@index([isActive, updatedAt])
   @@index([industry])
   @@index([ownerId])
+  @@index([salesforceId])
 }
 
 // Customer-specific documents (only used when this customer is selected)
@@ -591,6 +617,9 @@ model QuestionHistory {
   @@index([userId, createdAt])
   @@index([createdAt])
   @@index([flaggedForReview])
+  // Composite indexes for question log queries
+  @@index([reviewStatus, createdAt])
+  @@index([flagResolved, flaggedForReview])
 }
 
 // Chat Session - tracks full chat conversations in The Oracle
@@ -737,5 +766,152 @@ model AnswerFeedback {
 enum FeedbackRating {
   THUMBS_UP
   THUMBS_DOWN
+}
+
+// Document Templates - reusable templates for deliverables
+// Used by Chat V2 to generate filled documents (battlecards, proposals, etc.)
+model Template {
+  id                  String         @id @default(uuid())
+  name                String         // Human-readable name, e.g., "Sales Battlecard"
+  description         String?        // Brief description of what this template is for
+  content             String         @db.Text // Markdown template with placeholders
+  category            String?        // Grouping: "Sales", "Marketing", "Technical"
+  outputFormat        String         @default("markdown") // markdown, docx (for future export)
+  placeholderHint     String?        @db.Text // Guidance on available placeholders (deprecated - use placeholderMappings)
+  // Placeholder mappings - defines how each {{placeholder}} maps to data sources
+  // JSON array of { placeholder: string, source: PlaceholderSource, field?: string, fallback?: string, llmInstruction?: string }
+  placeholderMappings Json?
+  // Link to instruction preset - auto-selects this persona when template is chosen
+  instructionPresetId String?
+  isActive            Boolean        @default(true)
+  sortOrder           Int            @default(0)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  createdBy           String?        // User email who created it
+  updatedBy           String?        // User email who last updated
+
+  @@index([category])
+  @@index([isActive])
+  @@index([sortOrder])
+  @@index([instructionPresetId])
+}
+
+// Collateral Output - tracks generated collateral from templates
+// Used by Collateral Builder to store filled templates and track review status
+model CollateralOutput {
+  id                  String               @id @default(uuid())
+  name                String               // User-given or auto-generated name
+
+  // Source references
+  templateId          String?              // Template used (if any)
+  templateName        String?              // Snapshot of template name at creation
+  customerId          String?              // Customer context used
+  customerName        String?              // Snapshot of customer name
+
+  // Generated content
+  filledContent       Json?                // Key-value pairs of placeholder -> value
+  generatedMarkdown   String?              @db.Text // Final markdown output
+  googleSlidesId      String?              // If exported to Google Slides
+  googleSlidesUrl     String?              // URL to the filled presentation
+
+  // Status and workflow
+  status              CollateralStatus     @default(DRAFT)
+
+  // Flagging (same pattern as BulkRow)
+  flaggedForReview    Boolean              @default(false)
+  flaggedAt           DateTime?
+  flaggedBy           String?
+  flagNote            String?              @db.Text
+  flagResolved        Boolean              @default(false)
+  flagResolvedAt      DateTime?
+  flagResolvedBy      String?
+  flagResolutionNote  String?              @db.Text
+
+  // Review workflow (same pattern as BulkRow)
+  reviewStatus        RowReviewStatus      @default(NONE)
+  reviewRequestedAt   DateTime?
+  reviewRequestedBy   String?
+  reviewNote          String?              @db.Text
+  assignedReviewerId  String?
+  assignedReviewerName String?
+  reviewedAt          DateTime?
+  reviewedBy          String?
+
+  // Queue for batch review
+  queuedForReview     Boolean              @default(false)
+  queuedAt            DateTime?
+  queuedBy            String?
+  queuedNote          String?              @db.Text
+  queuedReviewerId    String?
+  queuedReviewerName  String?
+
+  // Feedback
+  rating              FeedbackRating?
+  feedbackComment     String?              @db.Text
+
+  // Metadata
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  createdBy           String?
+  ownerId             String?
+
+  owner               User?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  customer            CustomerProfile?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([customerId])
+  @@index([templateId])
+  @@index([ownerId])
+  @@index([flaggedForReview])
+  @@index([reviewStatus])
+  @@index([queuedForReview])
+  @@index([createdAt])
+  // Composite indexes for common queries
+  @@index([ownerId, status])
+  @@index([ownerId, createdAt])
+}
+
+enum CollateralStatus {
+  DRAFT           // In progress, not finished
+  GENERATED       // AI generated content
+  EXPORTED        // Exported to Google Slides
+  NEEDS_REVIEW    // Sent for review
+  APPROVED        // Reviewed and approved
+  FINALIZED       // Final version, locked
+}
+
+// Chat message feedback - tracks user ratings and flags for chat responses
+model ChatFeedback {
+  id              String    @id @default(cuid())
+  messageId       String    // Client-side message ID
+  sessionId       String    // Chat session ID (or "no-session")
+  userId          String    // User who gave feedback
+  orgId           String?   // User's organization
+
+  // Rating
+  rating          String?   // "THUMBS_UP" | "THUMBS_DOWN"
+  comment         String?   @db.Text
+
+  // Flagging
+  flaggedForReview Boolean  @default(false)
+  flagNote         String?  @db.Text
+
+  // Review request
+  reviewRequested  Boolean  @default(false)
+  reviewerId       String?  // User ID of requested reviewer
+  reviewerName     String?  // Display name of reviewer
+  reviewNote       String?  @db.Text
+  sendNow          Boolean  @default(false) // Send notification immediately vs queue
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([messageId, sessionId])
+  @@index([userId])
+  @@index([orgId])
+  @@index([sessionId])
+  @@index([flaggedForReview])
+  @@index([reviewRequested])
+  @@index([createdAt])
 }
 

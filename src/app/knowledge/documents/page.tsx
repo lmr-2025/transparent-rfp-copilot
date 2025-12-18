@@ -7,7 +7,9 @@ import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
 import { useConfirm } from "@/components/ConfirmModal";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
-import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
+import { getApiErrorMessage } from "@/lib/apiClient";
+import { useApiQuery, useApiMutation } from "@/hooks/use-api";
+import { useQueryClient } from "@tanstack/react-query";
 import { DocumentActionDialog } from "../components/document-action-dialog";
 
 interface CategoryItem {
@@ -29,8 +31,7 @@ interface DocumentMeta {
 }
 
 export default function DocumentsPage() {
-  const [documents, setDocuments] = useState<DocumentMeta[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [isUploading, setIsUploading] = useState(false);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -54,28 +55,30 @@ export default function DocumentsPage() {
   const [showActionDialog, setShowActionDialog] = useState(false);
   const [uploadedDocument, setUploadedDocument] = useState<DocumentMeta | null>(null);
 
+  // Fetch documents
+  const {
+    data: documents = [],
+    isLoading,
+  } = useApiQuery<DocumentMeta[]>({
+    queryKey: ["documents"],
+    url: "/api/documents",
+    responseKey: "documents",
+    transform: (data) => (Array.isArray(data) ? data : []),
+  });
+
+  // Delete mutation
+  const deleteMutation = useApiMutation<void, string>({
+    url: (id) => `/api/documents/${id}`,
+    method: "DELETE",
+    invalidateKeys: [["documents"]],
+  });
+
   useEffect(() => {
-    loadDocuments();
     // Load categories from API
     loadCategoriesFromApi().then(setAvailableCategories).catch(() => {
       // Silent failure - categories are optional
     });
   }, []);
-
-  const loadDocuments = async () => {
-    try {
-      const response = await fetch("/api/documents");
-      if (response.ok) {
-        const json = await response.json();
-        const data = parseApiData<DocumentMeta[]>(json, "documents");
-        setDocuments(Array.isArray(data) ? data : []);
-      }
-    } catch {
-      toast.error("Failed to load documents");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -123,13 +126,15 @@ export default function DocumentsPage() {
         throw new Error(getApiErrorMessage(json, "Failed to upload document"));
       }
 
-      const data = parseApiData<{ document: DocumentMeta }>(json);
-      setDocuments([data.document, ...documents]);
+      // Invalidate documents query to refetch
+      await queryClient.invalidateQueries({ queryKey: ["documents"] });
+
+      const uploadedDoc = json.data?.document || json.document;
       resetForm();
 
       // Show action dialog for non-template uploads
-      if (!saveAsTemplate) {
-        setUploadedDocument(data.document);
+      if (!saveAsTemplate && uploadedDoc) {
+        setUploadedDocument(uploadedDoc);
         setShowActionDialog(true);
       }
     } catch (error) {
@@ -143,17 +148,11 @@ export default function DocumentsPage() {
     const confirmed = await confirmDelete();
     if (!confirmed) return;
 
-    try {
-      const response = await fetch(`/api/documents/${id}`, {
-        method: "DELETE",
-      });
-
-      if (response.ok) {
-        setDocuments(documents.filter((d) => d.id !== id));
-      }
-    } catch {
-      toast.error("Failed to delete document");
-    }
+    deleteMutation.mutate(id, {
+      onError: () => {
+        toast.error("Failed to delete document");
+      },
+    });
   };
 
   const resetForm = () => {

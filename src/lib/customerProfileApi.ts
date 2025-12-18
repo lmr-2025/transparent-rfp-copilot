@@ -4,6 +4,7 @@ import {
   CustomerProfileUpdate,
   CustomerProfileKeyFact,
   CustomerProfileSourceUrl,
+  CustomerProfileSourceDocument,
   CustomerProfileOwner,
   CustomerProfileHistoryEntry,
 } from "@/types/customerProfile";
@@ -19,6 +20,20 @@ interface DbCustomerProfile {
   name: string;
   industry?: string | null;
   website?: string | null;
+  // Static fields from Salesforce
+  salesforceId?: string | null;
+  region?: string | null;
+  tier?: string | null;
+  employeeCount?: number | null;
+  annualRevenue?: number | null;
+  accountType?: string | null;
+  billingLocation?: string | null;
+  lastSalesforceSync?: string | null;
+  // New fields
+  content?: string | null;
+  considerations?: string[] | null;
+  sourceDocuments?: CustomerProfileSourceDocument[] | null;
+  // Legacy fields
   overview: string;
   products?: string | null;
   challenges?: string | null;
@@ -43,6 +58,20 @@ function transformProfileFromDb(item: unknown): CustomerProfile {
     name: p.name,
     industry: p.industry ?? undefined,
     website: p.website ?? undefined,
+    // Static fields from Salesforce
+    salesforceId: p.salesforceId ?? undefined,
+    region: p.region ?? undefined,
+    tier: p.tier ?? undefined,
+    employeeCount: p.employeeCount ?? undefined,
+    annualRevenue: p.annualRevenue ?? undefined,
+    accountType: p.accountType ?? undefined,
+    billingLocation: p.billingLocation ?? undefined,
+    lastSalesforceSync: p.lastSalesforceSync ?? undefined,
+    // New fields
+    content: p.content ?? undefined,
+    considerations: p.considerations ?? [],
+    sourceDocuments: p.sourceDocuments ?? undefined,
+    // Legacy fields
     overview: p.overview,
     products: p.products ?? undefined,
     challenges: p.challenges ?? undefined,

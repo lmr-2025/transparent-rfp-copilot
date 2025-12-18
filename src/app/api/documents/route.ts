@@ -117,13 +117,14 @@ export async function POST(request: NextRequest) {
     try {
       content = await extractTextContent(buffer, fileType);
     } catch (extractError) {
-      logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType });
+      const errorMessage = extractError instanceof Error ? extractError.message : "Unknown error";
+      logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType, errorMessage });
       // If saving as template, text extraction is required
       if (saveAsTemplate) {
-        return errors.badRequest("Failed to extract text from document. Text extraction is required for templates.");
+        return errors.badRequest(`Failed to extract text from document: ${errorMessage}`);
       }
       // Otherwise, store with placeholder - document is still useful as a reference
-      content = `[Text extraction failed for ${fileType.toUpperCase()} file. Document stored for reference only.]`;
+      content = `[Text extraction failed for ${fileType.toUpperCase()} file: ${errorMessage}. Document stored for reference only.]`;
     }
 
     // For templates, we need actual content
@@ -138,12 +139,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database with owner info
+    // Store original file data for PDFs to enable native Claude document support
     const document = await prisma.knowledgeDocument.create({
       data: {
         title: title.trim(),
         filename: file.name,
         fileType,
         content,
+        fileData: fileType === "pdf" ? buffer : null, // Store original PDF for native Claude support
         fileSize: file.size,
         categories,
         description: description?.trim() || null,
@@ -185,31 +188,103 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Extract text from PDF using Claude's native document support
+async function extractPdfWithClaude(buffer: Buffer): Promise<string> {
+  const anthropic = getAnthropicClient();
+
+  const base64Data = buffer.toString("base64");
+
+  const response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 16000,
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: "application/pdf",
+              data: base64Data,
+            },
+          },
+          {
+            type: "text",
+            text: `Extract ALL text content from this PDF document.
+
+IMPORTANT RULES:
+1. Extract the complete text content, preserving the document structure
+2. Include headers, paragraphs, bullet points, tables, and any other text
+3. Preserve the logical reading order
+4. For tables, format them clearly with columns separated by | characters
+5. Do NOT summarize or interpret - extract the actual text verbatim
+6. Do NOT add any commentary or explanations
+7. If there are multiple pages, extract all pages
+
+Return ONLY the extracted text content, nothing else.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const textContent = response.content[0];
+  if (textContent.type !== "text") {
+    throw new Error("Unexpected response format from Claude");
+  }
+
+  if (!textContent.text || textContent.text.trim().length === 0) {
+    throw new Error("PDF appears to be image-based or contains no extractable text");
+  }
+
+  return textContent.text;
+}
+
+// Sanitize extracted text to remove problematic characters
+function sanitizeExtractedText(text: string): string {
+  return text
+    // Remove null bytes and other control characters (except newline, tab, carriage return)
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
+    // Normalize multiple spaces to single space
+    .replace(/[^\S\n]+/g, " ")
+    // Normalize multiple newlines to max 2
+    .replace(/\n{3,}/g, "\n\n")
+    // Trim each line
+    .split("\n")
+    .map((line) => line.trim())
+    .join("\n")
+    .trim();
+}
+
 async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
+  let rawText: string;
+
   switch (fileType) {
     case "pdf": {
-      // Dynamic import for pdf-parse (new API)
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      return textResult.text;
+      // Use Claude's native PDF support for reliable extraction
+      rawText = await extractPdfWithClaude(buffer);
+      break;
     }
     case "docx": {
       const result = await mammoth.extractRawText({ buffer });
-      return result.value;
+      rawText = result.value;
+      break;
     }
     case "doc": {
       // mammoth doesn't support old .doc format well
       // Try it anyway, but it may not work for all files
       try {
         const result = await mammoth.extractRawText({ buffer });
-        return result.value;
+        rawText = result.value;
+        break;
       } catch {
         throw new Error("Old .doc format not fully supported. Please convert to .docx");
       }
     }
     case "txt": {
-      return buffer.toString("utf-8");
+      rawText = buffer.toString("utf-8");
+      break;
     }
     case "pptx": {
       const { writeFile, unlink } = await import("fs/promises");
@@ -225,9 +300,10 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
       try {
         const parser = new PptxParser(tempPath);
         const slides = await parser.extractText();
-        return slides.map((slide: { id: string; text: string[] }) =>
+        rawText = slides.map((slide: { id: string; text: string[] }) =>
           `--- Slide ${slide.id} ---\n${slide.text.join("\n")}`
         ).join("\n\n");
+        break;
       } finally {
         // Clean up temp file
         await unlink(tempPath).catch(() => {});
@@ -236,6 +312,9 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
     default:
       throw new Error(`Unsupported file type: ${fileType}`);
   }
+
+  // Sanitize the extracted text to remove problematic characters
+  return sanitizeExtractedText(rawText);
 }
 
 // Generate a markdown template from document content using LLM

@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { History, Plus, Eye } from "lucide-react";
+import { History, Plus, Eye, MessageSquareOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
@@ -19,11 +19,13 @@ import {
   ChatSessionItem,
 } from "@/hooks/use-chat-data";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
-import { ChatInput } from "./components/chat-input";
-import { MessageList } from "./components/message-list";
-import { KnowledgeSidebar } from "./components/knowledge-sidebar";
-import { ChatHistoryPanel } from "./components/chat-history-panel";
-import { TransparencyModal, TransparencyData } from "./components/transparency-modal";
+import { ChatInput } from "@/components/chat/chat-input";
+import { MessageList } from "@/components/chat/message-list";
+import { ChatHistoryPanel } from "@/components/chat/chat-history-panel";
+import { TransparencyModal, TransparencyData } from "@/components/chat/transparency-modal";
+import { ChatFeedbackModal } from "@/components/chat/chat-feedback-modal";
+import { ContextControlsBar, InstructionPreset } from "./components/context-controls-bar";
+import { CollapsibleKnowledgeSidebar } from "./components/collapsible-knowledge-sidebar";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
@@ -32,18 +34,23 @@ import { parseAnswerSections } from "@/lib/questionHelpers";
 // Sidebar resize constants
 const SIDEBAR_MIN_WIDTH = 280;
 const SIDEBAR_MAX_WIDTH = 500;
-const SIDEBAR_DEFAULT_WIDTH = 320;
+const SIDEBAR_DEFAULT_WIDTH = 340;
 
-export default function ChatPageV2() {
+export default function ChatV2Page() {
   const { data: session } = useSession();
 
   // Local state for modals
   const [showHistory, setShowHistory] = useState(false);
   const [showTransparency, setShowTransparency] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
   const [lastTransparency, setLastTransparency] = useState<TransparencyData | null>(null);
   // Quick mode for faster LLM responses (Haiku vs Sonnet)
   const [quickMode, setQuickMode] = useState(false);
+
+  // V2 specific state
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [focusedCustomerId, setFocusedCustomerId] = useState<string | null>(null);
 
   // Zustand stores
   const {
@@ -67,6 +74,7 @@ export default function ChatPageV2() {
     getSelectedDocumentIds,
     getSelectedUrlIds,
     getSelectedCustomerIds,
+    setCustomerSelected,
   } = useSelectionStore();
 
   // React Query data fetching
@@ -92,7 +100,7 @@ export default function ChatPageV2() {
     minWidth: sidebarMinWidth,
     maxWidth: sidebarMaxWidth,
   } = useResizablePanel({
-    storageKey: "chat-sidebar-width",
+    storageKey: "chat-v2-sidebar-width",
     defaultWidth: SIDEBAR_DEFAULT_WIDTH,
     minWidth: SIDEBAR_MIN_WIDTH,
     maxWidth: SIDEBAR_MAX_WIDTH,
@@ -117,6 +125,24 @@ export default function ChatPageV2() {
     const stored = localStorage.getItem(STORAGE_KEYS.USER_INSTRUCTIONS);
     setUserInstructions(stored || DEFAULTS.USER_INSTRUCTIONS);
   }, [setUserInstructions]);
+
+  // Handle customer focus change - auto-select/deselect in knowledge context
+  const handleCustomerFocusChange = useCallback((customerId: string | null) => {
+    // Deselect previous focused customer
+    if (focusedCustomerId) {
+      setCustomerSelected(focusedCustomerId, false);
+    }
+    // Select new focused customer
+    if (customerId) {
+      setCustomerSelected(customerId, true);
+    }
+    setFocusedCustomerId(customerId);
+  }, [focusedCustomerId, setCustomerSelected]);
+
+  // Handle persona change
+  const handlePresetChange = useCallback((preset: InstructionPreset | null) => {
+    setSelectedPresetId(preset?.id || null);
+  }, []);
 
   // Build transparency data for preview or post-response
   const buildTransparencyData = useCallback((): TransparencyData => {
@@ -158,6 +184,8 @@ export default function ChatPageV2() {
             : "";
           return `=== CUSTOMER PROFILE: ${profile.name} ===
 Industry: ${profile.industry || "Not specified"}
+Region: ${profile.region || "Not specified"}
+Tier: ${profile.tier || "Not specified"}
 
 Overview:
 ${profile.overview || "Not provided"}
@@ -254,19 +282,18 @@ ${keyFactsText}`;
         quickMode,
       });
 
-      // Parse the response to extract transparency metadata (reuse existing parser from questions)
+      // Parse the response to extract transparency metadata
       const parsed = parseAnswerSections(response.response);
 
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         role: "assistant",
-        content: parsed.response || response.response, // Use parsed response, fallback to full response
+        content: parsed.response || response.response,
         timestamp: new Date(),
         skillsUsed: response.skillsUsed,
         customersUsed: response.customersUsed,
         documentsUsed: response.documentsUsed,
         urlsUsed: response.urlsUsed,
-        // Only include transparency fields if they have actual values
         ...(parsed.confidence && { confidence: parsed.confidence }),
         ...(parsed.sources && { sources: parsed.sources }),
         ...(parsed.reasoning && { reasoning: parsed.reasoning }),
@@ -280,7 +307,6 @@ ${keyFactsText}`;
       if (response.transparency) {
         setLastTransparency(response.transparency);
       } else {
-        // Build transparency data from what we sent
         setLastTransparency(buildTransparencyData());
       }
 
@@ -343,7 +369,6 @@ ${keyFactsText}`;
   };
 
   const handleLoadSession = (sessionItem: ChatSessionItem) => {
-    // Convert stored messages back to ChatMessage format
     const loadedMessages: ChatMessage[] = (sessionItem.messages || []).map((m, idx) => ({
       id: `loaded-${idx}`,
       role: m.role as "user" | "assistant",
@@ -372,7 +397,6 @@ ${keyFactsText}`;
   };
 
   const handleViewTransparency = (_message: ChatMessage) => {
-    // Use the last transparency data or build new one
     const data = lastTransparency || buildTransparencyData();
     setTransparencyData(data);
     setShowTransparency(true);
@@ -387,15 +411,37 @@ ${keyFactsText}`;
   const totalSelected = getSelectedSkillIds().length + getSelectedDocumentIds().length +
                         getSelectedUrlIds().length + getSelectedCustomerIds().length;
 
+  const focusedCustomer = customers.find((c) => c.id === focusedCustomerId) || null;
+
   return (
-    <div ref={containerRef} className="flex h-[calc(100vh-0px)] bg-background">
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="relative flex items-center justify-between px-4 py-3 border-b border-border">
-          <h1 className="text-lg font-semibold">Chat</h1>
-          <div className="flex gap-2">
-            {/* Transparency info bar */}
+    <div ref={containerRef} className="flex h-screen overflow-hidden bg-background">
+      {/* Left - Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+        {/* Page Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-semibold">Knowledge Chat</h1>
+          </div>
+          <a
+            href="/collateral"
+            className="text-sm text-muted-foreground hover:text-primary transition-colors"
+          >
+            Need to build slides or collateral? →
+          </a>
+        </div>
+
+        {/* Controls Row */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviewPrompt}
+              className="gap-2"
+            >
+              <Eye className="h-4 w-4" />
+              System Prompt
+            </Button>
             {lastTransparency && (
               <Button
                 variant="outline"
@@ -410,6 +456,8 @@ ${keyFactsText}`;
                 View Last Prompt
               </Button>
             )}
+          </div>
+          <div className="flex items-center gap-2">
             {session?.user && (
               <Button
                 variant={showHistory ? "secondary" : "outline"}
@@ -421,11 +469,42 @@ ${keyFactsText}`;
                 History ({chatSessions.length})
               </Button>
             )}
+            {messages.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowFeedback(true)}
+                className="gap-2"
+              >
+                <MessageSquareOff className="h-4 w-4" />
+                End Chat
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={handleNewChat} className="gap-2">
               <Plus className="h-4 w-4" />
               New Chat
             </Button>
           </div>
+        </div>
+
+        {/* Combined Persona + Customer Controls */}
+        <ContextControlsBar
+          selectedPresetId={selectedPresetId}
+          onPresetChange={handlePresetChange}
+          userInstructions={userInstructions}
+          onUserInstructionsChange={setUserInstructions}
+          customers={customers}
+          selectedCustomerId={focusedCustomerId}
+          onCustomerSelect={handleCustomerFocusChange}
+          customersLoading={customersLoading}
+        />
+
+        {/* Messages */}
+        <div className="relative flex-1 min-h-0">
+          <MessageList
+            messages={messages}
+            onViewTransparency={handleViewTransparency}
+          />
 
           {/* Chat History Panel */}
           {showHistory && session?.user && (
@@ -440,27 +519,8 @@ ${keyFactsText}`;
           )}
         </div>
 
-        {/* Messages */}
-        <MessageList
-          messages={messages}
-          onViewTransparency={handleViewTransparency}
-        />
-
         {/* Input */}
         <div className="border-t border-border">
-          {/* Preview prompt button */}
-          {totalSelected > 0 && (
-            <div className="px-4 pt-3 flex justify-end">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePreviewPrompt}
-                className="text-xs"
-              >
-                Preview System Prompt
-              </Button>
-            </div>
-          )}
           <ChatInput
             value={inputValue}
             onChange={setInputValue}
@@ -480,20 +540,21 @@ ${keyFactsText}`;
       {/* Resizable Divider */}
       <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
 
-      {/* Knowledge sidebar */}
+      {/* Right - Context Sidebar (full height) */}
       <div
         style={{
           width: `${sidebarWidth}px`,
           minWidth: `${sidebarMinWidth}px`,
           maxWidth: `${sidebarMaxWidth}px`,
         }}
-        className="flex-shrink-0"
+        className="flex-shrink-0 flex flex-col h-full"
       >
-        <KnowledgeSidebar
+        <CollapsibleKnowledgeSidebar
           skills={skills}
           documents={documents}
           urls={urls}
           customers={customers}
+          selectedCustomer={focusedCustomer}
           isLoading={isDataLoading}
         />
       </div>
@@ -507,6 +568,18 @@ ${keyFactsText}`;
           isPreview={!lastTransparency}
         />
       )}
+
+      {/* Chat Feedback Modal */}
+      <ChatFeedbackModal
+        isOpen={showFeedback}
+        sessionId={currentSessionId}
+        messageCount={messages.length}
+        onClose={() => setShowFeedback(false)}
+        onSubmitAndNewChat={() => {
+          setShowFeedback(false);
+          handleNewChat();
+        }}
+      />
     </div>
   );
 }

@@ -223,7 +223,88 @@ export async function searchAccounts(searchTerm: string): Promise<SalesforceAcco
   return data.searchRecords || [];
 }
 
-// Map Salesforce Account to CustomerProfile fields
+// Static fields from Salesforce (read-only in app)
+export type SalesforceStaticFields = {
+  salesforceId: string;
+  name: string;
+  industry: string | null;
+  website: string | null;
+  region: string | null;
+  tier: string | null;
+  employeeCount: number | null;
+  annualRevenue: number | null;
+  accountType: string | null;
+  billingLocation: string | null;
+};
+
+// Map Salesforce Account to CustomerProfile static fields
+export function mapAccountToStaticFields(account: SalesforceAccount): SalesforceStaticFields {
+  // Build billing location from components
+  const billingLocation = [account.BillingCity, account.BillingState, account.BillingCountry]
+    .filter(Boolean)
+    .join(", ") || null;
+
+  // Region can come from a custom field or be derived from BillingCountry
+  // This is a placeholder - customize based on your Salesforce schema
+  const region = (account as Record<string, unknown>).Region__c as string | undefined ||
+    deriveRegionFromCountry(account.BillingCountry) || null;
+
+  // Tier can come from a custom field
+  // This is a placeholder - customize based on your Salesforce schema
+  const tier = (account as Record<string, unknown>).Tier__c as string | undefined ||
+    (account as Record<string, unknown>).Account_Tier__c as string | undefined || null;
+
+  return {
+    salesforceId: account.Id,
+    name: account.Name,
+    industry: account.Industry || null,
+    website: account.Website || null,
+    region,
+    tier,
+    employeeCount: account.NumberOfEmployees || null,
+    annualRevenue: account.AnnualRevenue || null,
+    accountType: account.Type || null,
+    billingLocation,
+  };
+}
+
+// Helper to derive region from country (customize as needed)
+function deriveRegionFromCountry(country?: string): string | null {
+  if (!country) return null;
+
+  const countryLower = country.toLowerCase();
+
+  // North America
+  if (["united states", "usa", "us", "canada", "mexico"].some(c => countryLower.includes(c))) {
+    return "NA";
+  }
+
+  // EMEA
+  if (["united kingdom", "uk", "germany", "france", "spain", "italy", "netherlands",
+       "sweden", "norway", "denmark", "finland", "ireland", "belgium", "switzerland",
+       "austria", "poland", "czech", "portugal", "israel", "south africa", "uae",
+       "saudi arabia", "egypt", "nigeria", "kenya"].some(c => countryLower.includes(c))) {
+    return "EMEA";
+  }
+
+  // APAC
+  if (["australia", "japan", "china", "india", "singapore", "hong kong", "korea",
+       "taiwan", "indonesia", "malaysia", "thailand", "vietnam", "philippines",
+       "new zealand"].some(c => countryLower.includes(c))) {
+    return "APAC";
+  }
+
+  // LATAM
+  if (["brazil", "argentina", "chile", "colombia", "peru", "costa rica",
+       "panama", "puerto rico"].some(c => countryLower.includes(c))) {
+    return "LATAM";
+  }
+
+  return null;
+}
+
+// Legacy function - kept for backwards compatibility
+// Map Salesforce Account to CustomerProfile fields (including legacy keyFacts)
 export function mapAccountToProfile(account: SalesforceAccount): {
   name: string;
   industry: string | null;
@@ -231,7 +312,16 @@ export function mapAccountToProfile(account: SalesforceAccount): {
   overview: string;
   keyFacts: { label: string; value: string }[];
   salesforceId: string;
+  // Static fields
+  region: string | null;
+  tier: string | null;
+  employeeCount: number | null;
+  annualRevenue: number | null;
+  accountType: string | null;
+  billingLocation: string | null;
 } {
+  const staticFields = mapAccountToStaticFields(account);
+
   const keyFacts: { label: string; value: string }[] = [];
 
   if (account.NumberOfEmployees) {
@@ -243,11 +333,8 @@ export function mapAccountToProfile(account: SalesforceAccount): {
       value: `$${(account.AnnualRevenue / 1000000).toFixed(1)}M`,
     });
   }
-  if (account.BillingCity || account.BillingState || account.BillingCountry) {
-    const location = [account.BillingCity, account.BillingState, account.BillingCountry]
-      .filter(Boolean)
-      .join(", ");
-    keyFacts.push({ label: "Location", value: location });
+  if (staticFields.billingLocation) {
+    keyFacts.push({ label: "Location", value: staticFields.billingLocation });
   }
   if (account.Type) {
     keyFacts.push({ label: "Account Type", value: account.Type });
@@ -261,11 +348,17 @@ export function mapAccountToProfile(account: SalesforceAccount): {
     }.`;
 
   return {
-    name: account.Name,
-    industry: account.Industry || null,
-    website: account.Website || null,
+    name: staticFields.name,
+    industry: staticFields.industry,
+    website: staticFields.website,
     overview,
     keyFacts,
-    salesforceId: account.Id,
+    salesforceId: staticFields.salesforceId,
+    region: staticFields.region,
+    tier: staticFields.tier,
+    employeeCount: staticFields.employeeCount,
+    annualRevenue: staticFields.annualRevenue,
+    accountType: staticFields.accountType,
+    billingLocation: staticFields.billingLocation,
   };
 }

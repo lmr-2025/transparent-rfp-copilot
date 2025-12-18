@@ -21,6 +21,19 @@ export const INTEGRATIONS: Record<string, IntegrationConfig> = {
     ],
     docsUrl: "https://api.slack.com/messaging/webhooks",
   },
+  snowflake: {
+    name: "Snowflake",
+    description: "Connect to Snowflake for GTM data (Gong calls, HubSpot activities, Looker metrics)",
+    envVars: [
+      { key: "SNOWFLAKE_ACCOUNT", label: "Account", placeholder: "your_account.region (e.g., abc12345.us-east-1)" },
+      { key: "SNOWFLAKE_USER", label: "Username", placeholder: "your_username" },
+      { key: "SNOWFLAKE_PASSWORD", label: "Password", placeholder: "your_password", isSecret: true },
+      { key: "SNOWFLAKE_WAREHOUSE", label: "Warehouse", placeholder: "COMPUTE_WH" },
+      { key: "SNOWFLAKE_DATABASE", label: "Database", placeholder: "YOUR_DATABASE" },
+      { key: "SNOWFLAKE_SCHEMA", label: "Schema", placeholder: "PUBLIC" },
+    ],
+    docsUrl: "https://docs.snowflake.com/en/developer-guide/node-js/nodejs-driver",
+  },
 };
 
 export const FEATURE_LABELS: Record<string, string> = {

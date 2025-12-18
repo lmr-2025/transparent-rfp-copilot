@@ -1,5 +1,5 @@
 import { NextAuthOptions } from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+// Note: PrismaAdapter removed - we use JWT strategy and handle user creation manually
 import GoogleProvider from "next-auth/providers/google";
 import OktaProvider from "next-auth/providers/okta";
 import CredentialsProvider from "next-auth/providers/credentials";
@@ -16,15 +16,29 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      // Restrict to specific domain(s) if configured
-      // Set GOOGLE_ALLOWED_DOMAINS=yourcompany.com or GOOGLE_ALLOWED_DOMAINS=company1.com,company2.com
-      ...(process.env.GOOGLE_ALLOWED_DOMAINS && {
-        authorization: {
-          params: {
-            hd: process.env.GOOGLE_ALLOWED_DOMAINS.split(",")[0], // hd param only supports one domain
-          },
+      // Allow linking Google account to existing user with same email
+      // This is needed when user was created via dev login or another method
+      allowDangerousEmailAccountLinking: true,
+      authorization: {
+        params: {
+          // Request offline access for refresh tokens
+          access_type: "offline",
+          prompt: "consent",
+          // Include Slides and Drive scopes for template filling
+          scope: [
+            "openid",
+            "email",
+            "profile",
+            "https://www.googleapis.com/auth/presentations", // Read/write slides
+            "https://www.googleapis.com/auth/drive.readonly", // List all presentations
+            "https://www.googleapis.com/auth/drive.file", // Create/edit files (needed to copy presentations)
+          ].join(" "),
+          // Restrict to specific domain(s) if configured
+          ...(process.env.GOOGLE_ALLOWED_DOMAINS && {
+            hd: process.env.GOOGLE_ALLOWED_DOMAINS.split(",")[0],
+          }),
         },
-      }),
+      },
     })
   );
 }
@@ -99,14 +113,21 @@ async function computeCapabilitiesFromGroups(
   ssoGroups: string[],
   provider: string
 ): Promise<Capability[]> {
-  // Get user's manual capabilities
+  // Get user's existing capabilities and manual overrides
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { manualCapabilities: true },
+    select: { capabilities: true, manualCapabilities: true },
   });
 
-  // If no SSO groups, use defaults + manual
+  // If no SSO groups (e.g., Google auth without group claims), preserve existing capabilities
+  // Only apply defaults for brand new users with no capabilities yet
   if (!ssoGroups || ssoGroups.length === 0) {
+    const existingCaps = user?.capabilities || [];
+    if (existingCaps.length > 0) {
+      // User already has capabilities - preserve them, merge with any manual overrides
+      return mergeCapabilities(existingCaps, user?.manualCapabilities);
+    }
+    // New user with no capabilities - use defaults + manual
     return mergeCapabilities(getDefaultCapabilities(), user?.manualCapabilities);
   }
 
@@ -153,35 +174,99 @@ function extractGroupsFromProfile(profile: Record<string, unknown>): string[] {
 }
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as NextAuthOptions["adapter"],
+  // NOTE: No adapter - we use JWT strategy and handle user creation manually
+  // This avoids issues with PrismaAdapter account linking
   providers,
   secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV !== "production", // Enable debug logging
   session: {
     strategy: "jwt",
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      // On OAuth sign-in, extract groups and update user
-      if (account && profile && user.id) {
+      // On OAuth sign-in, find or create user and update capabilities
+      if (account && profile && user.email) {
         const ssoGroups = extractGroupsFromProfile(profile as Record<string, unknown>);
         const provider = account.provider;
 
         try {
-          // Compute capabilities from SSO groups
-          const capabilities = await computeCapabilitiesFromGroups(user.id, ssoGroups, provider);
+          // Find or create user by email
+          let dbUser = await prisma.user.findUnique({
+            where: { email: user.email },
+            select: { id: true, capabilities: true, manualCapabilities: true },
+          });
 
-          // Update user with latest SSO groups and computed capabilities
+          if (!dbUser) {
+            // Create new user - first user gets admin
+            const userCount = await prisma.user.count();
+            const isFirstUser = userCount === 0;
+
+            dbUser = await prisma.user.create({
+              data: {
+                email: user.email,
+                name: user.name || user.email.split("@")[0],
+                image: (user as { image?: string }).image,
+                role: isFirstUser ? "ADMIN" : "USER",
+                capabilities: isFirstUser
+                  ? roleToCapabilities("ADMIN")
+                  : getDefaultCapabilities(),
+              },
+              select: { id: true, capabilities: true, manualCapabilities: true },
+            });
+          }
+
+          // Compute capabilities from SSO groups
+          const capabilities = await computeCapabilitiesFromGroups(dbUser.id, ssoGroups, provider);
+
+          // Update user with latest SSO groups, capabilities, and profile info
           await prisma.user.update({
-            where: { id: user.id },
+            where: { id: dbUser.id },
             data: {
               ssoGroups,
               capabilities,
+              name: user.name || undefined,
+              image: (user as { image?: string }).image || undefined,
             },
           });
+
+          // Store OAuth tokens in Account table for API access (e.g., Google Slides)
+          // This replaces what PrismaAdapter would normally do
+          if (account.access_token) {
+            await prisma.account.upsert({
+              where: {
+                provider_providerAccountId: {
+                  provider: account.provider,
+                  providerAccountId: account.providerAccountId,
+                },
+              },
+              update: {
+                access_token: account.access_token,
+                refresh_token: account.refresh_token || undefined,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+                session_state: account.session_state as string | undefined,
+              },
+              create: {
+                userId: dbUser.id,
+                type: account.type,
+                provider: account.provider,
+                providerAccountId: account.providerAccountId,
+                access_token: account.access_token,
+                refresh_token: account.refresh_token,
+                expires_at: account.expires_at,
+                token_type: account.token_type,
+                scope: account.scope,
+                id_token: account.id_token,
+                session_state: account.session_state as string | undefined,
+              },
+            });
+          }
         } catch (error) {
           // Log but don't block sign-in
-          console.error("Error updating user capabilities:", error);
+          console.error("Error in signIn callback:", error);
         }
       }
       return true;
@@ -196,51 +281,54 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
 
-    async jwt({ token, user, trigger, account, profile }) {
-      if (user) {
-        token.sub = user.id;
+    async jwt({ token, user, trigger }) {
+      try {
+        // For OAuth providers, always fetch user data from database by email
+        // This avoids issues where user.id might not match the database ID
+        const email = user?.email || token.email;
 
-        // Get capabilities from user object or database
-        if ((user as { capabilities?: Capability[] }).capabilities) {
-          token.capabilities = (user as { capabilities?: Capability[] }).capabilities;
-        } else {
-          // Fetch from database
+        if (email) {
           const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { capabilities: true, role: true },
+            where: { email: email as string },
+            select: { id: true, capabilities: true, role: true },
           });
-          token.capabilities = dbUser?.capabilities || getDefaultCapabilities();
-          token.role = dbUser?.role || "USER";
+
+          if (dbUser) {
+            // Always use the database user ID as the token subject
+            token.sub = dbUser.id;
+            token.capabilities = dbUser.capabilities.length > 0
+              ? dbUser.capabilities
+              : getDefaultCapabilities();
+            token.role = dbUser.role || "USER";
+          } else {
+            // User not in database yet - use defaults
+            // This can happen briefly before PrismaAdapter creates the user
+            if (user) {
+              token.sub = user.id;
+            }
+            token.capabilities = getDefaultCapabilities();
+            token.role = "USER";
+          }
         }
 
-        // Use role from user object if available (credentials provider passes it)
-        if ((user as { role?: string }).role) {
-          token.role = (user as { role?: string }).role as "ADMIN" | "USER";
-        } else {
-          // Fetch role from database for OAuth providers
+        // Refresh capabilities on session update
+        if (trigger === "update" && token.sub) {
           const dbUser = await prisma.user.findUnique({
-            where: { id: user.id },
-            select: { role: true },
+            where: { id: token.sub },
+            select: { role: true, capabilities: true },
           });
-          token.role = dbUser?.role || "USER";
+          if (dbUser) {
+            token.role = dbUser.role || "USER";
+            token.capabilities = dbUser.capabilities.length > 0
+              ? dbUser.capabilities
+              : getDefaultCapabilities();
+          }
         }
-      }
-
-      // On OAuth sign-in with profile, update capabilities
-      if (account && profile && token.sub) {
-        const ssoGroups = extractGroupsFromProfile(profile as Record<string, unknown>);
-        const capabilities = await computeCapabilitiesFromGroups(token.sub, ssoGroups, account.provider);
-        token.capabilities = capabilities;
-      }
-
-      // Refresh capabilities on session update
-      if (trigger === "update" && token.sub) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.sub },
-          select: { role: true, capabilities: true },
-        });
-        token.role = dbUser?.role || "USER";
-        token.capabilities = dbUser?.capabilities || getDefaultCapabilities();
+      } catch (error) {
+        console.error("Error in jwt callback:", error);
+        // Don't fail sign-in, just use defaults
+        token.capabilities = getDefaultCapabilities();
+        token.role = "USER";
       }
 
       return token;

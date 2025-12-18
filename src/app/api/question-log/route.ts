@@ -105,10 +105,15 @@ export async function GET(request: NextRequest) {
     const shouldFetchRows = source === "all" || source === "project";
     const shouldFetchQuestions = source === "all" || source === "questions";
 
-    // Fetch from BulkRow (project questions)
+    // Fetch from BulkRow (project questions) with safety limit
+    // We fetch more than the page limit since we merge two sources and sort in memory
+    const fetchLimit = Math.min(limit * 10, 1000); // Cap at 1000 per source
+
     const rows = shouldFetchRows
       ? await prisma.bulkRow.findMany({
           where: buildRowWhereClause(),
+          take: fetchLimit,
+          orderBy: { createdAt: "desc" },
           include: {
             project: {
               select: {
@@ -124,10 +129,11 @@ export async function GET(request: NextRequest) {
         })
       : [];
 
-    // Fetch from QuestionHistory
+    // Fetch from QuestionHistory with safety limit
     const questions = shouldFetchQuestions
       ? await prisma.questionHistory.findMany({
           where: buildQuestionWhereClause(),
+          take: fetchLimit,
           orderBy: { createdAt: "desc" },
         })
       : [];

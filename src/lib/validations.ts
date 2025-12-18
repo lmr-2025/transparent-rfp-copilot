@@ -73,6 +73,23 @@ export const updateSkillSchema = z.object({
   lastRefreshedAt: z.string().optional(),
 });
 
+// Customer profile source URL schema - supports both string and object formats
+const customerSourceUrlSchema = z.union([
+  z.string().url(),
+  z.object({
+    url: z.string().url(),
+    addedAt: z.string(),
+    lastFetchedAt: z.string().optional(),
+  }),
+]);
+
+// Customer profile source document schema
+const customerSourceDocumentSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  uploadedAt: z.string(),
+});
+
 // Customer profile schemas
 export const createCustomerSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -85,10 +102,22 @@ export const createCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).default([]),
-  sourceUrls: z.array(z.string().url()).default([]),
+  sourceUrls: z.array(customerSourceUrlSchema).default([]),
+  sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
+  // New content field
+  content: z.string().max(100000).optional(),
+  considerations: z.array(z.string()).optional(),
   isActive: z.boolean().default(true),
   owners: z.string().nullable().optional(),
+  // Salesforce static fields
   salesforceId: z.string().optional(),
+  region: z.string().optional(),
+  tier: z.string().optional(),
+  employeeCount: z.number().optional(),
+  annualRevenue: z.number().optional(),
+  accountType: z.string().optional(),
+  billingLocation: z.string().optional(),
+  lastSalesforceSync: z.string().optional(),
 });
 
 // For updates, use a separate schema without defaults
@@ -104,10 +133,22 @@ export const updateCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).optional(),
-  sourceUrls: z.array(z.string().url()).optional(),
+  sourceUrls: z.array(customerSourceUrlSchema).optional(),
+  sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
+  // New content field
+  content: z.string().max(100000).optional(),
+  considerations: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
   owners: z.string().nullable().optional(),
+  // Salesforce static fields
   salesforceId: z.string().optional(),
+  region: z.string().optional(),
+  tier: z.string().optional(),
+  employeeCount: z.number().optional(),
+  annualRevenue: z.number().optional(),
+  accountType: z.string().optional(),
+  billingLocation: z.string().optional(),
+  lastSalesforceSync: z.string().optional(),
 });
 
 // Project row schema
@@ -242,13 +283,17 @@ const customerProfileContextSchema = z.object({
   id: z.string(),
   name: z.string(),
   industry: z.string().optional(),
-  overview: z.string(),
+  // New unified content field (markdown-structured prose)
+  content: z.string().optional(),
+  considerations: z.array(z.string()).optional(),
+  // Legacy fields for backwards compatibility
+  overview: z.string().optional(), // Now optional since content replaces it
   products: z.string().optional(),
   challenges: z.string().optional(),
   keyFacts: z.array(z.object({
     label: z.string(),
     value: z.string(),
-  })),
+  })).optional(), // Now optional
 });
 
 const referenceUrlContextSchema = z.object({
@@ -271,6 +316,35 @@ const chatSectionSchema = z.object({
   enabled: z.boolean(),
 });
 
+// GTM data context schema (from Snowflake - Gong, HubSpot, Looker)
+const gtmDataContextSchema = z.object({
+  salesforceAccountId: z.string(),
+  customerName: z.string().optional(),
+  // Pre-built context string (if already fetched and formatted)
+  contextString: z.string().optional(),
+  // Or individual data for server-side formatting
+  gongCalls: z.array(z.object({
+    id: z.string(),
+    title: z.string(),
+    date: z.string(),
+    duration: z.number(),
+    participants: z.array(z.string()),
+    summary: z.string().optional(),
+    transcript: z.string().optional(),
+  })).optional(),
+  hubspotActivities: z.array(z.object({
+    id: z.string(),
+    type: z.string(),
+    date: z.string(),
+    subject: z.string(),
+    content: z.string().optional(),
+  })).optional(),
+  lookerMetrics: z.array(z.object({
+    period: z.string(),
+    metrics: z.record(z.string(), z.union([z.string(), z.number()])),
+  })).optional(),
+});
+
 export const knowledgeChatSchema = z.object({
   message: z.string().min(1, "Message is required").max(50000),
   skills: z.array(skillContextSchema).default([]),
@@ -282,6 +356,8 @@ export const knowledgeChatSchema = z.object({
   userInstructions: z.string().max(50000).optional(), // User-facing behavior/persona instructions
   // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
   quickMode: z.boolean().optional(),
+  // GTM data from Snowflake (Gong, HubSpot, Looker)
+  gtmData: gtmDataContextSchema.optional(),
 });
 
 // Legacy chat message schema (for other uses)
