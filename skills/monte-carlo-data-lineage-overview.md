@@ -4,7 +4,7 @@ title: Monte Carlo Data Lineage Overview
 categories:
   - Product & Features
 created: '2025-12-19T16:47:44.091Z'
-updated: '2025-12-19T16:47:44.096Z'
+updated: '2025-12-19T17:20:00.000Z'
 owners:
   - name: lross
     email: lross@monteccarlodata.com
@@ -61,4 +61,5 @@ A: Monte Carlo tracks both table-level lineage (table-to-table relationships) an
 
 ---
 
-_Test edit made directly to markdown file at 2025-12-19T17:15:00Z to test git→database sync._
+_Test edit #1: Made directly to markdown file at 2025-12-19T17:15:00Z to test git→database sync._
+_Test edit #2: Made at 2025-12-19T17:20:00Z to test sync logging._
