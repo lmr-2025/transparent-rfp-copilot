@@ -188,21 +188,145 @@ See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete
 ### Phase 2: Networking Foundation
 
 #### 2.1 VPC and Subnets (SEC-1051)
-- [ ] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
-- [ ] Create public subnets in 2+ AZs (for ALB/NAT)
-- [ ] Create private subnets in 2+ AZs (for app/database)
-- [ ] Create Internet Gateway
-- [ ] Create NAT Gateway (or NAT instance)
-- [ ] Configure route tables
-- [ ] Enable VPC Flow Logs
+- [x] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
+- [x] Create public subnets in 2+ AZs (for ALB/NAT)
+- [x] Create private subnets in 2+ AZs (for app/database)
+- [x] Create Internet Gateway
+- [x] Create NAT Gateway (or NAT instance)
+- [x] Configure route tables
+- [x] Enable VPC Flow Logs
+
+**Implementation Details**:
+- **Location**: `infrastructure/vpc/`
+- **Terraform Modules**:
+  - `main.tf` - VPC, subnets, IGW, NAT Gateways, route tables, VPC Flow Logs
+  - `variables.tf` - Configurable variables for CIDR, AZs, NAT Gateway, Flow Logs
+  - `outputs.tf` - VPC, subnet, NAT Gateway, and Flow Log outputs
+  - `README.md` - Complete documentation with architecture diagrams and usage examples
+
+**Architecture**:
+- **VPC**: 10.0.0.0/16 CIDR block with DNS support enabled
+- **Public Subnets**: 3 subnets (10.0.0.0/24, 10.0.1.0/24, 10.0.2.0/24) across us-east-1a/b/c
+  - For Application Load Balancers
+  - For NAT Gateways
+- **Private Subnets**: 3 subnets (10.0.3.0/24, 10.0.4.0/24, 10.0.5.0/24) across us-east-1a/b/c
+  - For ECS/Fargate tasks
+  - For RDS PostgreSQL
+  - For ElastiCache Redis
+- **Internet Gateway**: Public subnet internet access
+- **NAT Gateways**: 3 NAT Gateways (one per AZ) for high availability
+- **Route Tables**: Separate public route table and private route tables per AZ
+- **VPC Flow Logs**: All traffic logged to CloudWatch (30-day retention)
+
+**Key Features**:
+- Multi-AZ high availability (3 availability zones)
+- Network isolation (public/private subnet separation)
+- Automatic subnet CIDR calculation
+- VPC Flow Logs for network monitoring and compliance
+- Cost-optimized options (single NAT Gateway, disable Flow Logs)
+- Configurable for production, staging, and development environments
+
+**Outputs Available**:
+- `vpc_id` - For use in security groups and other resources
+- `public_subnet_ids` - For ALB placement
+- `private_subnet_ids` - For ECS tasks, RDS, ElastiCache
+- `nat_gateway_ids` - NAT Gateway IDs for monitoring
+- `vpc_flow_log_group_name` - CloudWatch log group for flow logs
+
+**Usage**:
+```bash
+cd infrastructure/vpc
+terraform init
+terraform plan -var="environment=production" -var="enable_nat_gateway=true"
+terraform apply -var="environment=production"
+```
+
+**Cost Estimate**: ~$120-125/month (3 NAT Gateways, VPC Flow Logs, data transfer)
+
+**Cost Optimization**:
+- Single NAT Gateway: `enable_nat_gateway=true` + reduce `availability_zones` to 2
+- No NAT Gateway: `enable_nat_gateway=false` (use Upstash/public services only)
+- Disable Flow Logs: `enable_flow_logs=false` (save ~$5-10/month)
+
+See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete documentation.
 
 #### 2.2 Security Groups and NACLs (SEC-1053)
-- [ ] ALB security group (allow 443 from 0.0.0.0/0)
-- [ ] App security group (allow traffic from ALB only)
-- [ ] RDS security group (allow 5432 from app SG only)
-- [ ] Redis security group (allow 6379 from app SG only)
-- [ ] Configure NACLs for defense in depth
-- [ ] Document all security group rules
+- [x] ALB security group (allow 443 from 0.0.0.0/0)
+- [x] App security group (allow traffic from ALB only)
+- [x] RDS security group (allow 5432 from app SG only)
+- [x] Redis security group (allow 6379 from app SG only)
+- [x] Configure NACLs for defense in depth
+- [x] Document all security group rules
+
+**Implementation Details**:
+- **Location**: `infrastructure/security-groups/`
+- **Terraform Modules**:
+  - `main.tf` - Security groups for ALB, App, RDS, Redis, VPC Endpoints
+  - `nacls.tf` - Network ACLs for public and private subnets
+  - `variables.tf` - Configuration variables
+  - `outputs.tf` - Security group and NACL IDs for use in other modules
+  - `README.md` - Complete documentation with security best practices
+
+**Security Groups Created**:
+1. **ALB Security Group**
+   - Inbound: HTTPS (443) and HTTP (80) from internet (0.0.0.0/0)
+   - Outbound: Traffic to app security group on port 3000
+
+2. **Application Security Group**
+   - Inbound: Traffic from ALB security group on port 3000
+   - Outbound: All internet (for API calls, package downloads via NAT)
+   - Outbound: PostgreSQL (5432) to RDS security group
+   - Outbound: Redis (6379) to Redis security group (if enabled)
+
+3. **RDS Security Group**
+   - Inbound: PostgreSQL (5432) from app security group only
+   - No outbound rules (database doesn't initiate connections)
+
+4. **Redis Security Group** (optional)
+   - Inbound: Redis (6379) from app security group only
+   - No outbound rules (cache doesn't initiate connections)
+
+5. **VPC Endpoints Security Group** (optional)
+   - Inbound: HTTPS (443) from app security group
+   - For private access to S3, Secrets Manager, etc.
+
+**Network ACLs** (optional):
+- Public subnet NACL: Allows HTTPS/HTTP inbound, ephemeral ports outbound
+- Private subnet NACL: Allows app/DB/Redis ports within VPC, ephemeral ports from internet
+- Provides defense-in-depth at subnet level (in addition to security groups)
+
+**Key Features**:
+- Least privilege access (only necessary ports/sources allowed)
+- Security group references (no hardcoded IPs)
+- Defense in depth with optional Network ACLs
+- Stateful filtering at instance level
+- Stateless filtering at subnet level (NACLs)
+- No direct database access from internet
+
+**Outputs Available**:
+- `alb_security_group_id` - For ALB configuration
+- `app_security_group_id` - For ECS task/service configuration
+- `rds_security_group_id` - For RDS instance configuration
+- `redis_security_group_id` - For ElastiCache configuration (if enabled)
+- `vpc_endpoints_security_group_id` - For VPC endpoint configuration (if enabled)
+
+**Usage**:
+```bash
+cd infrastructure/security-groups
+terraform init
+VPC_ID=$(cd ../vpc && terraform output -raw vpc_id)
+terraform plan -var="vpc_id=$VPC_ID" -var="environment=production"
+terraform apply -var="vpc_id=$VPC_ID" -var="environment=production"
+```
+
+**Security Best Practices**:
+- ✅ Least privilege (only necessary traffic allowed)
+- ✅ Security group references (not IP ranges)
+- ✅ Defense in depth (security groups + NACLs)
+- ✅ No direct internet access to databases
+- ✅ Explicit deny by default
+
+See [infrastructure/security-groups/README.md](../infrastructure/security-groups/README.md) for complete documentation.
 
 #### 2.3 Application Load Balancer (SEC-1052)
 - [x] Create ALB in public subnets
