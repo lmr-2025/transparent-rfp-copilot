@@ -26,8 +26,8 @@ All subtasks are tracked in Linear under the Security team.
 | **0. AWS Account** | [SEC-1063](https://linear.app/montecarlodata/issue/SEC-1063) | 🔴 Not Started |
 | **1.1 AWS SSO** | [SEC-1045](https://linear.app/montecarlodata/issue/SEC-1045) | 🔴 Not Started |
 | **1.2 IAM Roles** | [SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046) | ✅ Complete |
-| **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | ✅ Complete |
-| **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
+| **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | 🔴 Not Started |
+| **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | ✅ Complete |
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
 | **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
@@ -251,12 +251,82 @@ terraform apply -var="environment=production"
 See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete documentation.
 
 #### 2.2 Security Groups and NACLs (SEC-1053)
-- [ ] ALB security group (allow 443 from 0.0.0.0/0)
-- [ ] App security group (allow traffic from ALB only)
-- [ ] RDS security group (allow 5432 from app SG only)
-- [ ] Redis security group (allow 6379 from app SG only)
-- [ ] Configure NACLs for defense in depth
-- [ ] Document all security group rules
+- [x] ALB security group (allow 443 from 0.0.0.0/0)
+- [x] App security group (allow traffic from ALB only)
+- [x] RDS security group (allow 5432 from app SG only)
+- [x] Redis security group (allow 6379 from app SG only)
+- [x] Configure NACLs for defense in depth
+- [x] Document all security group rules
+
+**Implementation Details**:
+- **Location**: `infrastructure/security-groups/`
+- **Terraform Modules**:
+  - `main.tf` - Security groups for ALB, App, RDS, Redis, VPC Endpoints
+  - `nacls.tf` - Network ACLs for public and private subnets
+  - `variables.tf` - Configuration variables
+  - `outputs.tf` - Security group and NACL IDs for use in other modules
+  - `README.md` - Complete documentation with security best practices
+
+**Security Groups Created**:
+1. **ALB Security Group**
+   - Inbound: HTTPS (443) and HTTP (80) from internet (0.0.0.0/0)
+   - Outbound: Traffic to app security group on port 3000
+
+2. **Application Security Group**
+   - Inbound: Traffic from ALB security group on port 3000
+   - Outbound: All internet (for API calls, package downloads via NAT)
+   - Outbound: PostgreSQL (5432) to RDS security group
+   - Outbound: Redis (6379) to Redis security group (if enabled)
+
+3. **RDS Security Group**
+   - Inbound: PostgreSQL (5432) from app security group only
+   - No outbound rules (database doesn't initiate connections)
+
+4. **Redis Security Group** (optional)
+   - Inbound: Redis (6379) from app security group only
+   - No outbound rules (cache doesn't initiate connections)
+
+5. **VPC Endpoints Security Group** (optional)
+   - Inbound: HTTPS (443) from app security group
+   - For private access to S3, Secrets Manager, etc.
+
+**Network ACLs** (optional):
+- Public subnet NACL: Allows HTTPS/HTTP inbound, ephemeral ports outbound
+- Private subnet NACL: Allows app/DB/Redis ports within VPC, ephemeral ports from internet
+- Provides defense-in-depth at subnet level (in addition to security groups)
+
+**Key Features**:
+- Least privilege access (only necessary ports/sources allowed)
+- Security group references (no hardcoded IPs)
+- Defense in depth with optional Network ACLs
+- Stateful filtering at instance level
+- Stateless filtering at subnet level (NACLs)
+- No direct database access from internet
+
+**Outputs Available**:
+- `alb_security_group_id` - For ALB configuration
+- `app_security_group_id` - For ECS task/service configuration
+- `rds_security_group_id` - For RDS instance configuration
+- `redis_security_group_id` - For ElastiCache configuration (if enabled)
+- `vpc_endpoints_security_group_id` - For VPC endpoint configuration (if enabled)
+
+**Usage**:
+```bash
+cd infrastructure/security-groups
+terraform init
+VPC_ID=$(cd ../vpc && terraform output -raw vpc_id)
+terraform plan -var="vpc_id=$VPC_ID" -var="environment=production"
+terraform apply -var="vpc_id=$VPC_ID" -var="environment=production"
+```
+
+**Security Best Practices**:
+- ✅ Least privilege (only necessary traffic allowed)
+- ✅ Security group references (not IP ranges)
+- ✅ Defense in depth (security groups + NACLs)
+- ✅ No direct internet access to databases
+- ✅ Explicit deny by default
+
+See [infrastructure/security-groups/README.md](../infrastructure/security-groups/README.md) for complete documentation.
 
 #### 2.3 Application Load Balancer (SEC-1052)
 - [ ] Create ALB in public subnets
