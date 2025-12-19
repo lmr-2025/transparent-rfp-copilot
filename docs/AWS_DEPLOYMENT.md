@@ -26,7 +26,7 @@ All subtasks are tracked in Linear under the Security team.
 | **0. AWS Account** | [SEC-1063](https://linear.app/montecarlodata/issue/SEC-1063) | 🔴 Not Started |
 | **1.1 AWS SSO** | [SEC-1045](https://linear.app/montecarlodata/issue/SEC-1045) | 🔴 Not Started |
 | **1.2 IAM Roles** | [SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046) | ✅ Complete |
-| **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | 🔴 Not Started |
+| **2.1 VPC** | [SEC-1051](https://linear.app/montecarlodata/issue/SEC-1051) | ✅ Complete |
 | **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
@@ -188,13 +188,67 @@ See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete
 ### Phase 2: Networking Foundation
 
 #### 2.1 VPC and Subnets (SEC-1051)
-- [ ] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
-- [ ] Create public subnets in 2+ AZs (for ALB/NAT)
-- [ ] Create private subnets in 2+ AZs (for app/database)
-- [ ] Create Internet Gateway
-- [ ] Create NAT Gateway (or NAT instance)
-- [ ] Configure route tables
-- [ ] Enable VPC Flow Logs
+- [x] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
+- [x] Create public subnets in 2+ AZs (for ALB/NAT)
+- [x] Create private subnets in 2+ AZs (for app/database)
+- [x] Create Internet Gateway
+- [x] Create NAT Gateway (or NAT instance)
+- [x] Configure route tables
+- [x] Enable VPC Flow Logs
+
+**Implementation Details**:
+- **Location**: `infrastructure/vpc/`
+- **Terraform Modules**:
+  - `main.tf` - VPC, subnets, IGW, NAT Gateways, route tables, VPC Flow Logs
+  - `variables.tf` - Configurable variables for CIDR, AZs, NAT Gateway, Flow Logs
+  - `outputs.tf` - VPC, subnet, NAT Gateway, and Flow Log outputs
+  - `README.md` - Complete documentation with architecture diagrams and usage examples
+
+**Architecture**:
+- **VPC**: 10.0.0.0/16 CIDR block with DNS support enabled
+- **Public Subnets**: 3 subnets (10.0.0.0/24, 10.0.1.0/24, 10.0.2.0/24) across us-east-1a/b/c
+  - For Application Load Balancers
+  - For NAT Gateways
+- **Private Subnets**: 3 subnets (10.0.3.0/24, 10.0.4.0/24, 10.0.5.0/24) across us-east-1a/b/c
+  - For ECS/Fargate tasks
+  - For RDS PostgreSQL
+  - For ElastiCache Redis
+- **Internet Gateway**: Public subnet internet access
+- **NAT Gateways**: 3 NAT Gateways (one per AZ) for high availability
+- **Route Tables**: Separate public route table and private route tables per AZ
+- **VPC Flow Logs**: All traffic logged to CloudWatch (30-day retention)
+
+**Key Features**:
+- Multi-AZ high availability (3 availability zones)
+- Network isolation (public/private subnet separation)
+- Automatic subnet CIDR calculation
+- VPC Flow Logs for network monitoring and compliance
+- Cost-optimized options (single NAT Gateway, disable Flow Logs)
+- Configurable for production, staging, and development environments
+
+**Outputs Available**:
+- `vpc_id` - For use in security groups and other resources
+- `public_subnet_ids` - For ALB placement
+- `private_subnet_ids` - For ECS tasks, RDS, ElastiCache
+- `nat_gateway_ids` - NAT Gateway IDs for monitoring
+- `vpc_flow_log_group_name` - CloudWatch log group for flow logs
+
+**Usage**:
+```bash
+cd infrastructure/vpc
+terraform init
+terraform plan -var="environment=production" -var="enable_nat_gateway=true"
+terraform apply -var="environment=production"
+```
+
+**Cost Estimate**: ~$120-125/month (3 NAT Gateways, VPC Flow Logs, data transfer)
+
+**Cost Optimization**:
+- Single NAT Gateway: `enable_nat_gateway=true` + reduce `availability_zones` to 2
+- No NAT Gateway: `enable_nat_gateway=false` (use Upstash/public services only)
+- Disable Flow Logs: `enable_flow_logs=false` (save ~$5-10/month)
+
+See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete documentation.
 
 #### 2.2 Security Groups and NACLs (SEC-1053)
 - [ ] ALB security group (allow 443 from 0.0.0.0/0)
