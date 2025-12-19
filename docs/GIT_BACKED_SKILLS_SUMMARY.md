@@ -198,21 +198,26 @@ User creates skill via web UI
 
 ## Testing & Verification
 
-### ✅ Tested Successfully
-1. Created 3 skills via web UI → all committed to git
-2. All markdown files have proper YAML frontmatter
-3. Git commits attributed correctly
-4. Sync logging tracks all operations
-5. TypeScript compiles with no errors
-6. API endpoints authenticated correctly
+### ✅ Tested Successfully (Dec 19, 2025)
+1. ✅ Created 3 skills via web UI → all committed to git
+2. ✅ All markdown files have proper YAML frontmatter
+3. ✅ Git commits attributed correctly
+4. ✅ Sync logging tracks all operations (both db→git and git→db)
+5. ✅ TypeScript compiles with no errors
+6. ✅ API endpoints authenticated correctly
+7. ✅ Update skill → verified git commit with SHA tracking
+8. ✅ Edit markdown directly → sync to DB works perfectly
+9. ✅ Sync script updated to use sync logging wrapper
+10. ✅ Sync health status API returns accurate metrics
+11. ✅ Individual skill sync logs retrievable via API
+12. ✅ Git→DB sync creates proper sync log entries
 
 ### 📋 Still Need Testing
-1. Update skill → verify git commit
-2. Delete skill → verify git removal
-3. Edit markdown directly → sync to DB
-4. Sync failure scenarios
-5. Concurrent updates
-6. UI components (not built yet)
+1. Delete skill → verify git removal
+2. Sync failure scenarios (network errors, git conflicts)
+3. Concurrent updates (race conditions)
+4. Manual sync trigger API endpoint (POST /api/skills/sync/trigger)
+5. UI components (not built yet)
 
 ---
 
@@ -245,7 +250,11 @@ transparent-trust/
 │
 ├── scripts/
 │   ├── export-skills-to-git.ts              # One-time: DB → git
-│   ├── sync-skills-to-db.ts                 # Recurring: git → DB
+│   ├── sync-skills-to-db.ts                 # Recurring: git → DB (with sync logging)
+│   ├── test-sync-tracking.ts                # Test: sync tracking (db→git)
+│   ├── test-complete-sync-flow.ts           # Test: complete flow + health
+│   ├── verify-git-sync.ts                   # Verify: git→DB sync worked
+│   ├── verify-sync-logs.ts                  # Verify: sync logs for a skill
 │   ├── check-skills.ts                      # Debug: list skills
 │   └── check-user.ts                        # Debug: list users
 │
