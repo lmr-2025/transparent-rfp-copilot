@@ -304,12 +304,27 @@ Each infrastructure module includes:
 - `outputs.tf` - Values for other modules
 - `main.tf` - Resource definitions
 
+## Third-Party Integrations
+
+The platform supports optional integrations with external systems:
+
+| Integration | Purpose | Documentation |
+|-------------|---------|---------------|
+| **Salesforce** | Customer data enrichment | [Setup Guide](docs/INTEGRATIONS.md#salesforce-integration) |
+| **Google OAuth** | SSO + Slides template filling | [Setup Guide](docs/INTEGRATIONS.md#google-oauth--slides) |
+| **Snowflake** | GTM data queries | [Setup Guide](docs/INTEGRATIONS.md#snowflake-integration) |
+| **Okta** | Enterprise SSO with group sync | [Setup Guide](docs/INTEGRATIONS.md#okta-sso) |
+| **Slack** | Review notifications | [Setup Guide](docs/INTEGRATIONS.md#slack-notifications) |
+
+All integrations are **optional**. The platform works fully without any external integrations. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete setup instructions.
+
 ## Documentation
 
+- **Third-Party Integrations**: See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for Salesforce, Google, Snowflake, Okta, and Slack setup
+- **AWS Deployment**: See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for production infrastructure
 - **Prompt System**: See `/admin/prompt-blocks` for the composable prompt builder
 - **API**: All routes documented in `/src/app/api/` with JSDoc comments
 - **Database Schema**: See `prisma/schema.prisma` for data models
-- **AWS Infrastructure**: See `/infrastructure` and `docs/AWS_DEPLOYMENT.md`
 
 ## License
 
