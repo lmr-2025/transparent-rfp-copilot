@@ -1085,11 +1085,102 @@ knowledge/
 - ✅ npm scripts (`npm run export:customers`, `npm run sync:customers`)
 
 **Remaining:**
-- [ ] Update Customer API routes to commit to git on save
+- [x] Update Customer API routes to commit to git on save
 - [ ] Add sync status UI to customer profile cards (reuse `SyncStatusBadge`)
 - [ ] Add API endpoints for customer sync status/logs
 - [ ] Test full bidirectional sync workflow
 - [ ] GitHub Actions for automated sync
+
+---
+
+## AWS Infrastructure Recommendations
+
+> **Reference**: See [git-backed-skills-deployment.md](git-backed-skills-deployment.md) for detailed AWS deployment architecture.
+
+### Summary of Recommended Approach
+
+The recommended AWS deployment uses **Lambda-Based Git Sync** (Option 1 from the skills deployment doc):
+
+```
+Web UI (ECS) → RDS (write only)
+                ↓
+          EventBridge → Lambda (commit to git)
+                ↓
+          GitHub webhook → Lambda → sync to RDS
+```
+
+### Infrastructure Components Needed (Phase 2+)
+
+The same Lambda-based sync architecture applies to **all git-backed knowledge types**:
+
+| Component | Description | Phase |
+|-----------|-------------|-------|
+| Lambda: `knowledge-to-git` | Commits DB changes to git | Phase 1 (exists) |
+| Lambda: `git-to-knowledge` | Syncs git changes to RDS | Phase 1 (exists) |
+| EventBridge Rules | Trigger on RDS table changes | Phase 1+ |
+| GitHub Webhook | Trigger on push to main | Phase 1+ |
+
+### Changes for Phase 2 (Customer Profiles)
+
+**Extend existing Lambda functions to handle customers:**
+
+1. **EventBridge Rule**: Add pattern for `CustomerProfile` table changes
+   ```json
+   {
+     "source": ["aws.rds"],
+     "detail-type": ["RDS DB Instance Event"],
+     "detail": {
+       "table": ["Skill", "CustomerProfile"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add customer handling
+   ```typescript
+   if (event.detail.table === 'CustomerProfile') {
+     const customer = await fetchCustomerFromRDS(event.detail.id);
+     const slug = getCustomerSlug(customer.name);
+     await writeCustomerFile(`/tmp/repo/customers/${slug}.md`, customer);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add customer sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('customers/'))) {
+     await exec('npm run sync:customers', { cwd: '/tmp/repo' });
+   }
+   ```
+
+### Changes for Phase 3+ (Prompts, Templates)
+
+Same pattern - extend EventBridge rules and Lambda handlers:
+
+- `prompts/` directory → sync SystemPrompt/PromptBlock tables
+- `templates/` directory → sync Template table
+
+### Cost Estimate (All Phases)
+
+| Resource | Monthly Cost | Notes |
+|----------|-------------|-------|
+| Lambda (2 functions) | ~$5-20 | Based on invocation frequency |
+| EventBridge | ~$1 | Per rule evaluation |
+| GitHub webhook | Free | Part of GitHub |
+| CloudWatch Logs | ~$5 | Log retention |
+| **Total** | **~$15-30/month** | Minimal additional infra |
+
+### Security Considerations
+
+1. **GitHub Token**: Store in AWS Secrets Manager (already recommended)
+2. **VPC Access**: Lambdas need VPC attachment to reach RDS
+3. **IAM**: Minimal permissions for git operations
+4. **Audit**: All sync operations logged to CloudWatch and SyncLog tables
+
+### No Additional Infrastructure Needed
+
+The git-first expansion (Phases 2-4) **reuses the same Lambda infrastructure** as Phase 1. The only changes are:
+- EventBridge rule patterns (add new table names)
+- Lambda code (add handlers for new entity types)
+- Git directory structure (add `customers/`, `prompts/`, `templates/`)
 
 ---
 
