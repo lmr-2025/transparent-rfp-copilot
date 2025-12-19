@@ -4,10 +4,10 @@ title: Monte Carlo Data Monitoring Features and Capabilities
 categories:
   - Product & Features
 created: '2025-12-19T16:47:43.525Z'
-updated: '2025-12-19T16:47:43.530Z'
+updated: '2025-12-19T17:09:25.667Z'
 owners:
-  - name: lross
-    email: lross@monteccarlodata.com
+  - name: Test User
+    email: test@example.com
     userId: cmjd3p1oq0000iruzymyw2ji7
 sources:
   - url: 'https://docs.getmontecarlo.com/docs/data-profiler.md'
@@ -200,3 +200,5 @@ A: The Schema Monitor automatically detects schema changes, displays them on the
 
 **Q: What training resources are available?**
 A: Video tutorials are available for each monitor type, providing step-by-step guidance for implementation and configuration.
+
+_Last tested: 2025-12-19T17:09:25.654Z_
