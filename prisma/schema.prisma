@@ -376,8 +376,8 @@ model Skill {
   title           String
   content         String   @db.Text
   categories      String[] // Broad capability areas
-  quickFacts      Json?    // Array of {question, answer}
-  edgeCases       String[]
+  quickFacts      Json?    // Array of {question, answer} - DEPRECATED (use content field)
+  edgeCases       String[] // DEPRECATED (use content field)
   sourceUrls      Json?    // Array of {url, addedAt, lastFetchedAt}
   sourceDocuments Json?    // Array of {id, filename, uploadedAt} - docs that fed into this skill
   isActive        Boolean  @default(true)
@@ -390,8 +390,29 @@ model Skill {
   owners          Json?    // Array of {name, email} - legacy/additional owners
   history         Json?    // Audit trail entries
 
+  // Review system fields (optional, defaults to category settings)
+  requiresReview      Boolean?   // NULL = inherit from category, TRUE = requires review, FALSE = direct save
+  minApprovers        Int?       // NULL = use category default (usually 1)
+  approvers           String[]   @default([]) // Email addresses or user IDs of allowed approvers
+  status              SkillStatus @default(PUBLISHED) // DRAFT, IN_REVIEW, PUBLISHED, ARCHIVED
+  draftContent        String?    @db.Text // Content being drafted (for review workflow)
+  pendingReviewers    Json?      // Array of {userId, email, status: "pending"|"approved"|"rejected", reviewedAt}
+  reviewRequestedAt   DateTime?
+  reviewRequestedBy   String?    // User ID or email who requested review
+  reviewComments      Json?      // Array of {author, comment, timestamp, lineNumber?}
+
   @@index([isActive, updatedAt])
   @@index([ownerId])
+  @@index([status])
+  @@index([reviewRequestedAt])
+}
+
+// Skill status for review workflow
+enum SkillStatus {
+  DRAFT          // Saved but not published
+  IN_REVIEW      // Submitted for review
+  PUBLISHED      // Live and active (default)
+  ARCHIVED       // Archived/inactive
 }
 
 // Skill Categories
@@ -403,6 +424,11 @@ model SkillCategory {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Review settings for skills in this category
+  requiresReview Boolean? // NULL = no, TRUE = skills in this category require review
+  minApprovers   Int?     @default(1) // Minimum number of approvals needed
+  approvers      String[] @default([]) // Email addresses or user IDs of allowed approvers
 
   @@index([sortOrder])
 }

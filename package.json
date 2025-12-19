@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "stop": "lsof -ti:3000 | xargs kill 2>/dev/null && echo 'Server stopped' || echo 'No server running on port 3000'",
-    "restart": "npm run stop && npm run dev"
+    "restart": "npm run stop && npm run dev",
+    "export:skills": "tsx scripts/export-skills-to-git.ts",
+    "sync:skills": "tsx scripts/sync-skills-to-db.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
@@ -30,6 +32,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "docx": "^9.5.1",
+    "gray-matter": "^4.0.3",
     "lucide-react": "^0.561.0",
     "mammoth": "^1.11.0",
     "next": "16.0.10",
