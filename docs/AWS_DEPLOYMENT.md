@@ -31,8 +31,8 @@ All subtasks are tracked in Linear under the Security team.
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
 | **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
-| **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | ✅ Complete |
-| **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
+| **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
+| **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | ✅ Complete |
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
 | **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
@@ -790,11 +790,213 @@ See [infrastructure/s3/README.md](../infrastructure/s3/README.md) for complete d
 - Application integration examples
 
 #### 4.2 S3 Access Policies (SEC-1055)
-- [ ] Configure bucket policies
-- [ ] Set up IAM permissions for app
-- [ ] Configure signed URL generation
-- [ ] Enable server access logging
-- [ ] Configure cross-region replication (optional)
+- [x] Configure bucket policies
+- [x] Set up IAM permissions for app
+- [x] Configure signed URL generation
+- [x] Enable server access logging
+- [x] Configure cross-region replication (optional)
+
+**Implementation Details**:
+- **Location**: `infrastructure/s3-policies/`
+- **Terraform Modules**:
+  - `main.tf` - IAM policies, bucket policies, S3 Access Points, replication roles
+  - `variables.tf` - Configuration variables for policy creation
+  - `outputs.tf` - Policy ARNs, role ARNs, Access Point details
+  - `README.md` - Comprehensive documentation with signed URL examples and security best practices
+
+**IAM Policies Created**:
+
+1. **Application S3 Access Policy**:
+   - Purpose: Full CRUD operations for application on S3 buckets
+   - Permissions: PutObject, GetObject, DeleteObject, ListBucket, version operations
+   - KMS Access: Decrypt, GenerateDataKey (if KMS encryption enabled)
+   - Conditions: Enforce encryption on uploads
+   - Scope: Specific bucket only (least privilege)
+   - Automatic attachment to application IAM role
+
+2. **Read-Only S3 Access Policy** (optional):
+   - Purpose: Read-only access for analytics, reporting, auditing
+   - Permissions: GetObject, GetObjectVersion, ListBucket, bucket metadata
+   - Use Cases: BI tools, reporting systems, data science, audit log analysis
+   - KMS Access: Decrypt only (if KMS enabled)
+
+3. **Lambda S3 Access Policy** (optional):
+   - Purpose: Lambda function file processing
+   - Permissions: GetObject, PutObject, ListBucket
+   - Use Cases: Format conversion, thumbnails, text extraction, virus scanning
+   - KMS Access: Decrypt and GenerateDataKey (if KMS enabled)
+
+4. **S3 Replication Policy** (optional):
+   - Purpose: Cross-region replication for disaster recovery
+   - Source Permissions: Read replication config, get objects/versions
+   - Destination Permissions: Write replicated objects
+   - KMS Access: Decrypt from source, encrypt to destination
+   - IAM Role: Dedicated replication role with AssumeRole policy
+   - Use Cases: Disaster recovery, compliance, data sovereignty
+
+**Bucket Policies (Resource-Based)**:
+- **SSL/TLS Enforcement**: Deny all requests without `aws:SecureTransport`
+- **Encryption Enforcement**: Deny PutObject without proper encryption header
+- **Application Role Access**: Explicitly allow application role
+- **Defense in Depth**: Both identity-based (IAM) and resource-based (bucket) policies
+
+**S3 Access Points** (optional):
+- Purpose: Simplify data access management for shared datasets
+- Features: Unique hostname, dedicated policy, optional VPC restriction
+- Benefits: Simplified management, network isolation, app-specific access
+- VPC Integration: Restrict access to VPC only for sensitive data
+- Access Point Policy: Separate from bucket policy for cleaner management
+
+**Signed URL Generation**:
+- **Upload URLs**: Presigned PUT for browser uploads (15 min expiration)
+- **Download URLs**: Presigned GET for time-limited downloads (1 hour expiration)
+- **Security**: Enforce encryption, validate file types, user authentication required
+- **Implementation**: Complete TypeScript/Node.js examples provided
+- **API Routes**: Next.js API route examples for URL generation
+- **Frontend**: React component example for file uploads
+
+**Cross-Region Replication Setup**:
+- **Disaster Recovery**: Protect against regional failures
+- **Compliance**: Meet data residency requirements
+- **Configuration**: Replication role, source/destination bucket setup
+- **Versioning**: Required on both source and destination buckets
+- **KMS Support**: Replicate encrypted objects with destination KMS key
+- **Monitoring**: CloudWatch metrics for replication latency and status
+
+**Security Best Practices**:
+1. **Least Privilege**: Only grant necessary permissions, scope to specific buckets
+2. **Encryption**: Enforce at rest (AES256/KMS) and in transit (SSL/TLS)
+3. **Access Control**: Both IAM and bucket policies (defense in depth)
+4. **Monitoring**: S3 access logs, CloudTrail data events, CloudWatch alarms
+5. **Data Protection**: Versioning, replication, lifecycle policies, MFA delete
+
+**Configuration Flags**:
+- `create_readonly_policy` - Create read-only policy (default: true)
+- `create_lambda_policy` - Create Lambda policy (default: false)
+- `create_bucket_policies` - Create bucket policies (default: true)
+- `create_access_point` - Create S3 Access Point (default: false)
+- `enable_replication` - Enable cross-region replication (default: false)
+- `use_kms_encryption` - Adjust policies for KMS (default: false)
+
+**Policy Conditions**:
+- Encryption enforcement: `s3:x-amz-server-side-encryption` must be AES256 or aws:kms
+- SSL/TLS requirement: `aws:SecureTransport` must be true
+- KMS key scope: Specific KMS key ARN only
+- Resource scope: Specific bucket ARN and bucket/* only
+
+**Signed URL Security**:
+- **Short Expiration**: 5-15 min for uploads, 1 hour for downloads
+- **File Type Validation**: Only generate URLs for allowed file types
+- **User Authentication**: Require auth before generating URLs
+- **Rate Limiting**: Limit URLs per user per time period
+- **Key Uniqueness**: UUID or timestamp to prevent collisions
+- **Logging**: Log all URL generation for audit trail
+
+**Application Integration Examples**:
+```typescript
+// Generate presigned upload URL
+export async function generateUploadUrl(
+  key: string,
+  contentType: string,
+  expiresIn: number = 900
+): Promise<string> {
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+    ContentType: contentType,
+    ServerSideEncryption: "AES256",
+  });
+  return await getSignedUrl(s3Client, command, { expiresIn });
+}
+
+// API route for presigned URL
+export async function POST(request: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { fileName, fileType } = await request.json();
+  const key = `uploads/${session.user.id}/${Date.now()}-${fileName}`;
+  const uploadUrl = await generateUploadUrl(key, fileType, 900);
+
+  return NextResponse.json({ uploadUrl, key, expiresIn: 900 });
+}
+```
+
+**Cross-Region Replication Configuration**:
+```bash
+# Enable versioning on source
+aws s3api put-bucket-versioning \
+  --bucket transparent-rfp-uploads-production \
+  --versioning-configuration Status=Enabled
+
+# Configure replication
+aws s3api put-bucket-replication \
+  --bucket transparent-rfp-uploads-production \
+  --replication-configuration '{
+    "Role": "<replication-role-arn>",
+    "Rules": [{
+      "Status": "Enabled",
+      "Priority": 1,
+      "Filter": {},
+      "Destination": {
+        "Bucket": "arn:aws:s3:::backup-bucket",
+        "ReplicationTime": { "Status": "Enabled", "Time": { "Minutes": 15 } }
+      }
+    }]
+  }'
+```
+
+**Usage**:
+```bash
+cd infrastructure/s3-policies
+terraform init
+
+# Basic deployment
+terraform apply \
+  -var="project_name=transparent-rfp" \
+  -var="environment=production" \
+  -var="app_uploads_bucket_id=transparent-rfp-uploads-production" \
+  -var="app_uploads_bucket_arn=arn:aws:s3:::bucket" \
+  -var="app_role_name=transparent-rfp-app-role" \
+  -var="app_role_arn=arn:aws:iam::123456789012:role/app-role"
+
+# With KMS, Lambda, and replication
+terraform apply \
+  -var="project_name=transparent-rfp" \
+  -var="environment=production" \
+  -var="use_kms_encryption=true" \
+  -var="kms_key_arn=arn:aws:kms:us-east-1:123456789012:key/xxx" \
+  -var="create_lambda_policy=true" \
+  -var="enable_replication=true" \
+  -var="replication_destination_bucket_arn=arn:aws:s3:::backup"
+```
+
+**Outputs Available**:
+- Application S3 access policy ARN (for manual attachment if needed)
+- Read-only policy ARN (attach to analytics roles)
+- Lambda policy ARN (attach to Lambda execution roles)
+- Replication policy ARN and role ARN (for replication setup)
+- S3 Access Point ARN and alias (if created)
+- Summary object with all policy details
+
+**Key Features**:
+- Modular policy creation (enable/disable each policy type)
+- Least privilege access with resource scoping
+- Defense-in-depth security (IAM + bucket policies)
+- Complete signed URL implementation examples
+- Cross-region replication support
+- S3 Access Points for advanced access control
+- KMS integration for encrypted buckets
+- Comprehensive documentation with security best practices
+
+See [infrastructure/s3-policies/README.md](../infrastructure/s3-policies/README.md) for complete documentation including:
+- Detailed policy descriptions
+- Signed URL generation examples (TypeScript/Node.js)
+- Frontend upload component examples (React)
+- Cross-region replication setup guide
+- S3 Access Point configuration
+- Security best practices
+- Application integration examples
 
 ### Phase 5: Secrets & Configuration
 
