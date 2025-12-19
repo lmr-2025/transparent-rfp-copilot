@@ -270,26 +270,20 @@ aws sts get-caller-identity
 ### Deploy IAM Roles
 
 ```bash
-# Navigate to IAM infrastructure directory
-cd infrastructure/iam
+# IAM roles are deployed as part of the environment configuration
+cd infrastructure/env/prod-us-security
 
-# Initialize Terraform
+# Initialize Terraform (first time only)
 terraform init
 
-# Review planned changes
-terraform plan \
-  -var="environment=production" \
-  -var="aws_region=us-east-1" \
-  -var="enable_lambda=false" \
-  -var="enable_xray=false"
+# Review planned changes (including IAM roles)
+terraform plan
 
-# Apply configuration
-terraform apply \
-  -var="environment=production" \
-  -var="aws_region=us-east-1"
+# Apply configuration (deploys all infrastructure including IAM)
+terraform apply
 
-# Save outputs
-terraform output -json > iam-outputs.json
+# View IAM role outputs
+terraform output | grep role_arn
 ```
 
 ### Verify Deployment
@@ -436,7 +430,7 @@ aws cloudtrail lookup-events \
 ## Related Documentation
 
 - [AWS_DEPLOYMENT.md](./AWS_DEPLOYMENT.md) - Full deployment guide
-- [infrastructure/iam/README.md](../infrastructure/iam/README.md) - Terraform module documentation
+- [infrastructure/modules/iam/](../infrastructure/modules/iam/) - Terraform IAM module
 - [AWS IAM Best Practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/best-practices.html)
 - [ECS Task IAM Roles](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/task-iam-roles.html)
 - [Linear Issue SEC-1046](https://linear.app/montecarlodata/issue/SEC-1046)
