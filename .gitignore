@@ -48,3 +48,20 @@ next-env.d.ts
 
 # VS Code workspace files
 *.code-workspace
+
+# Terraform
+**/.terraform/*
+**/.terraform.lock.hcl
+**/terraform.tfstate
+**/terraform.tfstate.*
+**/terraform.tfvars
+**/*.tfplan
+**/crash.log
+**/crash.*.log
+**/.terraformrc
+**/terraform.rc
+**/override.tf
+**/override.tf.json
+**/*_override.tf
+**/*_override.tf.json
+**/.terraform.tfstate.lock.info
