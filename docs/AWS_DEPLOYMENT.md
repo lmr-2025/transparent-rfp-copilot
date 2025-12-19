@@ -38,7 +38,7 @@ All subtasks are tracked in Linear under the Security team.
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | ✅ Complete |
-| **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | 🔴 Not Started |
+| **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | ✅ Complete |
 | **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | 🔴 Not Started |
 | **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | 🔴 Not Started |
 | **12. Cost Management** | [SEC-1062](https://linear.app/montecarlodata/issue/SEC-1062) | 🔴 Not Started |
@@ -1605,17 +1605,124 @@ Access: CloudWatch → Logs → Insights → Saved queries
 
 ### Phase 9: DNS & CDN (SEC-1059)
 
-- [ ] Create Route 53 hosted zone (if not exists)
-- [ ] Request SSL certificate in ACM
-  - Validate via DNS or email
-- [ ] Create A record pointing to:
-  - ALB (if using ECS/Fargate)
-  - Amplify distribution (if using Amplify)
-- [ ] Configure health checks
-- [ ] Optional: Set up CloudFront CDN
-  - For static assets
-  - For global distribution
-- [ ] Update `NEXTAUTH_URL` with production domain
+**Implementation**: Use `infrastructure/dns-cdn` module for DNS and optional CDN.
+
+#### Features
+- **Route 53**: DNS management with automated ACM certificate validation
+- **ACM Certificates**: Free SSL/TLS certificates with auto-renewal
+- **CloudFront CDN**: Optional global content delivery (disabled by default)
+- **AWS WAF**: Optional web application firewall for CloudFront
+- **Health Checks**: Route 53 health monitoring with CloudWatch alarms
+- **Cost**: ~$1/month (DNS only) or $1-5+/month (with CloudFront)
+
+#### Architecture Options
+
+**Option 1: Direct ALB (Recommended)**
+```
+User → Route 53 → ALB → ECS/Fargate
+```
+- Simplest setup, lower cost
+- Good for single-region applications
+
+**Option 2: CloudFront CDN**
+```
+User → Route 53 → CloudFront → ALB → ECS/Fargate
+```
+- Global edge caching, better worldwide performance
+- DDoS protection, optional WAF integration
+
+#### Usage - Direct ALB
+
+```hcl
+module "dns_cdn" {
+  source = "./infrastructure/dns-cdn"
+
+  # Domain configuration
+  domain_name         = "transparenttrust.com"
+  create_hosted_zone  = false  # Use existing hosted zone
+  include_wildcard    = true   # Include *.transparenttrust.com
+
+  # ALB configuration (from ECS module)
+  alb_dns_name = module.ecs.alb_dns_name
+  alb_zone_id  = module.ecs.alb_zone_id
+
+  # CloudFront disabled (direct to ALB)
+  enable_cloudfront = false
+
+  # Health check
+  create_health_check       = true
+  health_check_path         = "/api/health"
+  health_check_alarm_actions = [module.monitoring.critical_alert_topic_arn]
+
+  environment = "production"
+}
+```
+
+#### Usage - With CloudFront CDN
+
+```hcl
+module "dns_cdn" {
+  source = "./infrastructure/dns-cdn"
+
+  domain_name         = "transparenttrust.com"
+  create_hosted_zone  = false
+
+  # CloudFront enabled
+  enable_cloudfront         = true
+  origin_domain_name        = module.ecs.alb_dns_name
+  cloudfront_price_class    = "PriceClass_100"  # US, Canada, Europe
+  enable_static_cache       = true              # Cache _next/static/* aggressively
+
+  # Optional WAF
+  enable_waf       = true
+  waf_rate_limit   = 2000  # Max 2000 requests per 5 min per IP
+
+  # Caching behavior
+  cloudfront_default_ttl = 3600    # 1 hour
+  cloudfront_max_ttl     = 86400   # 24 hours
+
+  environment = "production"
+}
+```
+
+#### Setup Steps
+
+1. **Apply Terraform**:
+   ```bash
+   cd infrastructure
+   terraform apply
+   ```
+
+2. **Update Name Servers** (if creating new hosted zone):
+   - Get name servers from `terraform output hosted_zone_name_servers`
+   - Update at your domain registrar
+   - Wait for DNS propagation (24-48 hours)
+
+3. **Verify DNS**:
+   ```bash
+   dig transparenttrust.com
+   dig NS transparenttrust.com
+   curl -I https://transparenttrust.com
+   ```
+
+4. **Update Application**:
+   ```bash
+   # Update NEXTAUTH_URL in Secrets Manager or Parameter Store
+   NEXTAUTH_URL=https://transparenttrust.com
+   ```
+
+5. **Invalidate CloudFront cache** (if using CloudFront):
+   ```bash
+   aws cloudfront create-invalidation \
+     --distribution-id $(terraform output -raw cloudfront_distribution_id) \
+     --paths "/*"
+   ```
+
+#### CloudFront Price Classes
+
+- **PriceClass_100**: US, Canada, Europe (lowest cost)
+- **PriceClass_200**: Above + Asia, South Africa, South America
+- **PriceClass_All**: All edge locations (highest performance)
 
 ### Phase 10: CI/CD Pipeline (SEC-1060)
 
