@@ -1067,13 +1067,13 @@ knowledge/
 | Phase | Status | Completed | Notes |
 |-------|--------|-----------|-------|
 | Phase 1 | ✅ DONE | 2025-12-19 | Skills in git - fully implemented with sync tracking UI |
-| Phase 2 | 🔄 IN PROGRESS | - | Customer profiles - core infrastructure complete |
+| Phase 2 | ✅ DONE | 2025-12-19 | Customer profiles - fully implemented |
 | Phase 3 | ⏳ Pending | - | System prompts - not started |
 | Phase 4 | ⏳ Pending | - | Templates - not started |
 
 ### Phase 2 Implementation Details (Customer Profiles)
 
-**Completed:**
+**All Complete:**
 - ✅ Directory structure (`customers/`, `.gitignore`, `README.md`)
 - ✅ `src/lib/customerFiles.ts` - File read/write operations
 - ✅ `src/lib/customerGitSync.ts` - Git commit/sync operations
@@ -1083,13 +1083,14 @@ knowledge/
 - ✅ `scripts/export-customers-to-git.ts` - Export existing customers
 - ✅ `scripts/sync-customers-to-db.ts` - Sync from git to database
 - ✅ npm scripts (`npm run export:customers`, `npm run sync:customers`)
+- ✅ Update Customer API routes to commit to git on save
+- ✅ Add sync status UI to customer profile cards (reuse `SyncStatusBadge`)
+- ✅ Add API endpoint for customer sync logs (`/api/customers/[id]/sync-logs`)
+- ✅ Add `syncStatus`, `lastSyncedAt`, `gitCommitSha` to CustomerProfile TypeScript type
 
-**Remaining:**
-- [x] Update Customer API routes to commit to git on save
-- [ ] Add sync status UI to customer profile cards (reuse `SyncStatusBadge`)
-- [ ] Add API endpoints for customer sync status/logs
+**Remaining (nice-to-have for production):**
 - [ ] Test full bidirectional sync workflow
-- [ ] GitHub Actions for automated sync
+- [ ] GitHub Actions for automated sync (extends existing skills workflow)
 
 ---
 
@@ -1187,4 +1188,4 @@ The git-first expansion (Phases 2-4) **reuses the same Lambda infrastructure** a
 Generated: 2025-12-19
 Updated: 2025-12-19
 Author: Claude Code
-Status: Phase 2 In Progress
+Status: Phases 1-2 Complete, Phases 3-4 Pending
