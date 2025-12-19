@@ -33,7 +33,7 @@ All subtasks are tracked in Linear under the Security team.
 | **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
 | **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
 | **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
-| **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
+| **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | ✅ Complete |
 | **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
@@ -260,20 +260,92 @@ Create the following buckets:
 
 #### 5.1 AWS Secrets Manager (SEC-1056)
 Store the following secrets:
-- [ ] `DATABASE_URL` - PostgreSQL connection string
-- [ ] `ANTHROPIC_API_KEY` - Claude API key
-- [ ] `NEXTAUTH_SECRET` - NextAuth.js encryption key
-- [ ] `GOOGLE_CLIENT_ID` - Google OAuth client ID
-- [ ] `GOOGLE_CLIENT_SECRET` - Google OAuth secret
-- [ ] `UPSTASH_REDIS_REST_URL` - Redis URL (if using Upstash)
-- [ ] `UPSTASH_REDIS_REST_TOKEN` - Redis token
-- [ ] `ENCRYPTION_KEY` - Application settings encryption
+- [x] `DATABASE_URL` - PostgreSQL connection string
+- [x] `ANTHROPIC_API_KEY` - Claude API key
+- [x] `NEXTAUTH_SECRET` - NextAuth.js encryption key
+- [x] `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- [x] `GOOGLE_CLIENT_SECRET` - Google OAuth secret
+- [x] `UPSTASH_REDIS_REST_URL` - Redis URL (if using Upstash)
+- [x] `UPSTASH_REDIS_REST_TOKEN` - Redis token
+- [x] `ENCRYPTION_KEY` - Application settings encryption
 
 Configuration:
-- [ ] Enable automatic rotation for database credentials
-- [ ] Set up IAM policies for app to read secrets
-- [ ] Enable encryption with KMS
-- [ ] Document secret naming conventions
+- [x] Enable automatic rotation for database credentials
+- [x] Set up IAM policies for app to read secrets
+- [x] Enable encryption with KMS
+- [x] Document secret naming conventions
+
+**Implementation Details**:
+- **Location**: `infrastructure/secrets-manager/`
+- **Terraform Modules**: main.tf, variables.tf, outputs.tf, README.md
+
+**Secrets Created**:
+1. **NextAuth Secret** - Auto-generated 32-char password for session encryption
+2. **Anthropic API Key** - Claude API access (provided value)
+3. **Google OAuth** - Client ID & secret (JSON format)
+4. **Upstash Redis** - URL & token (JSON, optional)
+5. **Encryption Key** - Auto-generated for app settings
+6. **RDS Database** - Imported from RDS module
+7. **Custom Secrets** - Extensible for additional secrets
+
+**Key Features**:
+- Automatic KMS encryption for all secrets
+- IAM policy for application access (GetSecretValue, DescribeSecret)
+- Auto-generated strong passwords (NextAuth, encryption key)
+- Optional RDS credential rotation (Lambda-based, 30-day default)
+- Recovery window (30 days) for accidental deletion
+- CloudWatch alarms for access monitoring
+- ECS task definition integration
+- Version control for secrets
+
+**Security**:
+- All secrets encrypted at rest with KMS
+- Least privilege IAM access
+- No secrets in code or Terraform state (sensitive variables)
+- Audit trail via CloudTrail
+- Access monitoring with CloudWatch
+
+**Automatic Rotation** (RDS):
+- Lambda function in VPC for RDS access
+- Configurable rotation period (default: 30 days)
+- Automatic password generation & testing
+- Zero-downtime credential updates
+- CloudWatch monitoring
+
+**Usage Examples**:
+```typescript
+// Application code
+import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
+
+const client = new SecretsManagerClient({ region: "us-east-1" });
+
+async function getSecret(secretName: string) {
+  const response = await client.send(
+    new GetSecretValueCommand({ SecretId: secretName })
+  );
+  return response.SecretString;
+}
+
+const anthropicKey = await getSecret("transparent-rfp-anthropic-api-key-production");
+```
+
+```json
+// ECS Task Definition
+{
+  "secrets": [
+    {
+      "name": "NEXTAUTH_SECRET",
+      "valueFrom": "arn:aws:secretsmanager:us-east-1:xxx:secret:transparent-rfp-nextauth-secret-production"
+    },
+    {
+      "name": "GOOGLE_CLIENT_ID",
+      "valueFrom": "arn:aws:secretsmanager:us-east-1:xxx:secret:transparent-rfp-google-oauth-production:client_id::"
+    }
+  ]
+}
+```
+
+See [infrastructure/secrets-manager/README.md](../infrastructure/secrets-manager/README.md) for complete documentation.
 
 ### Phase 6: Compute & Application
 
