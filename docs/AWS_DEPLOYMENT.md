@@ -39,9 +39,9 @@ All subtasks are tracked in Linear under the Security team.
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | ✅ Complete |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | ✅ Complete |
 | **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | ✅ Complete |
-| **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | 🔴 Not Started |
-| **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | 🔴 Not Started |
-| **12. Cost Management** | [SEC-1062](https://linear.app/montecarlodata/issue/SEC-1062) | 🔴 Not Started |
+| **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | ✅ Complete |
+| **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | ✅ Complete |
+| **12. Cost Management** | [SEC-1062](https://linear.app/montecarlodata/issue/SEC-1062) | ✅ Complete |
 
 ## High-Level Checklist
 
@@ -1787,18 +1787,139 @@ jobs:
 
 ### Phase 12: Cost Management (SEC-1062)
 
-- [ ] Set up AWS Budgets
-  - Monthly budget alert at 50%, 80%, 100%
-  - Forecasted cost alerts
-- [ ] Configure cost allocation tags:
-  - `Project: transparent-rfp-copilot`
-  - `Environment: production`
-  - `Team: security`
-  - `CostCenter: [your-cost-center]`
-- [ ] Enable Cost Explorer
-- [ ] Review and set up Reserved Instances (after usage patterns known)
-- [ ] Configure automated cost reports
-- [ ] Document cost optimization opportunities
+**Implementation**: Use `infrastructure/cost-management` module for cost monitoring and optimization.
+
+#### Features
+- **AWS Budgets**: Monthly and per-service budgets with multi-threshold alerts
+- **Cost Anomaly Detection**: ML-based detection of unusual spending patterns
+- **Cost Allocation Tags**: Track costs by project, environment, team
+- **Cost Dashboard**: CloudWatch dashboard for billing metrics
+- **Automated Reports**: Optional daily/weekly cost reports
+- **Cost**: Budgets are free, anomaly detection included in Cost Explorer
+
+#### Components
+
+**AWS Budgets**:
+- Monthly total budget with 50%, 80%, 100% alerts
+- Forecasted cost alerts (predict overspending)
+- Optional per-service budgets (EC2, RDS, S3, etc.)
+- Email and SNS notifications
+
+**Cost Anomaly Detection**:
+- Service-level anomaly detection using ML
+- Daily notifications for unusual spending
+- Customizable alert threshold ($10 minimum)
+- Root cause analysis
+
+**Cost Allocation Tags**:
+- Project, Environment, Team, CostCenter
+- Enable chargeback and cost attribution
+- Track costs by business unit
+
+#### Usage - Basic Setup
+
+```hcl
+module "cost_management" {
+  source = "./infrastructure/cost-management"
+
+  # Monthly budget
+  enable_monthly_budget = true
+  monthly_budget_amount = "200"  # USD
+  budget_start_date     = "2024-01-01"
+
+  # Alert thresholds
+  budget_alert_threshold_1 = 50   # Alert at $100
+  budget_alert_threshold_2 = 80   # Alert at $160
+  budget_alert_threshold_3 = 100  # Alert at $200
+
+  # Alert recipients
+  budget_alert_emails = [
+    "finance@example.com",
+    "engineering@example.com"
+  ]
+
+  # Anomaly detection
+  enable_anomaly_detection    = true
+  anomaly_threshold_amount    = 10
+  anomaly_alert_email         = "finance@example.com"
+
+  # Cost dashboard
+  enable_cost_dashboard = true
+
+  environment = "production"
+}
+```
+
+#### Setup Steps
+
+1. **Apply Terraform**:
+   ```bash
+   terraform apply
+   ```
+
+2. **Confirm email subscriptions**: Check email and click confirmation links
+
+3. **Enable Cost Explorer** (one-time, manual):
+   Visit: https://console.aws.amazon.com/cost-management/home#/dashboard
+   Click "Enable Cost Explorer"
+
+4. **Activate cost allocation tags** (manual):
+   - Visit: https://console.aws.amazon.com/billing/home#/tags
+   - Activate: Project, Environment, Team, CostCenter
+   - Wait 24 hours for costs to be tagged
+
+5. **View current costs**:
+   ```bash
+   aws ce get-cost-and-usage \
+     --time-period Start=$(date -d '1 month ago' +%Y-%m-01),End=$(date +%Y-%m-%d) \
+     --granularity MONTHLY \
+     --metrics BlendedCost
+   ```
+
+#### Cost Optimization Strategies
+
+**Compute Savings (up to 72%)**:
+- Use Compute Savings Plans after 3-6 months
+- Switch to Graviton instances (20% savings)
+- Right-size based on CloudWatch metrics
+- Use Spot instances for non-critical workloads (90% savings)
+
+**Database Savings (up to 69%)**:
+- Use Aurora Serverless for variable workloads
+- Consider RDS Reserved Instances
+- Use single-AZ for non-production (50% savings)
+
+**Storage Savings (up to 84%)**:
+- Use S3 Intelligent-Tiering (automatic optimization)
+- Set lifecycle policies to move to Glacier
+- Delete unused snapshots and volumes
+
+**Networking Savings (up to $70/month)**:
+- Use VPC endpoints instead of NAT Gateway (save $35/month)
+- Use single NAT for non-production
+- Use CloudFront for static content
+
+#### Estimated Monthly Costs
+
+**Minimal Setup** (~$29-39/month):
+- Amplify hosting + builds: $5-15
+- RDS db.t3.micro Single-AZ: $15
+- S3 50GB: $1.50
+- Basic monitoring: $5-8
+
+**Standard Setup** (~$163/month):
+- ECS Fargate 1 task: $30
+- RDS db.t3.small Multi-AZ: $40
+- ALB: $20
+- NAT Gateway: $35
+- Compliance (CloudTrail, Config, GuardDuty): $21
+- Other services: $17
+
+**Optimized Setup** (~$75/month):
+- Use Amplify (saves $25)
+- Single-AZ RDS in dev (saves $15)
+- VPC endpoints instead of NAT (saves $35)
+- Upstash instead of ElastiCache (saves $12)
 
 ## Database Migration
 
