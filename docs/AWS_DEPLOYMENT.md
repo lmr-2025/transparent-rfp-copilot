@@ -39,7 +39,7 @@ All subtasks are tracked in Linear under the Security team.
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | ✅ Complete |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | ✅ Complete |
 | **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | ✅ Complete |
-| **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | 🔴 Not Started |
+| **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | ✅ Complete |
 | **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | 🔴 Not Started |
 | **12. Cost Management** | [SEC-1062](https://linear.app/montecarlodata/issue/SEC-1062) | 🔴 Not Started |
 
@@ -1726,49 +1726,137 @@ module "dns_cdn" {
 
 ### Phase 10: CI/CD Pipeline (SEC-1060)
 
-#### Option A: GitHub Actions
-Create `.github/workflows/deploy.yml`:
-```yaml
-name: Deploy to AWS
+**Implementation**: Use `infrastructure/cicd` module for automated deployment.
 
-on:
-  push:
-    branches: [main]
+#### Features
+- **ECR Repository**: Docker image storage with vulnerability scanning
+- **GitHub Actions**: Free, flexible CI/CD (recommended)
+- **AWS CodePipeline**: Native AWS CI/CD alternative
+- **Automated Deployments**: Build, test, and deploy on push to main
+- **Database Migrations**: Automated Prisma migrations
+- **CloudWatch Alarms**: Notifications for pipeline failures
+- **Cost**: $0/month (GitHub Actions) or $1-5/month (CodePipeline)
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-      - name: Build and push to ECR
-        run: |
-          # Build Docker image
-          # Push to ECR
-          # Update ECS service
-      - name: Run migrations
-        run: |
-          # Connect to RDS
-          # Run: npx prisma migrate deploy
+#### Architecture Options
+
+**Option 1: GitHub Actions (Recommended)**
+```
+GitHub → GitHub Actions → ECR → ECS/Fargate
+```
+- Free (2000 minutes/month), fast setup, flexible
+
+**Option 2: AWS CodePipeline**
+```
+GitHub → CodePipeline → CodeBuild → ECR → ECS/Fargate
+```
+- Native AWS integration (~$1-5/month)
+
+#### Usage - GitHub Actions
+
+```hcl
+module "cicd" {
+  source = "./infrastructure/cicd"
+
+  # Create ECR repository
+  create_ecr_repository = true
+  ecr_scan_on_push      = true
+
+  # Disable CodePipeline (using GitHub Actions)
+  create_codepipeline = false
+
+  environment = "production"
+}
 ```
 
-#### Option B: AWS CodePipeline
-- [ ] Create CodePipeline
-- [ ] Connect to GitHub
-- [ ] Configure CodeBuild for:
-  - Install dependencies
-  - Run Prisma generate
-  - Build Next.js
-  - Run tests
-  - Build Docker image (if ECS)
-- [ ] Set up deployment stage
-- [ ] Configure database migration step
-- [ ] Test pipeline end-to-end
+**Setup Steps**:
+
+1. **Set up AWS OIDC for GitHub** (one-time):
+   ```bash
+   aws iam create-open-id-connect-provider \
+     --url https://token.actions.githubusercontent.com \
+     --client-id-list sts.amazonaws.com \
+     --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+   ```
+
+2. **Create IAM role** for GitHub Actions:
+   ```bash
+   # Get policy from Terraform output
+   terraform output -raw github_actions_iam_policy > policy.json
+
+   # Create role with trust policy for your repository
+   aws iam create-role --role-name GitHubActionsDeployRole --assume-role-policy-document '{...}'
+   aws iam put-role-policy --role-name GitHubActionsDeployRole --policy-name DeployPolicy --policy-document file://policy.json
+   ```
+
+3. **Add workflow** to repository:
+   ```bash
+   cp infrastructure/cicd/github-actions/deploy-ecs.yml .github/workflows/
+   ```
+
+4. **Configure GitHub secrets**:
+   - `AWS_ROLE_ARN`: ARN of GitHubActionsDeployRole
+   - `AWS_REGION`: us-east-1
+
+5. **Deploy**: Push to main branch
+
+#### Usage - AWS CodePipeline
+
+```hcl
+module "cicd" {
+  source = "./infrastructure/cicd"
+
+  # ECR
+  create_ecr_repository = true
+  ecr_scan_on_push      = true
+
+  # CodePipeline
+  create_codepipeline     = true
+  codestar_connection_arn = "arn:aws:codestar-connections:..."
+  github_repository       = "your-org/transparent-trust"
+  github_branch           = "main"
+
+  # Deployment
+  deploy_to_ecs    = true
+  ecs_cluster_name = module.ecs.cluster_name
+  ecs_service_name = module.ecs.service_name
+
+  # Monitoring
+  enable_pipeline_alarms = true
+  pipeline_alarm_actions = [module.monitoring.critical_alert_topic_arn]
+
+  environment = "production"
+}
+```
+
+**Setup Steps**:
+
+1. **Create CodeStar connection**:
+   ```bash
+   aws codestar-connections create-connection \
+     --provider-type GitHub \
+     --connection-name transparent-trust-github
+   ```
+
+2. **Authorize in AWS Console**:
+   CodePipeline → Settings → Connections → Update pending connection
+
+3. **Apply Terraform**:
+   ```bash
+   terraform apply
+   ```
+
+4. **Deploy**: Push to main branch
+
+#### Custom Build Specification
+
+Override default buildspec:
+```hcl
+module "cicd" {
+  custom_buildspec = file("${path.module}/custom-buildspec.yml")
+}
+```
+
+Or add `buildspec.yml` to repository root.
 
 ### Phase 11: Compliance & Governance (SEC-1061)
 
