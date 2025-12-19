@@ -36,8 +36,8 @@ All subtasks are tracked in Linear under the Security team.
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
 | **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
-| **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | ✅ Complete |
-| **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | 🔴 Not Started |
+| **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
+| **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | ✅ Complete |
 | **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | 🔴 Not Started |
 | **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | 🔴 Not Started |
 | **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | 🔴 Not Started |
@@ -1515,21 +1515,93 @@ See [infrastructure/redis/README.md](../infrastructure/redis/README.md) for comp
 
 ### Phase 8: Monitoring & Logging (SEC-1058)
 
-- [ ] Create CloudWatch Log Groups:
-  - `/aws/ecs/transparent-rfp-copilot` (if using ECS)
-  - `/aws/amplify/transparent-rfp-copilot` (if using Amplify)
-  - `/aws/rds/postgresql/transparent-rfp-copilot`
-- [ ] Configure log retention (30-90 days)
-- [ ] Set up CloudWatch Alarms:
-  - High error rate (> 5% for 5 minutes)
-  - Database CPU > 80%
-  - Database connections > 80% of max
-  - ALB 5xx errors
-  - High API latency (p99 > 2s)
-  - Failed authentication attempts
-- [ ] Create SNS topics for notifications
-- [ ] Enable Container Insights (if using ECS)
-- [ ] Set up custom metrics if needed
+**Implementation**: Use `infrastructure/monitoring` module for comprehensive monitoring.
+
+#### Features
+- **SNS Topics**: Critical and warning alert channels with email/Slack subscriptions
+- **CloudWatch Dashboard**: Unified metrics view for ECS, RDS, Redis, and ALB
+- **CloudWatch Alarms**: Application, database, and composite alarms
+- **Log Insights Queries**: Pre-configured queries for troubleshooting
+- **Cost**: ~$2-5/month
+
+#### Usage
+
+```hcl
+module "monitoring" {
+  source = "./infrastructure/monitoring"
+
+  # Alert recipients
+  critical_alert_emails = ["oncall@example.com", "team@example.com"]
+  warning_alert_emails  = ["team@example.com"]
+
+  # Slack webhooks (optional)
+  slack_webhook_url_critical = var.slack_webhook_critical
+  slack_webhook_url_warning  = var.slack_webhook_warning
+
+  # Resource IDs from other modules
+  ecs_cluster_name            = module.ecs.cluster_name
+  rds_instance_id             = module.rds.instance_id
+  redis_replication_group_id  = module.redis.redis_replication_group_id
+  alb_arn_suffix              = module.alb.arn_suffix
+  log_group_name              = module.ecs.cloudwatch_log_group_name
+
+  # Alarm thresholds
+  error_rate_threshold      = 10    # 5XX errors per 5 minutes
+  response_time_threshold   = 2     # seconds
+  rds_cpu_threshold         = 80    # percent
+  rds_connections_threshold = 80    # connections
+
+  environment = "production"
+}
+```
+
+#### Included Alarms
+
+**Application**:
+- High Error Rate: >10 5XX errors in 5 minutes (critical)
+- High Response Time: >2 seconds average for 15 minutes (warning)
+
+**Database**:
+- High CPU: >80% for 10 minutes (warning)
+- High Connections: >80 connections for 10 minutes (warning)
+- Low Storage: <5 GB free space (critical)
+
+**Composite**:
+- Service Unhealthy: Multiple metrics in alarm state (critical)
+
+#### Setup Steps
+
+1. **Configure email alerts**:
+   ```bash
+   # Add emails to terraform.tfvars
+   critical_alert_emails = ["oncall@example.com"]
+   warning_alert_emails  = ["team@example.com"]
+   ```
+
+2. **Apply monitoring module**:
+   ```bash
+   terraform apply
+   ```
+
+3. **Confirm SNS subscriptions**: Check email and click confirmation links
+
+4. **Optional: Configure Slack**:
+   - Create incoming webhook in Slack
+   - Add webhook URLs to variables
+   - Re-apply Terraform
+
+5. **View dashboard**:
+   ```
+   https://console.aws.amazon.com/cloudwatch/home?region=us-east-1#dashboards:name=transparent-trust-production
+   ```
+
+#### Log Insights Queries
+
+Pre-configured saved queries:
+- **Error Logs**: Find all ERROR messages
+- **Slow Requests**: Find requests >1 second
+
+Access: CloudWatch → Logs → Insights → Saved queries
 
 ### Phase 9: DNS & CDN (SEC-1059)
 
