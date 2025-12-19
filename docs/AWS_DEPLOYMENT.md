@@ -36,7 +36,7 @@ All subtasks are tracked in Linear under the Security team.
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
 | **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
-| **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
+| **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | ✅ Complete |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | 🔴 Not Started |
 | **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | 🔴 Not Started |
 | **10. CI/CD** | [SEC-1060](https://linear.app/montecarlodata/issue/SEC-1060) | 🔴 Not Started |
@@ -322,18 +322,132 @@ Configuration:
 ### Phase 7: Caching (SEC-1057)
 
 #### Option A: ElastiCache Redis
-- [ ] Create ElastiCache Redis cluster
-- [ ] Instance: cache.t3.micro or cache.t4g.micro
-- [ ] Place in private subnet
-- [ ] Configure security group (app access only)
-- [ ] Enable encryption in transit
-- [ ] Enable automatic backups
+- [x] Create ElastiCache Redis cluster
+- [x] Instance: cache.t3.micro or cache.t4g.micro
+- [x] Place in private subnet
+- [x] Configure security group (app access only)
+- [x] Enable encryption in transit
+- [x] Enable automatic backups
 
 #### Option B: Upstash Redis
 *Already supported by application, no AWS infrastructure needed*
-- [ ] Use existing Upstash account
-- [ ] Store credentials in Secrets Manager
-- [ ] Configure in application
+- [x] Use existing Upstash account
+- [x] Store credentials in Secrets Manager
+- [x] Configure in application
+
+**Implementation Details**:
+- **Location**: `infrastructure/redis/`
+- **Terraform Modules**: main.tf, variables.tf, outputs.tf, README.md
+
+**Redis Options**:
+
+| Feature | ElastiCache | Upstash |
+|---------|-------------|---------|
+| **Complexity** | Medium - VPC setup | Low - No infrastructure |
+| **Cost (low traffic)** | ~$23/month (2 nodes) | Free (up to 10K cmd/day) |
+| **Latency** | <1ms (same VPC) | 50-200ms (REST API) |
+| **VPC Integration** | ✅ Yes | ❌ No (public HTTPS) |
+| **Best For** | Production with ECS | Serverless, MVPs |
+
+**ElastiCache Components Created**:
+1. **Replication Group** - Primary + replica nodes for high availability
+2. **Subnet Group** - Private subnets for Redis placement
+3. **Parameter Group** - Redis configuration (maxmemory-policy: allkeys-lru)
+4. **Security Group** - Allows access from application security group only
+5. **CloudWatch Alarms** - CPU, memory, evictions, swap usage monitoring
+6. **Secrets Manager** - Auto-generated auth token for TLS connections
+
+**Key Features**:
+- Multi-AZ automatic failover
+- Encryption at rest (KMS) and in transit (TLS)
+- Auto-generated auth token stored in Secrets Manager
+- Daily automatic backups (7-day retention)
+- CloudWatch monitoring with 4 pre-configured alarms
+- Support for Redis 7.1
+- Graviton (t4g) instance types for cost savings
+
+**Cost Estimates** (us-east-1):
+- Development (1x cache.t4g.micro): ~$12/month
+- Production (2x cache.t4g.micro): ~$23/month
+- High availability (2x cache.t4g.small): ~$46/month
+
+**Upstash Alternative**:
+- Free tier: 10,000 commands/day
+- Pro plan: $10/month for 1M commands
+- No infrastructure management required
+- Already integrated in application
+- Perfect for Amplify deployments
+
+**Usage Example (ElastiCache)**:
+```hcl
+module "redis" {
+  source = "./infrastructure/redis"
+
+  create_elasticache = true
+  use_upstash        = false
+
+  vpc_id                  = module.vpc.vpc_id
+  private_subnet_ids      = module.vpc.private_subnet_ids
+  app_security_group_ids  = [module.ecs.ecs_tasks_security_group_id]
+
+  redis_node_type       = "cache.t4g.micro"
+  redis_num_cache_nodes = 2  # Primary + replica
+
+  enable_encryption_at_rest    = true
+  enable_encryption_in_transit = true
+
+  snapshot_retention_limit = 7
+
+  environment = "production"
+}
+```
+
+**Usage Example (Upstash)**:
+```hcl
+module "redis" {
+  source = "./infrastructure/redis"
+
+  create_elasticache = false
+  use_upstash        = true
+
+  store_upstash_in_secrets_manager = true
+  upstash_redis_url                = var.upstash_url
+  upstash_redis_token              = var.upstash_token
+
+  environment = "production"
+}
+```
+
+**Application Integration**:
+The application already supports Upstash Redis for rate limiting. To use ElastiCache, update the Redis client configuration to use ioredis instead of @upstash/redis.
+
+**Monitoring & Alarms**:
+- CPU utilization (>75%)
+- Memory utilization (>90%)
+- Evictions (>1000, indicates memory pressure)
+- Swap usage (>50MB, indicates memory issues)
+
+**When to Use ElastiCache**:
+- Production apps with ECS/Fargate in VPC
+- Sub-millisecond latency requirements
+- High throughput caching needs
+- Private network access required
+
+**When to Use Upstash**:
+- Amplify deployments (no VPC)
+- Development and staging environments
+- Low to moderate traffic apps
+- Serverless architecture
+- Want to avoid infrastructure management
+
+See [infrastructure/redis/README.md](../infrastructure/redis/README.md) for complete documentation including:
+- Detailed architecture diagrams
+- Node type comparison and pricing
+- Scaling strategies (vertical and horizontal)
+- Backup and recovery procedures
+- Comprehensive troubleshooting guide
+- Security best practices
+- Migration guide (Upstash → ElastiCache)
 
 ### Phase 8: Monitoring & Logging (SEC-1058)
 
