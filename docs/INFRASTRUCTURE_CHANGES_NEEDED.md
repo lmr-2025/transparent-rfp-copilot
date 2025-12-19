@@ -28,14 +28,23 @@ This document tracks infrastructure changes that will be needed when deploying g
 - Infrastructure changes tracking document
 - Debug scripts for local development
 
-**Total time so far**: ~2.25 hours
+**Sync Tracking Backend** (Completed: Dec 19, 2025)
+- ⏱️ Time spent: ~45 minutes
+- Added SkillSyncLog model for tracking all sync operations
+- Added sync status fields to Skill model (lastSyncedAt, syncStatus, gitCommitSha)
+- Created skillSyncLog library with helpers (withSyncLogging, getSyncHealthStatus)
+- Updated git functions to return commit SHAs
+- Wrapped all git operations in API endpoints with sync logging
 
-**Next Phase - UI Sync Status** (In Progress)
+**Total time so far**: ~3 hours
+
+**Next Phase - UI Sync Status** (Not Started)
 - ⏱️ Estimated: 1-2 hours
 - Add sync status indicator to UI
 - Show last sync time and status
 - Add manual sync trigger button
 - Display sync errors/warnings
+- Create API endpoints for sync status
 
 ---
 
