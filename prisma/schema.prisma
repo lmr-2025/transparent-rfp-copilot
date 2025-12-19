@@ -510,25 +510,72 @@ model PromptBlock {
   blockId     String   @unique // e.g., "role_mission", "output_format"
   name        String   // Human-readable name
   description String?  // What this block is for
+  tier        Int      @default(3) // 1=Locked, 2=Caution, 3=Open
   variants    Json     // { "default": "...", "questions": "...", "skills": "..." }
+  createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   updatedBy   String?
 
+  // Git sync tracking (Phase 3 of git-first architecture)
+  lastSyncedAt    DateTime?  // Last successful sync to/from git
+  syncStatus      String?    // "synced", "pending", "failed", null = unknown
+  gitCommitSha    String?    // Latest git commit SHA for this block
+  syncLogs        PromptSyncLog[] @relation("BlockSyncLogs")
+
   @@index([blockId])
+  @@index([syncStatus])
+  @@index([lastSyncedAt])
 }
 
 // Prompt Modifiers - Runtime additions (mode, domain)
 model PromptModifier {
-  id        String   @id @default(uuid())
-  modifierId String  @unique // e.g., "mode_single", "domain_technical"
-  name      String   // Human-readable name
-  type      String   // "mode" or "domain"
-  content   String   // The prompt content
-  updatedAt DateTime @updatedAt
-  updatedBy String?
+  id         String   @id @default(uuid())
+  modifierId String   @unique // e.g., "mode_single", "domain_technical"
+  name       String   // Human-readable name
+  type       String   // "mode" or "domain"
+  tier       Int      @default(3) // 1=Locked, 2=Caution, 3=Open
+  content    String   @db.Text // The prompt content
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  updatedBy  String?
+
+  // Git sync tracking (Phase 3 of git-first architecture)
+  lastSyncedAt    DateTime?  // Last successful sync to/from git
+  syncStatus      String?    // "synced", "pending", "failed", null = unknown
+  gitCommitSha    String?    // Latest git commit SHA for this modifier
+  syncLogs        PromptSyncLog[] @relation("ModifierSyncLogs")
 
   @@index([modifierId])
   @@index([type])
+  @@index([syncStatus])
+  @@index([lastSyncedAt])
+}
+
+// Prompt Sync Log - Track git sync operations (Phase 3 of git-first architecture)
+// Supports both blocks and modifiers in one table with entityType
+model PromptSyncLog {
+  id            String   @id @default(cuid())
+  entityType    String   // "block" or "modifier"
+  entityId      String   // blockId or modifierId (the unique key, not the UUID)
+  operation     String   // "create", "update", "delete"
+  direction     String   // "db-to-git", "git-to-db"
+  status        String   // "pending", "success", "failed"
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  @db.Text
+  gitCommitSha  String?  // Git commit SHA for this sync
+  syncedBy      String?  // User ID or "system" for automated syncs
+
+  // Relations (optional - one will be set based on entityType)
+  blockUuid     String?
+  modifierUuid  String?
+  block         PromptBlock?    @relation("BlockSyncLogs", fields: [blockUuid], references: [id], onDelete: Cascade)
+  modifier      PromptModifier? @relation("ModifierSyncLogs", fields: [modifierUuid], references: [id], onDelete: Cascade)
+
+  @@index([entityType, entityId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([direction])
 }
 
 // Reference URLs (global URL store for knowledge building)

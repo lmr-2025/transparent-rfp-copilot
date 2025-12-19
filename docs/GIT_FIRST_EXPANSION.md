@@ -1068,8 +1068,32 @@ knowledge/
 |-------|--------|-----------|-------|
 | Phase 1 | ✅ DONE | 2025-12-19 | Skills in git - fully implemented with sync tracking UI |
 | Phase 2 | ✅ DONE | 2025-12-19 | Customer profiles - fully implemented |
-| Phase 3 | ⏳ Pending | - | System prompts - not started |
+| Phase 3 | ✅ DONE | 2025-12-19 | System prompts - fully implemented |
 | Phase 4 | ⏳ Pending | - | Templates - not started |
+
+### Phase 3 Implementation Details (System Prompts)
+
+**All Complete:**
+- ✅ Directory structure (`prompts/blocks/`, `prompts/modifiers/`, `.gitignore`, `README.md`)
+- ✅ `src/lib/promptFiles.ts` - File read/write operations for blocks and modifiers
+- ✅ `src/lib/promptGitSync.ts` - Git commit/sync operations for both blocks and modifiers
+- ✅ `src/lib/promptSyncLog.ts` - Sync logging utilities
+- ✅ Prisma schema updates (`tier`, `createdAt`, `syncStatus`, `lastSyncedAt`, `gitCommitSha` fields for both PromptBlock and PromptModifier)
+- ✅ `PromptSyncLog` model added to schema (supports both blocks and modifiers)
+- ✅ `scripts/export-prompts-to-git.ts` - Export blocks and modifiers to git (from DB or defaults)
+- ✅ `scripts/sync-prompts-to-db.ts` - Sync from git to database
+- ✅ npm scripts (`npm run export:prompts`, `npm run sync:prompts`)
+- ✅ Update Prompt API routes (`/api/prompt-blocks`) to commit to git on save
+
+**File Format Notes:**
+- Blocks use `---variant:{context}---` markers to separate context-specific content
+- Modifiers are simpler markdown files with single content field
+- Both include YAML frontmatter with metadata
+
+**Remaining (nice-to-have for production):**
+- [ ] Sync status UI in prompt builder (similar to skills/customers)
+- [ ] Test full bidirectional sync workflow
+- [ ] GitHub Actions for automated sync
 
 ### Phase 2 Implementation Details (Customer Profiles)
 
@@ -1188,4 +1212,4 @@ The git-first expansion (Phases 2-4) **reuses the same Lambda infrastructure** a
 Generated: 2025-12-19
 Updated: 2025-12-19
 Author: Claude Code
-Status: Phases 1-2 Complete, Phases 3-4 Pending
+Status: Phases 1-3 Complete, Phase 4 Pending
