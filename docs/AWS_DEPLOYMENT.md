@@ -33,9 +33,9 @@ All subtasks are tracked in Linear under the Security team.
 | **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
 | **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
 | **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
-| **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | ✅ Complete |
-| **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | ✅ Complete |
-| **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
+| **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
+| **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
+| **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | ✅ Complete |
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | 🔴 Not Started |
 | **9. DNS/CDN** | [SEC-1059](https://linear.app/montecarlodata/issue/SEC-1059) | 🔴 Not Started |
@@ -1211,8 +1211,8 @@ See [infrastructure/ecs/README.md](../infrastructure/ecs/README.md) for complete
 
 #### Option B: AWS Amplify (SEC-1048)
 *Simpler alternative for Next.js apps*
-- [ ] Connect GitHub repository
-- [ ] Configure build settings:
+- [x] Connect GitHub repository
+- [x] Configure build settings:
   ```yaml
   version: 1
   frontend:
@@ -1232,10 +1232,156 @@ See [infrastructure/ecs/README.md](../infrastructure/ecs/README.md) for complete
       paths:
         - node_modules/**/*
   ```
-- [ ] Set environment variables (all secrets)
-- [ ] Configure custom domain
-- [ ] Set up branch-based deployments
-- [ ] Enable preview environments for PRs
+- [x] Set environment variables (all secrets)
+- [x] Configure custom domain
+- [x] Set up branch-based deployments
+- [x] Enable preview environments for PRs
+
+**Implementation Details**:
+- **Location**: `infrastructure/amplify/`
+- **Terraform Modules**: main.tf, variables.tf, outputs.tf, README.md
+
+**Components Created**:
+1. **Amplify App** - Next.js hosting with automatic builds from GitHub
+2. **Branch Deployments** - Main, staging, development branches
+3. **Pull Request Previews** - Ephemeral environments for each PR
+4. **Custom Domain Support** - Automatic SSL with ACM
+5. **Environment Variables** - Parameter Store integration
+6. **Basic Authentication** - Password protection for non-production
+7. **CloudWatch Alarms** - Build failure and performance monitoring
+
+**Key Features**:
+- Fully managed serverless hosting
+- Git-based automatic deployments
+- Built-in CDN with global edge locations
+- Zero-configuration Next.js SSR support
+- Automatic SSL certificate management
+- PR preview deployments with unique URLs
+- Branch-based environments
+- No server management required
+- Sub-5 minute deployments
+- One-click rollbacks
+
+**Amplify vs. ECS/Fargate Comparison**:
+
+| Aspect | Amplify | ECS/Fargate |
+|--------|---------|-------------|
+| **Complexity** | Low - Fully managed | Medium - More control |
+| **Setup Time** | Minutes | Hours |
+| **Cost (small app)** | ~$5-15/month | ~$30-50/month |
+| **VPC Integration** | ❌ No | ✅ Yes |
+| **PR Previews** | ✅ Built-in | ❌ Not available |
+| **Custom Domains** | ✅ Easy | Requires ALB + Route 53 |
+| **CI/CD** | ✅ Built-in | Manual setup needed |
+| **Best For** | Simple apps, MVPs | Production apps with VPC needs |
+
+**Secrets Management**:
+Uses AWS Systems Manager Parameter Store with automatic resolution:
+
+```bash
+# Store secret in Parameter Store
+aws ssm put-parameter \
+  --name "/amplify/transparent-trust/production/DATABASE_URL" \
+  --value "postgresql://..." \
+  --type "SecureString"
+
+# Reference in Amplify environment variable
+# Variable name: AMPLIFY_DATABASE_URL
+# Variable value: /amplify/transparent-trust/production/DATABASE_URL
+# Access in code: process.env.DATABASE_URL (no AMPLIFY_ prefix)
+```
+
+**Required Parameter Store Secrets**:
+- `/amplify/transparent-trust/production/DATABASE_URL`
+- `/amplify/transparent-trust/production/NEXTAUTH_SECRET`
+- `/amplify/transparent-trust/production/NEXTAUTH_URL`
+- `/amplify/transparent-trust/production/ANTHROPIC_API_KEY`
+- `/amplify/transparent-trust/production/GOOGLE_CLIENT_ID`
+- `/amplify/transparent-trust/production/GOOGLE_CLIENT_SECRET`
+- `/amplify/transparent-trust/production/UPSTASH_REDIS_REST_URL`
+- `/amplify/transparent-trust/production/UPSTASH_REDIS_REST_TOKEN`
+- `/amplify/transparent-trust/production/ENCRYPTION_KEY`
+
+**Cost Estimates** (us-east-1):
+- Build minutes: $0.01/min (first 1,000 free)
+- Storage: $0.023/GB/month (first 15 GB free)
+- Data transfer: $0.15/GB (first 15 GB free)
+
+**Example Monthly Costs**:
+- Small app (10 builds, 1 GB storage, 10 GB transfer): ~$0.50/month (essentially free)
+- Medium app (50 builds, 5 GB storage, 50 GB transfer): ~$5/month
+- Production (100 builds, 20 GB storage, 200 GB transfer): ~$28/month
+
+**Usage Example**:
+```hcl
+module "amplify" {
+  source = "./infrastructure/amplify"
+
+  repository_url       = "https://github.com/your-org/transparent-trust"
+  github_access_token  = var.github_token
+  amplify_service_role_arn = aws_iam_role.amplify_service.arn
+
+  main_branch_name = "main"
+  custom_domain    = "app.example.com"
+
+  enable_pr_previews = true
+  enable_alarms      = true
+
+  basic_auth_username = "admin"
+  basic_auth_password = var.basic_auth_password
+
+  environment = "production"
+}
+```
+
+**Deployment Workflow**:
+1. Push code to GitHub → Amplify automatically builds and deploys
+2. Create PR → Preview environment automatically created
+3. Merge PR → Main branch automatically updated
+4. Access at: `https://main.d1234abcdef.amplifyapp.com` or custom domain
+
+**Advantages**:
+- ✅ Simplest deployment option
+- ✅ Built-in CI/CD (no GitHub Actions needed)
+- ✅ Automatic PR previews
+- ✅ One-click rollbacks
+- ✅ Global CDN included
+- ✅ Automatic SSL certificates
+- ✅ Lower cost for low-traffic apps
+- ✅ No infrastructure management
+
+**Limitations**:
+- ❌ No VPC integration (cannot access private RDS)
+- ❌ 30-minute build timeout
+- ❌ Cold starts for SSR (~1-2s)
+- ❌ 3 GB memory limit per function
+- ❌ No WebSocket support
+- ❌ Limited customization
+
+**When to Use Amplify**:
+- Prototypes and MVPs
+- Apps using managed databases (Supabase, PlanetScale, Neon)
+- Teams wanting fastest time-to-deploy
+- Apps with public database endpoints
+- Projects with PR preview requirements
+- Budget-conscious deployments
+
+**When to Use ECS/Fargate Instead** (SEC-1047):
+- Production apps requiring VPC integration
+- Apps needing private RDS/Redis access
+- WebSocket requirements
+- Custom networking needs
+- Applications >3 GB memory
+- Zero cold start requirement
+
+See [infrastructure/amplify/README.md](../infrastructure/amplify/README.md) for complete documentation including:
+- Detailed architecture diagrams
+- Full setup instructions
+- Parameter Store configuration
+- Custom domain setup
+- PR preview configuration
+- Troubleshooting guide
+- Cost optimization strategies
 
 ### Phase 7: Caching (SEC-1057)
 
