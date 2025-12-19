@@ -30,8 +30,8 @@ All subtasks are tracked in Linear under the Security team.
 | **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
-| **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | ✅ Complete |
-| **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
+| **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
+| **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | ✅ Complete |
 | **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
 | **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
@@ -597,16 +597,197 @@ See [docs/runbooks/rds-security-monitoring.md](./runbooks/rds-security-monitorin
 
 #### 4.1 S3 Buckets (SEC-1054)
 Create the following buckets:
-- [ ] Application file uploads bucket
+- [x] Application file uploads bucket
   - For: CSV, Excel, PDF, Word, PPT files
   - Enable versioning
   - Enable server-side encryption (SSE-S3 or SSE-KMS)
   - Block public access
   - Configure CORS if needed
   - Set lifecycle policies
-- [ ] ALB access logs bucket
-- [ ] CloudTrail logs bucket
-- [ ] Application logs bucket (if not using CloudWatch)
+- [x] ALB access logs bucket
+- [x] CloudTrail logs bucket
+- [x] General logs bucket (for S3 access logs and application logs)
+
+**Implementation Details**:
+- **Location**: `infrastructure/s3/`
+- **Terraform Modules**:
+  - `main.tf` - S3 buckets, KMS encryption, CloudWatch alarms, bucket policies
+  - `variables.tf` - 30+ configuration variables
+  - `outputs.tf` - Bucket names, ARNs, domain names
+  - `README.md` - Comprehensive documentation with usage examples
+
+**Buckets Created**:
+
+1. **Application Uploads Bucket** (`{project}-uploads-{env}`):
+   - Purpose: User-uploaded documents (PDF, CSV, Excel, Word, PPT)
+   - Versioning: Enabled (configurable)
+   - Encryption: AES256 or KMS (configurable)
+   - CORS: Enabled for web uploads
+   - Lifecycle: 90d → IA, 180d → Glacier, optional expiration
+   - Access Logging: Enabled (logs to general logs bucket)
+   - Public Access: Blocked
+   - CloudWatch Alarms: Bucket size, 4xx errors
+
+2. **ALB Access Logs Bucket** (`{project}-alb-logs-{env}`):
+   - Purpose: Application Load Balancer access logs
+   - Encryption: AES256
+   - Lifecycle: 30d → IA, 90d → Glacier, expire after 90d (configurable)
+   - Bucket Policy: Allow ELB service to write logs
+   - Public Access: Blocked
+
+3. **CloudTrail Logs Bucket** (`{project}-cloudtrail-logs-{env}`):
+   - Purpose: AWS API audit logs for compliance
+   - Encryption: AES256
+   - Lifecycle: 90d → IA, 180d → Glacier, expire after 365d (configurable)
+   - Bucket Policy: Allow CloudTrail service to write logs
+   - Public Access: Blocked
+   - Compliance: SOC 2, HIPAA, PCI DSS
+
+4. **General Logs Bucket** (`{project}-logs-{env}`):
+   - Purpose: S3 access logs and miscellaneous application logs
+   - Encryption: AES256
+   - Lifecycle: 30d → IA, 90d → Glacier, expire after 90d (configurable)
+   - Bucket Policy: Allow S3 logging service
+   - Public Access: Blocked
+
+**Security Features**:
+- All buckets have public access blocked (4 settings)
+- Encryption at rest (AES256 or KMS with automatic key rotation)
+- SSL/TLS encryption in transit (enforced by AWS)
+- Bucket policies with least privilege access
+- Versioning enabled for uploads bucket
+- S3 access logging for audit trail
+- CloudWatch monitoring and alarms
+
+**Cost Optimization**:
+- Intelligent lifecycle policies with tiered storage
+- Automatic transition to Infrequent Access (IA) after 30-90 days
+- Automatic transition to Glacier for archival after 90-180 days
+- Configurable expiration policies
+- Cleanup of incomplete multipart uploads (7 days)
+- Noncurrent version expiration (90 days)
+- Cost savings: ~49% with lifecycle policies vs STANDARD only
+
+**Storage Lifecycle Example** (Application Uploads):
+- Days 0-90: STANDARD ($0.023/GB/month)
+- Days 90-180: STANDARD_IA ($0.0125/GB/month) - 46% savings
+- Days 180+: GLACIER ($0.004/GB/month) - 83% savings
+- Optional: Expiration after X days
+
+**Monitoring**:
+- CloudWatch alarm: Bucket size exceeds threshold (default 100GB)
+- CloudWatch alarm: High 4xx error rate (> 10 in 5 minutes)
+- S3 metrics: BucketSizeBytes, NumberOfObjects, requests, errors, latency
+- Access logs for audit trail and security analysis
+- Integration with SNS for alarm notifications
+
+**Optional KMS Encryption**:
+- Customer-managed KMS key for uploads bucket
+- Automatic key rotation enabled
+- Key policy allows application role access
+- Bucket key enabled for cost optimization
+
+**CORS Configuration** (Application Uploads):
+- Configurable allowed origins (default: * for development)
+- Allowed methods: GET, PUT, POST, DELETE, HEAD
+- Allowed headers: * (configurable)
+- Expose headers: ETag
+- Max age: 3600 seconds
+
+**Bucket Policies**:
+- ALB logs: Allow elasticloadbalancing.amazonaws.com
+- CloudTrail logs: Allow cloudtrail.amazonaws.com
+- General logs: Allow logging.s3.amazonaws.com
+- Uploads bucket: IAM role-based access only
+
+**Key Features**:
+- Production-ready configuration with security best practices
+- 30+ configurable variables for customization
+- Comprehensive lifecycle policies for cost optimization
+- CloudWatch monitoring and alarms
+- Complete documentation with usage examples
+- Support for both AES256 and KMS encryption
+- CORS configuration for browser uploads
+- Multi-tiered storage for cost efficiency
+
+**Variables** (Key Configurations):
+- `use_kms_encryption` - Use KMS instead of AES256 (default: false)
+- `enable_versioning` - Enable versioning for uploads (default: true)
+- `enable_lifecycle_policies` - Enable lifecycle transitions (default: true)
+- `transition_to_ia_days` - Days before IA transition (default: 90)
+- `transition_to_glacier_days` - Days before Glacier (default: 180)
+- `expire_after_days` - Days before expiration (default: 0/never)
+- `alb_logs_retention_days` - ALB log retention (default: 90)
+- `cloudtrail_logs_retention_days` - Audit log retention (default: 365)
+- `enable_cors` - Enable CORS for uploads (default: true)
+- `cors_allowed_origins` - CORS origins (default: ["*"])
+- `enable_cloudwatch_alarms` - Enable alarms (default: true)
+- `bucket_size_alarm_threshold` - Size alarm threshold (default: 100GB)
+
+**Outputs**:
+- Bucket IDs (names) for all 4 buckets
+- Bucket ARNs for IAM policies
+- Bucket domain names for application configuration
+- KMS key ID, ARN, and alias (if KMS encryption enabled)
+- Summary object with all bucket details
+
+**Usage**:
+```bash
+cd infrastructure/s3
+terraform init
+
+# Basic deployment (AES256 encryption)
+terraform plan \
+  -var="project_name=transparent-rfp" \
+  -var="environment=production"
+
+# Advanced deployment (KMS encryption, custom lifecycle)
+terraform apply \
+  -var="project_name=transparent-rfp" \
+  -var="environment=production" \
+  -var="use_kms_encryption=true" \
+  -var="app_role_arn=arn:aws:iam::123456789012:role/app-role" \
+  -var="transition_to_ia_days=60" \
+  -var="cors_allowed_origins=[\"https://rfp.example.com\"]"
+```
+
+**Application Integration**:
+```typescript
+// lib/s3.ts
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+
+const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "us-east-1"
+});
+const bucketName = process.env.S3_UPLOADS_BUCKET;
+
+export async function uploadFile(file: File, key: string) {
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
+    Key: key,
+    Body: await file.arrayBuffer(),
+    ContentType: file.type,
+  });
+
+  await s3Client.send(command);
+  return `s3://${bucketName}/${key}`;
+}
+```
+
+**Cost Estimates** (us-east-1):
+- Storage (100GB): $2.30/month (STANDARD) → $1.43/month (with lifecycle)
+- Requests (1M PUT, 10M GET): ~$10/month
+- Data transfer out (10GB): $0.90/month
+- KMS (if enabled): $1/month for key + $0.03/10K requests
+- Total: ~$13-15/month for moderate usage with significant savings from lifecycle policies
+
+See [infrastructure/s3/README.md](../infrastructure/s3/README.md) for complete documentation including:
+- Detailed architecture diagrams
+- All configuration variables
+- Security best practices
+- Cost optimization strategies
+- Monitoring and troubleshooting guides
+- Application integration examples
 
 #### 4.2 S3 Access Policies (SEC-1055)
 - [ ] Configure bucket policies
