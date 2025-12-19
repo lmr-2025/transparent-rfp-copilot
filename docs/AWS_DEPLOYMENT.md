@@ -188,42 +188,291 @@ See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete
 ### Phase 2: Networking Foundation
 
 #### 2.1 VPC and Subnets (SEC-1051)
-- [ ] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
-- [ ] Create public subnets in 2+ AZs (for ALB/NAT)
-- [ ] Create private subnets in 2+ AZs (for app/database)
-- [ ] Create Internet Gateway
-- [ ] Create NAT Gateway (or NAT instance)
-- [ ] Configure route tables
-- [ ] Enable VPC Flow Logs
+- [x] Create VPC with appropriate CIDR (e.g., 10.0.0.0/16)
+- [x] Create public subnets in 2+ AZs (for ALB/NAT)
+- [x] Create private subnets in 2+ AZs (for app/database)
+- [x] Create Internet Gateway
+- [x] Create NAT Gateway (or NAT instance)
+- [x] Configure route tables
+- [x] Enable VPC Flow Logs
+
+**Implementation Details**:
+- **Location**: `infrastructure/vpc/`
+- **Terraform Module**: Complete VPC infrastructure with multi-AZ deployment
+- **VPC CIDR**: 10.0.0.0/16
+- **Subnet Allocation**:
+  - Public subnets: 10.0.0.0/24, 10.0.1.0/24, 10.0.2.0/24 (us-east-1a/b/c)
+  - Private subnets: 10.0.3.0/24, 10.0.4.0/24, 10.0.5.0/24 (us-east-1a/b/c)
+- **NAT Gateways**: 3 NAT Gateways (1 per AZ) for high availability
+- **VPC Flow Logs**: Enabled with CloudWatch Logs integration, 7-day retention
+
+**Key Features**:
+- Multi-AZ deployment across 3 availability zones
+- Separate public and private subnets for network isolation
+- NAT Gateways in each AZ for private subnet internet access
+- Internet Gateway for public subnet internet access
+- Proper route table configuration for public/private routing
+- VPC Flow Logs for network traffic monitoring
+- DNS hostnames and DNS support enabled
+
+**Usage**:
+```bash
+cd infrastructure/vpc
+terraform init
+terraform plan -var="environment=production"
+terraform apply -var="environment=production"
+```
+
+See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete documentation.
 
 #### 2.2 Security Groups and NACLs (SEC-1053)
-- [ ] ALB security group (allow 443 from 0.0.0.0/0)
-- [ ] App security group (allow traffic from ALB only)
-- [ ] RDS security group (allow 5432 from app SG only)
-- [ ] Redis security group (allow 6379 from app SG only)
-- [ ] Configure NACLs for defense in depth
-- [ ] Document all security group rules
+- [x] ALB security group (allow 443 from 0.0.0.0/0)
+- [x] App security group (allow traffic from ALB only)
+- [x] RDS security group (allow 5432 from app SG only)
+- [x] Redis security group (allow 6379 from app SG only)
+- [x] Configure NACLs for defense in depth
+- [x] Document all security group rules
+
+**Implementation Details**:
+- **Location**: `infrastructure/security-groups/`
+- **Terraform Modules**:
+  - `main.tf` - Security groups for ALB, App, RDS, Redis, and VPC Endpoints
+  - `nacls.tf` - Network ACLs for public and private subnets
+  - `variables.tf` - Configuration variables
+  - `outputs.tf` - Security group IDs for cross-module references
+  - `README.md` - Complete documentation
+
+**Security Groups**:
+- **ALB SG**: Ingress HTTPS (443) and HTTP (80) from internet, egress to App on port 3000
+- **App SG**: Ingress from ALB (3000), egress to RDS (5432), Redis (6379), HTTPS (443)
+- **RDS SG**: Ingress from App SG only on port 5432
+- **Redis SG**: Ingress from App SG only on port 6379
+- **VPC Endpoint SG**: Ingress from App SG on port 443 (for S3, Secrets Manager, etc.)
+
+**Network ACLs** (optional, enabled via variable):
+- Public subnet NACLs: Allow inbound HTTP/HTTPS from internet, ephemeral ports, SSH from bastion
+- Private subnet NACLs: Allow traffic from VPC CIDR, deny external access
+- Defense-in-depth security alongside security groups
+
+**Key Features**:
+- Security group references instead of CIDR blocks (more secure)
+- Least privilege: Only necessary ports and sources
+- Stateful filtering via security groups
+- Optional stateless filtering via NACLs
+- VPC endpoint security groups for AWS service access
+
+**Usage**:
+```bash
+cd infrastructure/security-groups
+terraform init
+terraform plan -var="environment=production" -var="vpc_id=vpc-xxx" -var="vpc_cidr=10.0.0.0/16"
+terraform apply -var="environment=production"
+```
+
+See [infrastructure/security-groups/README.md](../infrastructure/security-groups/README.md) for complete documentation.
 
 #### 2.3 Application Load Balancer (SEC-1052)
-- [ ] Create ALB in public subnets
-- [ ] Configure target groups
-- [ ] Set up HTTPS listener (port 443)
-- [ ] Request/import SSL certificate (ACM)
-- [ ] Configure health checks
-- [ ] Enable access logs to S3
-- [ ] Set up WAF rules (optional)
+- [x] Create ALB in public subnets
+- [x] Configure target groups
+- [x] Set up HTTPS listener (port 443)
+- [x] Request/import SSL certificate (ACM)
+- [x] Configure health checks
+- [x] Enable access logs to S3
+- [x] Set up WAF rules (optional)
+
+**Implementation Details**:
+- **Location**: `infrastructure/alb/`
+- **Terraform Modules**:
+  - `main.tf` - ALB, listeners, target groups, S3 bucket for logs, CloudWatch alarms
+  - `variables.tf` - Configuration variables
+  - `outputs.tf` - ALB DNS, ARN, target group ARN, zone ID
+  - `README.md` - Complete documentation
+
+**ALB Configuration**:
+- **Type**: Application Load Balancer (internet-facing)
+- **Subnets**: Deployed in all public subnets (multi-AZ)
+- **Target Group**: IP-based targeting for ECS Fargate (port 3000)
+- **Health Check**: GET /api/health endpoint
+  - Interval: 30 seconds
+  - Timeout: 5 seconds
+  - Healthy threshold: 2
+  - Unhealthy threshold: 3
+- **HTTP to HTTPS Redirect**: Automatic redirect from port 80 to 443
+- **HTTPS Listener**: Port 443 with ACM certificate (variable: certificate_arn)
+- **SSL Policy**: ELBSecurityPolicy-TLS13-1-2-2021-06 (TLS 1.2 and 1.3 only)
+
+**Access Logs**:
+- Stored in dedicated S3 bucket with encryption
+- Bucket lifecycle policy for automatic cleanup (90 days default)
+- ALB service account permissions configured
+
+**CloudWatch Alarms**:
+- Unhealthy target count > 0 for 5 minutes
+- HTTPCode_Target_5XX_Count > 10 in 5 minutes
+- TargetResponseTime p99 > 2 seconds
+
+**Key Features**:
+- Multi-AZ deployment for high availability
+- HTTPS-only traffic with modern SSL policy
+- Comprehensive health checks
+- Access logging for compliance and debugging
+- CloudWatch alarms for proactive monitoring
+- Connection draining for graceful shutdowns
+
+**Usage**:
+```bash
+cd infrastructure/alb
+terraform init
+terraform plan -var="environment=production" \
+  -var="vpc_id=vpc-xxx" \
+  -var="public_subnet_ids=[\"subnet-xxx\",\"subnet-yyy\"]" \
+  -var="alb_security_group_id=sg-xxx" \
+  -var="certificate_arn=arn:aws:acm:..."
+terraform apply -var="environment=production"
+```
+
+See [infrastructure/alb/README.md](../infrastructure/alb/README.md) for complete documentation.
 
 ### Phase 3: Data Layer
 
 #### 3.1 RDS PostgreSQL (SEC-1049)
-- [ ] Provision RDS PostgreSQL 16 instance
-- [ ] Instance type: db.t3.micro (start), scale as needed
-- [ ] Enable Multi-AZ for high availability
-- [ ] Configure automated backups (7-35 days retention)
-- [ ] Enable encryption at rest
-- [ ] Enable enhanced monitoring
-- [ ] Place in private subnet
-- [ ] Create database: `grcminion` or `rfp_copilot`
+- [x] Provision RDS PostgreSQL 16 instance
+- [x] Instance type: db.t3.micro (start), scale as needed
+- [x] Enable Multi-AZ for high availability
+- [x] Configure automated backups (7-35 days retention)
+- [x] Enable encryption at rest
+- [x] Enable enhanced monitoring
+- [x] Place in private subnet
+- [x] Create database: `grcminion` or `rfp_copilot`
+
+**Implementation Details**:
+- **Location**: `infrastructure/rds/`
+- **Terraform Modules**:
+  - `main.tf` - RDS instance, subnet group, parameter group, KMS key, Secrets Manager, CloudWatch alarms
+  - `variables.tf` - 50+ configuration variables for complete customization
+  - `outputs.tf` - Database endpoint, connection details, credentials secret ARN
+  - `README.md` - Comprehensive 600+ line documentation
+
+**RDS Configuration**:
+- **Engine**: PostgreSQL 16 (latest)
+- **Instance Class**: db.t3.micro (configurable, can scale to db.r6g.xlarge+)
+- **Storage**: 20GB allocated, up to 100GB max (auto-scaling enabled)
+- **Storage Type**: gp3 (latest generation with better performance)
+- **Multi-AZ**: Enabled for automatic failover and high availability
+- **Database Name**: Configurable via variable (default: app database)
+- **Port**: 5432 (standard PostgreSQL)
+
+**High Availability & Backup**:
+- Multi-AZ deployment with synchronous replication
+- Automated daily backups with 7-day retention (configurable 7-35 days)
+- Backup window: 03:00-04:00 UTC (configurable)
+- Maintenance window: Sun:04:00-Sun:05:00 UTC (configurable)
+- Point-in-time recovery enabled
+- Final snapshot created on deletion (configurable)
+
+**Security**:
+- Encryption at rest using AWS KMS with automatic key rotation
+- Encryption in transit enforced via parameter group (rds.force_ssl=1)
+- Master credentials stored in AWS Secrets Manager
+- IAM database authentication support (optional)
+- Deployed in private subnets only
+- Security group restricts access to app tier only
+- Deletion protection enabled (configurable)
+
+**Monitoring & Logging**:
+- Enhanced monitoring with 60-second granularity
+- Performance Insights enabled with 7-day retention
+- CloudWatch Logs for PostgreSQL logs
+- CloudWatch Alarms for:
+  - CPU utilization > 80%
+  - Freeable memory < 256MB
+  - Free storage space < 2GB
+  - Database connections > 80% of max
+- SNS topic integration for alarm notifications (optional)
+
+**Parameter Group**:
+- Custom parameter group with production-ready settings:
+  - SSL enforcement (rds.force_ssl=1)
+  - Enhanced logging (log_connections, log_disconnections, log_statement=ddl)
+  - Optimized for application workloads
+
+**Subnet Group**:
+- Spans all private subnets across multiple AZs
+- Ensures database can failover to any AZ
+- Provides network isolation from internet
+
+**Credentials Management**:
+- Master username and password generated securely
+- Stored in AWS Secrets Manager
+- Automatic rotation supported (can be enabled)
+- Retrieved by application at runtime
+
+**Key Features**:
+- Production-ready configuration with best practices
+- Fully configurable via variables (50+ options)
+- Comprehensive monitoring and alerting
+- Automatic backups and point-in-time recovery
+- Encryption at rest and in transit
+- Multi-AZ for high availability
+- Auto-scaling storage
+- Performance Insights for query optimization
+- Complete documentation with troubleshooting guides
+
+**Cost Estimates** (us-east-1):
+- db.t3.micro Multi-AZ: ~$30/month
+- db.t4g.micro Multi-AZ: ~$27/month (ARM-based, better value)
+- db.t3.small Multi-AZ: ~$60/month
+- Storage (20GB): ~$4.60/month
+- Backups (within retention): Free
+- Enhanced Monitoring: ~$1.50/month
+- KMS key: $1/month
+
+**Usage**:
+```bash
+cd infrastructure/rds
+terraform init
+
+# Review variables and customize as needed
+# Recommended: Create terraform.tfvars file
+
+terraform plan \
+  -var="environment=production" \
+  -var="project_name=transparent-rfp" \
+  -var="vpc_id=vpc-xxx" \
+  -var="private_subnet_ids=[\"subnet-xxx\",\"subnet-yyy\",\"subnet-zzz\"]" \
+  -var="app_security_group_id=sg-xxx" \
+  -var="db_name=rfp_copilot" \
+  -var="multi_az=true" \
+  -var="backup_retention_period=7"
+
+terraform apply -var="environment=production"
+```
+
+**Post-Deployment**:
+1. Retrieve database credentials from Secrets Manager
+2. Update application environment variables with DATABASE_URL
+3. Run Prisma migrations: `npx prisma migrate deploy`
+4. Verify connectivity and SSL enforcement
+5. Test automatic failover (optional)
+
+**Connection Example**:
+```bash
+# Retrieve credentials from Secrets Manager
+aws secretsmanager get-secret-value \
+  --secret-id transparent-rfp-db-credentials-production \
+  --query SecretString --output text | jq -r '.password'
+
+# Connect via psql
+psql "postgresql://dbadmin:PASSWORD@transparent-rfp-db-production.xxxxx.us-east-1.rds.amazonaws.com:5432/rfp_copilot?sslmode=require"
+```
+
+See [infrastructure/rds/README.md](../infrastructure/rds/README.md) for complete documentation including:
+- Detailed variable descriptions
+- Migration procedures with Prisma
+- Troubleshooting guides (connection, SSL, performance)
+- Backup and recovery procedures
+- Maintenance best practices
+- Security hardening recommendations
 
 #### 3.2 RDS Security Configuration (SEC-1050)
 - [x] Configure security groups (app access only)
