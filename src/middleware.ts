@@ -11,7 +11,6 @@ import type { NextRequest } from "next/server";
 // Feature flags - read directly from env (can't import from lib in middleware edge runtime)
 const features = {
   chat: process.env.NEXT_PUBLIC_FEATURE_CHAT_ENABLED !== "false",
-  contracts: process.env.NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED === "true",
   usage: process.env.NEXT_PUBLIC_FEATURE_USAGE_ENABLED !== "false",
   auditLog: process.env.NEXT_PUBLIC_FEATURE_AUDIT_LOG_ENABLED !== "false",
 };
@@ -19,7 +18,6 @@ const features = {
 // Routes that require feature flags
 const protectedRoutes: Record<string, keyof typeof features> = {
   "/chat": "chat",
-  "/contracts": "contracts",
   "/usage": "usage",
   "/audit-log": "auditLog",
 };

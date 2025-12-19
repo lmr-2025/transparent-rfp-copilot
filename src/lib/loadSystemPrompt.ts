@@ -29,8 +29,6 @@ const keyToContext: Record<string, PromptContext> = {
   knowledge_chat: "chat",
   analysis: "analysis",
   library_analysis: "analysis",
-  contract_analysis: "contracts",
-  contracts: "contracts",
   skill_organize: "skill_organize",
   skill_analyze: "skill_analyze",
   skill_refresh: "skill_refresh",

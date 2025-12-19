@@ -53,10 +53,6 @@ const FEATURE_LABELS: Record<LLMFeature, { label: string; description: string }>
     label: "Customer Build from Docs",
     description: "Building profiles from uploaded documents"
   },
-  "contracts-analyze": {
-    label: "Contract Analysis",
-    description: "Analyzing contract clauses"
-  },
   "prompts-optimize": {
     label: "Prompt Optimization",
     description: "AI-assisted prompt improvements"
@@ -78,8 +74,8 @@ const FEATURE_GROUPS = [
     features: ["skills-suggest", "skills-analyze", "skills-analyze-rfp", "skills-analyze-library", "skills-refresh"] as LLMFeature[],
   },
   {
-    name: "Customer & Contracts",
-    features: ["customers-analyze", "customers-suggest", "customers-build", "contracts-analyze"] as LLMFeature[],
+    name: "Customer Profiles",
+    features: ["customers-analyze", "customers-suggest", "customers-build"] as LLMFeature[],
   },
   {
     name: "Utilities",

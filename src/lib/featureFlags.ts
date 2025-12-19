@@ -21,14 +21,10 @@ function envBool(key: string, defaultValue = false): boolean {
  *
  * Set in .env:
  *   FEATURE_CHAT_ENABLED=true
- *   FEATURE_CONTRACTS_ENABLED=false
  */
 export const features = {
   // Chat interface - POC, works but needs streaming/WebSocket for production
   chat: envBool("NEXT_PUBLIC_FEATURE_CHAT_ENABLED", true),
-
-  // Contracts module - paused, will resume post-v1
-  contracts: envBool("NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED", false),
 
   // Usage dashboard - production ready
   usage: envBool("NEXT_PUBLIC_FEATURE_USAGE_ENABLED", true),
@@ -46,7 +42,6 @@ export const features = {
  */
 export const routeFeatureMap: Record<string, keyof typeof features> = {
   "/chat": "chat",
-  "/contracts": "contracts",
   "/usage": "usage",
   "/audit-log": "auditLog",
 };

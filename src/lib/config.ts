@@ -26,7 +26,6 @@ export type LLMFeature =
   | "customers-analyze" // Analyze URLs for customer matching
   | "customers-suggest" // Generate customer profiles
   | "customers-build"   // Build profile from documents
-  | "contracts-analyze" // Contract clause analysis
   | "prompts-optimize"  // Prompt optimization suggestions
   | "documents-template"; // Generate document templates
 
@@ -43,7 +42,6 @@ export const LLM_SPEED_DEFAULTS: Record<LLMFeature, ModelSpeed> = {
   "customers-analyze": "quality",
   "customers-suggest": "quality",
   "customers-build": "quality",
-  "contracts-analyze": "quality",
   "prompts-optimize": "quality",
   "documents-template": "quality",
 };

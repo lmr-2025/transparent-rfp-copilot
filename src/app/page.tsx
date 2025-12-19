@@ -193,15 +193,6 @@ export default function HomePage() {
               bgColor="#f0fdf4"
             />
           )}
-          {features.contracts && (
-            <Card
-              href="/contracts"
-              title="Contracts"
-              description="Upload and analyze contracts. Extract key terms, identify risks, and review obligations."
-              accentColor="#ec4899"
-              bgColor="#fdf2f8"
-            />
-          )}
         </div>
       </div>
 

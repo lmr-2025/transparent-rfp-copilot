@@ -61,14 +61,6 @@ const navItems: NavSection[] = [
     ],
   },
   {
-    section: "Contract Review",
-    featureFlag: "contracts",
-    items: [
-      { href: "/contracts", label: "Library", hint: "View contracts" },
-      { href: "/contracts/upload", label: "Upload", hint: "Add new contracts" },
-    ],
-  },
-  {
     section: "Backstage",
     adminOnly: true,
     items: [

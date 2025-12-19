@@ -540,39 +540,6 @@ model ChatPromptCategory {
   @@index([sortOrder])
 }
 
-// Contract Reviews (The Clause Checker)
-model ContractReview {
-  id              String   @id @default(uuid())
-  name            String   // Contract/document name
-  filename        String   // Original filename
-  fileType        String   // pdf, docx
-  customerName    String?  // Who the contract is with
-  contractType    String?  // e.g., "MSA", "DPA", "NDA", "SaaS Agreement"
-  extractedText   String   @db.Text // Full extracted text
-  status          ContractReviewStatus @default(PENDING)
-  overallRating   String?  // "compliant", "mostly_compliant", "needs_review", "high_risk"
-  summary         String?  @db.Text // AI-generated executive summary
-  findings        Json?    // Array of ContractFinding objects
-  skillsUsed      Json?    // Array of skill IDs used for analysis
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  analyzedAt      DateTime?
-  reviewedAt      DateTime?
-  reviewedBy      String?
-  notes           String?  @db.Text
-
-  @@index([status])
-  @@index([createdAt])
-  @@index([customerName])
-}
-
-enum ContractReviewStatus {
-  PENDING      // Uploaded, not yet analyzed
-  ANALYZING    // Analysis in progress
-  ANALYZED     // Analysis complete, awaiting review
-  REVIEWED     // Human reviewed
-  ARCHIVED     // No longer active
-}
 
 // Question History - tracks quick questions from the home page
 model QuestionHistory {

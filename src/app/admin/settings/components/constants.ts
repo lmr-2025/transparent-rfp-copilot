@@ -41,7 +41,6 @@ export const FEATURE_LABELS: Record<string, string> = {
   chat: "The Oracle (Chat)",
   "skills-suggest": "Knowledge Gremlin (Skills)",
   "customers-suggest": "The Rolodex (Customers)",
-  "contracts-analyze": "Clause Checker (Contracts)",
   projects: "Project Answerer",
 };
 

@@ -19,7 +19,6 @@ export type PromptContext =
   | "skills"               // Building knowledge skills
   | "analysis"             // Analyzing documents/libraries
   | "chat"                 // Knowledge chat
-  | "contracts"            // Contract analysis
   | "skill_organize"       // Organizing/merging skills from sources
   | "skill_analyze"        // Analyzing URLs/docs to decide skill actions (create/update)
   | "skill_refresh"        // Refreshing a skill from its source URLs
@@ -186,11 +185,6 @@ export const defaultBlocks: PromptBlock[] = [
         "- Use ## for section headers (NOT **bold**)",
         "- Use bullet points for lists",
         "- Keep paragraphs short (2-3 sentences max)",
-      ].join("\n"),
-      contracts: [
-        "You are a contract analyst specializing in security and compliance terms.",
-        "Review contract language and identify key obligations, risks, and compliance-relevant clauses.",
-        "Flag areas that may need legal review or pose security concerns.",
       ].join("\n"),
       skill_organize: [
         "You are a knowledge management expert helping organize documentation into a structured skill library.",
@@ -460,14 +454,6 @@ export const defaultBlocks: PromptBlock[] = [
         "Key Findings: [Bulleted list of important points]",
         "Gaps: [What's missing or unclear]",
         "Recommendations: [Suggested actions or follow-ups]",
-      ].join("\n"),
-      contracts: [
-        "Structure your analysis as:",
-        "",
-        "Summary: [Brief overview of the contract section]",
-        "Key Terms: [Important obligations and commitments]",
-        "Risk Areas: [Potential concerns or unusual clauses]",
-        "Compliance Notes: [Relevant regulatory or security implications]",
       ].join("\n"),
       skill_organize: [
         "Return a JSON object with this structure:",
@@ -953,12 +939,6 @@ export const defaultCompositions: PromptComposition[] = [
     blockIds: ["role_mission", "source_priority", "error_handling", "output_format"],
     supportsModes: false,
     supportsDomains: true,
-  },
-  {
-    context: "contracts",
-    blockIds: ["role_mission", "quality_rules", "output_format"],
-    supportsModes: false,
-    supportsDomains: false,
   },
   {
     context: "skill_organize",
