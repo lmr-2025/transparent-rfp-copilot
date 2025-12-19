@@ -6,6 +6,10 @@ import { logSkillChange, getUserFromSession, computeChanges } from "@/lib/auditL
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { invalidateSkillCache } from "@/lib/cache";
+import { getSkillSlug } from "@/lib/skillFiles";
+import { updateSkillAndCommit, deleteSkillAndCommit } from "@/lib/skillGitSync";
+import { withSyncLogging } from "@/lib/skillSyncLog";
+import type { SkillFile } from "@/lib/skillFiles";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -105,6 +109,79 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       data: updateData,
     });
 
+    // Commit to git (only if PUBLISHED - reviews disabled)
+    if (skill.status === "PUBLISHED") {
+      try {
+        const oldSlug = getSkillSlug(existing.title);
+        const newSlug = getSkillSlug(skill.title);
+
+        // Build commit message with change summary
+        const changedFields = Object.keys(updateData).filter(
+          (key) => key !== "history" && updateData[key] !== undefined
+        );
+        const changesSummary = changedFields.length > 0
+          ? `\n\nChanges: ${changedFields.join(", ")}`
+          : "";
+
+        // Parse owners for git commit
+        const owners = [
+          ...(skill.ownerId && auth.session.user
+            ? [
+                {
+                  name: auth.session.user.name || "Unknown",
+                  email: auth.session.user.email || undefined,
+                  userId: skill.ownerId,
+                },
+              ]
+            : []),
+          ...((skill.owners as Array<{ name: string; email?: string; userId?: string }>) || []),
+        ];
+
+        const skillFile: SkillFile = {
+          id: skill.id,
+          slug: newSlug,
+          title: skill.title,
+          content: skill.content,
+          categories: skill.categories,
+          owners,
+          sources: (skill.sourceUrls as SkillFile["sources"]) || [],
+          created: skill.createdAt.toISOString(),
+          updated: skill.updatedAt.toISOString(),
+          active: skill.isActive,
+        };
+
+        // Commit to git with sync logging
+        await withSyncLogging(
+          {
+            skillId: skill.id,
+            operation: "update",
+            direction: "db-to-git",
+            syncedBy: auth.session.user.id,
+          },
+          async () => {
+            const commitSha = await updateSkillAndCommit(
+              oldSlug,
+              skillFile,
+              `Update skill: ${skill.title}${changesSummary}`,
+              {
+                name: auth.session.user.name || auth.session.user.email || "Unknown",
+                email: auth.session.user.email || "unknown@example.com",
+              }
+            );
+
+            logger.info("Skill update committed to git", { skillId: skill.id, oldSlug, newSlug, commitSha });
+            return commitSha;
+          }
+        );
+      } catch (gitError) {
+        // Log git error but don't fail the request
+        logger.error("Failed to commit skill update to git", gitError, {
+          skillId: skill.id,
+          title: skill.title,
+        });
+      }
+    }
+
     // Determine the action type for audit log
     let auditAction: "UPDATED" | "OWNER_ADDED" | "OWNER_REMOVED" | "REFRESHED" = "UPDATED";
     if (data.owners !== undefined) {
@@ -163,6 +240,42 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await prisma.skill.delete({
       where: { id },
     });
+
+    // Delete from git (only if skill was published)
+    if (skill.status === "PUBLISHED") {
+      try {
+        const slug = getSkillSlug(skill.title);
+
+        // Delete from git with sync logging
+        await withSyncLogging(
+          {
+            skillId: skill.id,
+            operation: "delete",
+            direction: "db-to-git",
+            syncedBy: auth.session.user.id,
+          },
+          async () => {
+            const commitSha = await deleteSkillAndCommit(
+              slug,
+              `Delete skill: ${skill.title}`,
+              {
+                name: auth.session.user.name || auth.session.user.email || "Unknown",
+                email: auth.session.user.email || "unknown@example.com",
+              }
+            );
+
+            logger.info("Skill deletion committed to git", { skillId: skill.id, slug, commitSha });
+            return commitSha;
+          }
+        );
+      } catch (gitError) {
+        // Log git error but don't fail the request
+        logger.error("Failed to commit skill deletion to git", gitError, {
+          skillId: skill.id,
+          title: skill.title,
+        });
+      }
+    }
 
     // Audit log
     await logSkillChange(

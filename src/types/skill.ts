@@ -59,6 +59,8 @@ export type SkillHistoryEntry = {
   user?: string;
 };
 
+export type SyncStatus = "synced" | "pending" | "failed" | null;
+
 export type Skill = {
   id: string;
   title: string;
@@ -76,4 +78,7 @@ export type Skill = {
   lastSourceLink?: string; // Deprecated - use sourceUrls instead
   owners?: SkillOwner[]; // Subject matter experts responsible for this skill
   history?: SkillHistoryEntry[]; // Audit trail of changes
+  // Git sync tracking
+  syncStatus?: SyncStatus; // "synced", "pending", "failed", null = unknown
+  lastSyncedAt?: string; // Last successful sync to/from git
 };

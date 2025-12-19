@@ -28,6 +28,8 @@ import {
   UnifiedLibraryItem,
   SkillOwner,
 } from "@/hooks/use-knowledge-data";
+import { useSyncHealthStatus } from "@/hooks/useSkillSyncStatus";
+import { SyncHealthBar } from "@/components/knowledge/sync-health-bar";
 import {
   Select,
   SelectContent,
@@ -62,6 +64,7 @@ function KnowledgeLibraryContent() {
   const { data: documents = [], isLoading: documentsLoading } = useAllDocuments();
   const { data: urls = [], isLoading: urlsLoading } = useAllReferenceUrls();
   const { data: categories = [] } = useAllCategories();
+  const { data: syncHealth, isLoading: syncHealthLoading, refetch: refetchSyncHealth } = useSyncHealthStatus();
 
   // Mutations
   const deleteSkillMutation = useDeleteSkill();
@@ -441,6 +444,17 @@ function KnowledgeLibraryContent() {
           )}
         </div>
       </div>
+
+      {/* Sync Health Bar - Only show on Skills tab and when we have sync data */}
+      {activeTab === "skills" && syncHealth?.status && (
+        <div className="mb-6">
+          <SyncHealthBar
+            status={syncHealth.status}
+            isLoading={syncHealthLoading}
+            onRefresh={() => refetchSyncHealth()}
+          />
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-6">
