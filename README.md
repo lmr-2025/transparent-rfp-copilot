@@ -127,6 +127,80 @@ src/lib/              # Utilities (promptBlocks, auth, capabilities, prisma)
 infrastructure/       # Terraform modules for AWS deployment
 ```
 
+### Architecture Options
+
+**Option 1: AWS Amplify (Recommended)**
+- Fully managed hosting with Git-based CI/CD
+- Automatic builds and deployments
+- PR preview environments
+- Cost: ~$5-30/month
+
+**Option 2: ECS Fargate**
+- More control and flexibility
+- Better for complex requirements
+- Auto-scaling and self-healing
+- Cost: ~$30-50/month
+
+### Estimated Monthly Costs
+
+| Configuration | Monthly Cost | Description |
+|--------------|--------------|-------------|
+| **Minimal** | $29-39 | Amplify + Single-AZ RDS + Basic monitoring |
+| **Standard** | $130-163 | ECS + Multi-AZ RDS + Full compliance |
+| **Optimized** | $75-100 | Cost-optimized with Upstash, VPC endpoints |
+
+See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for detailed deployment guide.
+
+### Security & Compliance
+
+All infrastructure modules include:
+- ✅ Encryption at rest and in transit
+- ✅ Multi-AZ high availability
+- ✅ Automated backups and disaster recovery
+- ✅ Least privilege IAM policies
+- ✅ Network isolation (VPC, private subnets)
+- ✅ Comprehensive monitoring and alerting
+- ✅ Audit logging (CloudTrail)
+- ✅ Compliance monitoring (AWS Config)
+- ✅ Threat detection (GuardDuty)
+- ✅ Cost tracking and optimization
+
+**Compliance Frameworks**: SOC 2 Type II, HIPAA, PCI DSS
+
+### Infrastructure Documentation
+
+- **[AWS Deployment Guide](docs/AWS_DEPLOYMENT.md)**: Complete deployment walkthrough
+- **[RDS Security](docs/RDS_SECURITY.md)**: Database security best practices
+- **[Monitoring Runbook](docs/runbooks/rds-security-monitoring.md)**: Operational procedures
+
+Each infrastructure module includes:
+- `README.md` - Usage examples and troubleshooting
+- `variables.tf` - Configurable parameters
+- `outputs.tf` - Values for other modules
+- `main.tf` - Resource definitions
+
+## Third-Party Integrations
+
+The platform supports optional integrations with external systems:
+
+| Integration | Purpose | Documentation |
+|-------------|---------|---------------|
+| **Salesforce** | Customer data enrichment | [Setup Guide](docs/INTEGRATIONS.md#salesforce-integration) |
+| **Google OAuth** | SSO + Slides template filling | [Setup Guide](docs/INTEGRATIONS.md#google-oauth--slides) |
+| **Snowflake** | GTM data queries | [Setup Guide](docs/INTEGRATIONS.md#snowflake-integration) |
+| **Okta** | Enterprise SSO with group sync | [Setup Guide](docs/INTEGRATIONS.md#okta-sso) |
+| **Slack** | Review notifications | [Setup Guide](docs/INTEGRATIONS.md#slack-notifications) |
+
+All integrations are **optional**. The platform works fully without any external integrations. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for complete setup instructions.
+
+## Documentation
+
+- **Third-Party Integrations**: See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for Salesforce, Google, Snowflake, Okta, and Slack setup
+- **AWS Deployment**: See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for production infrastructure
+- **Prompt System**: See `/admin/prompt-blocks` for the composable prompt builder
+- **API**: All routes documented in `/src/app/api/` with JSDoc comments
+- **Database Schema**: See `prisma/schema.prisma` for data models
+
 ## License
 
 Apache-2.0 - See [LICENSE](LICENSE) for details.
