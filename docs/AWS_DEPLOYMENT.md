@@ -30,7 +30,7 @@ All subtasks are tracked in Linear under the Security team.
 | **2.2 Security Groups** | [SEC-1053](https://linear.app/montecarlodata/issue/SEC-1053) | 🔴 Not Started |
 | **2.3 Load Balancer** | [SEC-1052](https://linear.app/montecarlodata/issue/SEC-1052) | 🔴 Not Started |
 | **3.1 RDS PostgreSQL** | [SEC-1049](https://linear.app/montecarlodata/issue/SEC-1049) | 🔴 Not Started |
-| **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | 🔴 Not Started |
+| **3.2 RDS Security** | [SEC-1050](https://linear.app/montecarlodata/issue/SEC-1050) | ✅ Complete |
 | **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
 | **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | 🔴 Not Started |
@@ -226,13 +226,123 @@ See [infrastructure/iam/README.md](../infrastructure/iam/README.md) for complete
 - [ ] Create database: `grcminion` or `rfp_copilot`
 
 #### 3.2 RDS Security Configuration (SEC-1050)
-- [ ] Configure security groups (app access only)
-- [ ] Enforce SSL/TLS connections
-- [ ] Store credentials in Secrets Manager
-- [ ] Configure parameter group if needed
-- [ ] Set up automated snapshots
-- [ ] Configure backup retention
-- [ ] Document connection strings
+- [x] Configure security groups (app access only)
+- [x] Enforce SSL/TLS connections
+- [x] Store credentials in Secrets Manager
+- [x] Configure parameter group if needed
+- [x] Set up automated snapshots
+- [x] Configure backup retention
+- [x] Document connection strings
+
+**Implementation Details**:
+- **Location**: `docs/RDS_SECURITY.md` and `docs/runbooks/rds-security-monitoring.md`
+- **Documentation Type**: Security hardening, operational procedures, compliance
+
+**RDS Security Documentation**:
+- **RDS_SECURITY.md** - Comprehensive security configuration guide:
+  - Security layers overview (network, auth, encryption, monitoring, backup)
+  - Initial security setup and verification procedures
+  - Credential management and rotation procedures
+  - Network security configuration and verification
+  - Encryption at rest and in transit setup
+  - Access control and database user management
+  - Monitoring and auditing procedures
+  - Security hardening checklist (initial, post-deployment, monthly, quarterly)
+  - Incident response procedures (detection, containment, investigation, recovery)
+  - Compliance framework coverage (SOC 2, HIPAA, PCI DSS, GDPR)
+  - Security testing procedures (penetration testing, vulnerability assessment, load testing)
+  - Troubleshooting guide for common security issues
+
+**Security Monitoring Runbook**:
+- **rds-security-monitoring.md** - Operational procedures for security monitoring:
+  - Daily security checks (alarms, failed logins, connections, CloudTrail, performance)
+  - Weekly security review (user audit, security groups, query patterns, logs, backups)
+  - Monthly security audit (configuration review, access control, network, encryption, logs, compliance)
+  - Security alert response procedures (high connections, failed auth, high CPU)
+  - Credential rotation procedures (monthly schedule, automation)
+  - Security incident response workflow (detection, containment, investigation, recovery, post-incident)
+  - Compliance reporting (monthly reports, audit evidence collection)
+
+**Key Security Features Documented**:
+- **Authentication & Authorization**:
+  - Master credentials in Secrets Manager
+  - Application-specific database users with least privilege
+  - IAM database authentication setup
+  - Password policy and rotation
+  - Connection limits per user
+
+- **Network Security**:
+  - Private subnet placement verification
+  - Security group rule auditing
+  - NACL configuration (optional)
+  - VPC Flow Logs monitoring
+
+- **Encryption**:
+  - KMS encryption at rest verification
+  - Automatic key rotation
+  - SSL/TLS enforcement (rds.force_ssl=1)
+  - Certificate validation setup
+
+- **Monitoring & Logging**:
+  - CloudWatch Logs analysis
+  - Enhanced monitoring metrics
+  - Performance Insights usage
+  - CloudWatch Alarms configuration
+  - CloudTrail API auditing
+
+- **Incident Response**:
+  - Unauthorized access response
+  - Suspicious activity detection
+  - Configuration change review
+  - Data breach procedures
+  - Evidence preservation
+
+- **Compliance**:
+  - SOC 2 control documentation
+  - HIPAA requirements
+  - PCI DSS requirements
+  - GDPR requirements
+  - Audit evidence collection
+
+**Security Checklists**:
+- Initial deployment verification (15 items)
+- Post-deployment hardening (15 items)
+- Monthly maintenance tasks (14 items)
+- Quarterly security audit (12 items)
+
+**Operational Procedures**:
+- Daily security checks (10-15 minutes)
+- Weekly security review (30-45 minutes)
+- Monthly security audit (2-3 hours)
+- Credential rotation (monthly, 15-20 minutes)
+- Incident response workflow (5-phase process)
+- Compliance reporting (monthly and quarterly)
+
+**Response Times**:
+- Critical alerts: < 5 minutes
+- Authentication failures: < 15 minutes
+- Performance alerts: < 10 minutes
+- Weekly review: Within 24 hours
+- Monthly audit: Within first week of month
+
+**Tools & Commands**:
+- AWS CLI commands for all verification and monitoring tasks
+- SQL queries for database user and permission auditing
+- Log analysis scripts for security event detection
+- CloudWatch metrics queries for performance monitoring
+- CloudTrail commands for API activity review
+
+**Best Practices Covered**:
+- Defense-in-depth security architecture
+- Principle of least privilege for all access
+- Regular credential rotation (30-90 days)
+- Comprehensive logging and monitoring
+- Automated compliance checking
+- Incident response planning
+- Security testing and vulnerability assessment
+
+See [docs/RDS_SECURITY.md](./RDS_SECURITY.md) for complete security configuration guide.
+See [docs/runbooks/rds-security-monitoring.md](./runbooks/rds-security-monitoring.md) for operational procedures.
 
 ### Phase 4: Storage
 
