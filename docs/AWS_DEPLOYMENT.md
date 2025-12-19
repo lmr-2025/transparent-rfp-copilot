@@ -4,14 +4,16 @@ This document outlines the complete AWS infrastructure setup for deploying the T
 
 ## Overview
 
-The Transparent RFP Copilot is a Next.js 16 application that requires:
-- Container orchestration (ECS/Fargate or Amplify)
-- PostgreSQL database (RDS)
-- File storage (S3)
-- Authentication (SSO + NextAuth with Google OAuth)
-- Secrets management
-- Monitoring and logging
-- CI/CD pipeline
+The Transparent RFP Copilot is a Next.js application deployed to AWS with **Tailscale-only access** (no public internet access). The infrastructure includes:
+
+- **Compute**: ECS/Fargate (containerized Next.js app)
+- **Database**: PostgreSQL (RDS) in private subnets
+- **Storage**: S3 buckets for uploads and logs
+- **Networking**: Internal ALB on private subnets, Tailscale VPN required for access
+- **Authentication**: NextAuth with Google OAuth
+- **Secrets**: AWS Secrets Manager
+- **Monitoring**: CloudWatch Logs, Metrics, and Alarms
+- **Infrastructure**: Terraform with modular architecture
 
 ## Linear Project Tracking
 
@@ -43,60 +45,122 @@ All subtasks are tracked in Linear under the Security team.
 | **11. Compliance** | [SEC-1061](https://linear.app/montecarlodata/issue/SEC-1061) | 🔴 Not Started |
 | **12. Cost Management** | [SEC-1062](https://linear.app/montecarlodata/issue/SEC-1062) | 🔴 Not Started |
 
+## Quick Start
+
+### 1. Bootstrap Terraform State (One-time)
+
+```bash
+cd infrastructure/bootstrap
+terraform init
+terraform apply
+# Copy backend configuration from outputs
+```
+
+### 2. Deploy Environment
+
+```bash
+cd infrastructure/env/dev-us-security  # or prod-us-security
+terraform init
+terraform plan
+terraform apply
+```
+
+### 3. Access Application
+
+- **Requirement**: Tailscale VPN connected to VPC
+- **Dev**: `transparent-trust-dev.mcdinternal.io`
+- **Prod**: `transparent-trust-prod.mcdinternal.io`
+
+See [infrastructure/env/TAILSCALE_CONFIGURATION.md](../infrastructure/env/TAILSCALE_CONFIGURATION.md) for complete Tailscale setup.
+
 ## High-Level Checklist
 
 ### Pre-Deployment
 
 - [ ] AWS account created and secured
-- [ ] SSO configured
-- [ ] IAM roles created
-- [ ] Budget alerts set up
+- [ ] ACM certificate for `*.mcdinternal.io`
+- [ ] Route53 private hosted zone for `mcdinternal.io`
+- [ ] Tailscale account and app connector configured
+- [ ] Required secrets prepared (Anthropic API key, Google OAuth, etc.)
 
 ### Infrastructure
 
-- [ ] VPC and networking configured
-- [ ] RDS PostgreSQL provisioned
-- [ ] S3 buckets created
-- [ ] Secrets stored in Secrets Manager
-- [ ] Load balancer configured
+- [x] Terraform bootstrap for remote state
+- [x] VPC and networking (private/public subnets, NAT gateways)
+- [x] Security groups (internal ALB, VPC CIDR only)
+- [x] Internal ALB on private subnets
+- [x] RDS PostgreSQL in private subnets
+- [x] S3 buckets for uploads and logs
+- [x] Secrets Manager configuration
+- [x] ECS/Fargate cluster and service
+- [x] CloudWatch monitoring and alarms
 
 ### Application
 
-- [ ] Compute platform chosen (ECS/Fargate or Amplify)
-- [ ] Container/app deployed
-- [ ] Environment variables configured
-- [ ] Database migrations run
-
-### Operations
-
-- [ ] Monitoring and alarms configured
-- [ ] DNS and SSL certificate set up
-- [ ] CI/CD pipeline operational
-- [ ] Compliance logging enabled
+- [ ] Docker image built and pushed to ECR
+- [ ] Database migrations run (`npx prisma migrate deploy`)
+- [ ] Application deployed via Terraform
+- [ ] Tailscale app connector deployed
 
 ### Post-Deployment
 
-- [ ] Smoke tests passed
-- [ ] Security scan completed
-- [ ] Load testing performed
-- [ ] Documentation updated
+- [ ] Verify Tailscale connectivity
+- [ ] Access application via private domain
+- [ ] Test authentication (Google OAuth)
+- [ ] Verify application functionality
+- [ ] Monitor CloudWatch logs and metrics
 
-## Critical Decisions
+## Infrastructure Overview
 
-### Compute Platform
+### Network Architecture
 
-- **ECS/Fargate**: More control, container-based, traditional (~$30/month)
-- **AWS Amplify**: Simpler, managed, optimized for Next.js (pricing varies)
+**Access Model**: Tailscale-only (no public internet access)
 
-### Redis
+```
+Tailscale VPN
+    |
+    v
+Internal ALB (private subnets)
+    |
+    v
+ECS Fargate Tasks (private subnets)
+    |
+    +-- RDS PostgreSQL (private subnets)
+    +-- ElastiCache Redis (private subnets)
+    +-- S3 (VPC endpoints)
+    +-- Secrets Manager (VPC endpoints)
+```
 
-- **ElastiCache**: AWS-managed, requires VPC setup (~$15/month)
-- **Upstash**: SaaS, no infrastructure needed (already supported by app)
+### Key Security Features
 
-### Region
+- **Internal ALB**: Deployed on private subnets, no public IP
+- **VPC-Only Security Groups**: Ingress limited to VPC CIDR
+- **Private Domains**: `*.mcdinternal.io` accessible only via Tailscale
+- **Encryption**: At rest (KMS) and in transit (TLS)
+- **No Public Access**: All resources in private subnets
 
-- **Recommended**: `us-east-1` (most services, lowest cost)
-- **Consider**: Data residency requirements
+### Module Structure
+
+```
+infrastructure/
+├── bootstrap/          # Terraform state management (S3, DynamoDB, KMS)
+├── modules/           # Reusable Terraform modules
+│   ├── vpc/
+│   ├── security-groups/
+│   ├── alb/
+│   ├── ecs/
+│   ├── rds/
+│   ├── redis/
+│   ├── s3/
+│   ├── s3-policies/
+│   ├── secrets-manager/
+│   ├── iam/
+│   ├── monitoring/
+│   └── dns-cdn/
+└── env/               # Environment configurations
+    ├── dev-us-security/
+    └── prod-us-security/
+```
 
 ## Cost & Timeline Estimates
 
@@ -226,7 +290,7 @@ terraform apply -var="environment=production"
 See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete documentation.
 
 #### 2.2 Security Groups and NACLs (SEC-1053)
-- [x] ALB security group (allow 443 from 0.0.0.0/0)
+- [x] ALB security group (allow 443 from VPC CIDR only - Tailscale access)
 - [x] App security group (allow traffic from ALB only)
 - [x] RDS security group (allow 5432 from app SG only)
 - [x] Redis security group (allow 6379 from app SG only)
@@ -234,16 +298,15 @@ See [infrastructure/vpc/README.md](../infrastructure/vpc/README.md) for complete
 - [x] Document all security group rules
 
 **Implementation Details**:
-- **Location**: `infrastructure/security-groups/`
+- **Location**: `infrastructure/modules/security-groups/`
 - **Terraform Modules**:
   - `main.tf` - Security groups for ALB, App, RDS, Redis, and VPC Endpoints
   - `nacls.tf` - Network ACLs for public and private subnets
   - `variables.tf` - Configuration variables
   - `outputs.tf` - Security group IDs for cross-module references
-  - `README.md` - Complete documentation
 
 **Security Groups**:
-- **ALB SG**: Ingress HTTPS (443) and HTTP (80) from internet, egress to App on port 3000
+- **ALB SG**: Ingress HTTPS (443) from VPC CIDR only (Tailscale routes through VPC), egress to App on port 3000
 - **App SG**: Ingress from ALB (3000), egress to RDS (5432), Redis (6379), HTTPS (443)
 - **RDS SG**: Ingress from App SG only on port 5432
 - **Redis SG**: Ingress from App SG only on port 6379
