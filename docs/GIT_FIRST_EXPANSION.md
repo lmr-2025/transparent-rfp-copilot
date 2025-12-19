@@ -1062,6 +1062,291 @@ knowledge/
 
 ---
 
+## Implementation Progress
+
+| Phase | Status | Completed | Time Spent | Notes |
+|-------|--------|-----------|------------|-------|
+| Phase 1 | ✅ DONE | 2025-12-19 | ~3 hours | Skills in git - fully implemented with sync tracking UI |
+| Phase 2 | ✅ DONE | 2025-12-19 | ~1.5 hours | Customer profiles - reused patterns from Phase 1 |
+| Phase 3 | ✅ DONE | 2025-12-19 | ~1 hour | System prompts - blocks + modifiers with variant support |
+| Phase 4 | ✅ DONE | 2025-12-19 | ~45 min | Templates - reused patterns, fastest phase |
+
+**Total Implementation Time**: ~6-7 hours across all 4 phases
+
+**Key Efficiency Gains**:
+- Phase 1 established patterns that were reused in Phases 2-4
+- Each subsequent phase was faster due to pattern reuse
+- Copy-paste of library structure with entity-specific modifications
+
+### Phase 4 Implementation Details (Templates)
+
+**All Complete:**
+- ✅ Directory structure (`templates/`, `.gitignore`, `README.md`)
+- ✅ `src/lib/templateFiles.ts` - File read/write operations with placeholder mapping support
+- ✅ `src/lib/templateGitSync.ts` - Git commit/sync operations with rename support
+- ✅ `src/lib/templateSyncLog.ts` - Sync logging utilities
+- ✅ Prisma schema updates (`syncStatus`, `lastSyncedAt`, `gitCommitSha` fields)
+- ✅ `TemplateSyncLog` model added to schema
+- ✅ `scripts/export-templates-to-git.ts` - Export templates to git
+- ✅ `scripts/sync-templates-to-db.ts` - Sync from git to database
+- ✅ npm scripts (`npm run export:templates`, `npm run sync:templates`)
+- ✅ Update Template API routes (`/api/templates/[id]`) to commit to git on save/delete
+
+**File Format Notes:**
+- Templates use markdown with YAML frontmatter
+- Placeholder mappings stored in frontmatter for source definitions
+- Content uses `{{placeholder}}` syntax for variable interpolation
+
+**Remaining (nice-to-have for production):**
+- [ ] Sync status UI in template builder
+- [ ] Test full bidirectional sync workflow
+- [ ] GitHub Actions for automated sync
+
+### Phase 3 Implementation Details (System Prompts)
+
+**All Complete:**
+- ✅ Directory structure (`prompts/blocks/`, `prompts/modifiers/`, `.gitignore`, `README.md`)
+- ✅ `src/lib/promptFiles.ts` - File read/write operations for blocks and modifiers
+- ✅ `src/lib/promptGitSync.ts` - Git commit/sync operations for both blocks and modifiers
+- ✅ `src/lib/promptSyncLog.ts` - Sync logging utilities
+- ✅ Prisma schema updates (`tier`, `createdAt`, `syncStatus`, `lastSyncedAt`, `gitCommitSha` fields for both PromptBlock and PromptModifier)
+- ✅ `PromptSyncLog` model added to schema (supports both blocks and modifiers)
+- ✅ `scripts/export-prompts-to-git.ts` - Export blocks and modifiers to git (from DB or defaults)
+- ✅ `scripts/sync-prompts-to-db.ts` - Sync from git to database
+- ✅ npm scripts (`npm run export:prompts`, `npm run sync:prompts`)
+- ✅ Update Prompt API routes (`/api/prompt-blocks`) to commit to git on save
+
+**File Format Notes:**
+- Blocks use `---variant:{context}---` markers to separate context-specific content
+- Modifiers are simpler markdown files with single content field
+- Both include YAML frontmatter with metadata
+
+**Remaining (nice-to-have for production):**
+- [ ] Sync status UI in prompt builder (similar to skills/customers)
+- [ ] Test full bidirectional sync workflow
+- [ ] GitHub Actions for automated sync
+
+### Phase 2 Implementation Details (Customer Profiles)
+
+**All Complete:**
+- ✅ Directory structure (`customers/`, `.gitignore`, `README.md`)
+- ✅ `src/lib/customerFiles.ts` - File read/write operations
+- ✅ `src/lib/customerGitSync.ts` - Git commit/sync operations
+- ✅ `src/lib/customerSyncLog.ts` - Sync logging utilities
+- ✅ Prisma schema updates (`syncStatus`, `lastSyncedAt`, `gitCommitSha` fields)
+- ✅ `CustomerSyncLog` model added to schema
+- ✅ `scripts/export-customers-to-git.ts` - Export existing customers
+- ✅ `scripts/sync-customers-to-db.ts` - Sync from git to database
+- ✅ npm scripts (`npm run export:customers`, `npm run sync:customers`)
+- ✅ Update Customer API routes to commit to git on save
+- ✅ Add sync status UI to customer profile cards (reuse `SyncStatusBadge`)
+- ✅ Add API endpoint for customer sync logs (`/api/customers/[id]/sync-logs`)
+- ✅ Add `syncStatus`, `lastSyncedAt`, `gitCommitSha` to CustomerProfile TypeScript type
+
+**Remaining (nice-to-have for production):**
+- [ ] Test full bidirectional sync workflow
+- [ ] GitHub Actions for automated sync (extends existing skills workflow)
+
+---
+
+## AWS Infrastructure Recommendations
+
+> **Reference**: See [git-backed-skills-deployment.md](git-backed-skills-deployment.md) for detailed AWS deployment architecture.
+
+### Summary of Recommended Approach
+
+The recommended AWS deployment uses **Lambda-Based Git Sync** (Option 1 from the skills deployment doc):
+
+```
+Web UI (ECS) → RDS (write only)
+                ↓
+          EventBridge → Lambda (commit to git)
+                ↓
+          GitHub webhook → Lambda → sync to RDS
+```
+
+### Infrastructure Components Needed (Phase 2+)
+
+The same Lambda-based sync architecture applies to **all git-backed knowledge types**:
+
+| Component | Description | Phase |
+|-----------|-------------|-------|
+| Lambda: `knowledge-to-git` | Commits DB changes to git | Phase 1 (exists) |
+| Lambda: `git-to-knowledge` | Syncs git changes to RDS | Phase 1 (exists) |
+| EventBridge Rules | Trigger on RDS table changes | Phase 1+ |
+| GitHub Webhook | Trigger on push to main | Phase 1+ |
+
+### Changes for Phase 2 (Customer Profiles)
+
+**Extend existing Lambda functions to handle customers:**
+
+1. **EventBridge Rule**: Add pattern for `CustomerProfile` table changes
+   ```json
+   {
+     "source": ["aws.rds"],
+     "detail-type": ["RDS DB Instance Event"],
+     "detail": {
+       "table": ["Skill", "CustomerProfile"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add customer handling
+   ```typescript
+   if (event.detail.table === 'CustomerProfile') {
+     const customer = await fetchCustomerFromRDS(event.detail.id);
+     const slug = getCustomerSlug(customer.name);
+     await writeCustomerFile(`/tmp/repo/customers/${slug}.md`, customer);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add customer sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('customers/'))) {
+     await exec('npm run sync:customers', { cwd: '/tmp/repo' });
+   }
+   ```
+
+### Changes for Phase 3 (Prompts)
+
+**Extend existing Lambda functions to handle prompts:**
+
+1. **EventBridge Rule**: Add patterns for `PromptBlock` and `PromptModifier` table changes
+   ```json
+   {
+     "source": ["aws.rds"],
+     "detail-type": ["RDS DB Instance Event"],
+     "detail": {
+       "table": ["Skill", "CustomerProfile", "PromptBlock", "PromptModifier"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add prompt handling
+   ```typescript
+   if (event.detail.table === 'PromptBlock') {
+     const block = await fetchBlockFromRDS(event.detail.blockId);
+     await writeBlockFile(`/tmp/repo/prompts/blocks/${block.blockId}.md`, block);
+   }
+   if (event.detail.table === 'PromptModifier') {
+     const modifier = await fetchModifierFromRDS(event.detail.modifierId);
+     await writeModifierFile(`/tmp/repo/prompts/modifiers/${modifier.modifierId}.md`, modifier);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add prompt sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('prompts/'))) {
+     await exec('npm run sync:prompts', { cwd: '/tmp/repo' });
+   }
+   ```
+
+### Changes for Phase 4 (Templates)
+
+**Extend existing Lambda functions to handle templates:**
+
+1. **EventBridge Rule**: Add pattern for `Template` table changes
+   ```json
+   {
+     "detail": {
+       "table": ["Skill", "CustomerProfile", "PromptBlock", "PromptModifier", "Template"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add template handling
+   ```typescript
+   if (event.detail.table === 'Template') {
+     const template = await fetchTemplateFromRDS(event.detail.id);
+     const slug = getTemplateSlug(template.name);
+     await writeTemplateFile(`/tmp/repo/templates/${slug}.md`, template);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add template sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('templates/'))) {
+     await exec('npm run sync:templates', { cwd: '/tmp/repo' });
+   }
+   ```
+
+### Cost Estimate (All Phases)
+
+| Resource | Monthly Cost | Notes |
+|----------|-------------|-------|
+| Lambda (2 functions) | ~$5-20 | Based on invocation frequency |
+| EventBridge | ~$1 | Per rule evaluation |
+| GitHub webhook | Free | Part of GitHub |
+| CloudWatch Logs | ~$5 | Log retention |
+| **Total** | **~$15-30/month** | Minimal additional infra |
+
+### Security Considerations
+
+1. **GitHub Token**: Store in AWS Secrets Manager (already recommended)
+2. **VPC Access**: Lambdas need VPC attachment to reach RDS
+3. **IAM**: Minimal permissions for git operations
+4. **Audit**: All sync operations logged to CloudWatch and SyncLog tables
+
+### No Additional Infrastructure Needed
+
+The git-first expansion (Phases 2-4) **reuses the same Lambda infrastructure** as Phase 1. The only changes are:
+- EventBridge rule patterns (add new table names)
+- Lambda code (add handlers for new entity types)
+- Git directory structure (add `customers/`, `prompts/`, `templates/`)
+
+### AWS Deployment Checklist
+
+For production deployment, extend the existing Lambda infrastructure:
+
+- [ ] Update EventBridge rule to include all 5 tables: `Skill`, `CustomerProfile`, `PromptBlock`, `PromptModifier`, `Template`
+- [ ] Update `knowledge-to-git` Lambda with handlers for each entity type
+- [ ] Update `git-to-knowledge` Lambda to detect directory changes and run appropriate sync scripts
+- [ ] Test bidirectional sync for each entity type
+- [ ] Set up GitHub Actions for automated sync on merge to main
+
+---
+
+## Summary of npm Scripts
+
+All git-first sync operations are available via npm scripts:
+
+| Entity | Export (DB → Git) | Sync (Git → DB) |
+|--------|-------------------|-----------------|
+| Skills | `npm run export:skills` | `npm run sync:skills` |
+| Customers | `npm run export:customers` | `npm run sync:customers` |
+| Prompts | `npm run export:prompts` | `npm run sync:prompts` |
+| Templates | `npm run export:templates` | `npm run sync:templates` |
+
+---
+
+## Directory Structure (Final)
+
+```
+project-root/
+├── skills/                    # Phase 1
+│   ├── README.md
+│   ├── .gitignore
+│   └── {slug}.md              # Individual skill files
+├── customers/                 # Phase 2
+│   ├── README.md
+│   ├── .gitignore
+│   └── {slug}.md              # Individual customer profiles
+├── prompts/                   # Phase 3
+│   ├── README.md
+│   ├── .gitignore
+│   ├── blocks/
+│   │   └── {blockId}.md       # Prompt blocks with variants
+│   └── modifiers/
+│       └── {modifierId}.md    # Prompt modifiers
+└── templates/                 # Phase 4
+    ├── README.md
+    ├── .gitignore
+    └── {slug}.md              # Document templates
+```
+
+---
+
 Generated: 2025-12-19
+Updated: 2025-12-19
 Author: Claude Code
-Status: Architecture Expansion Plan - Ready for Review
+Status: All 4 Phases Complete - Implementation Done, AWS Deployment Pending

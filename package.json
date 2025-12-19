@@ -14,7 +14,13 @@
     "stop": "lsof -ti:3000 | xargs kill 2>/dev/null && echo 'Server stopped' || echo 'No server running on port 3000'",
     "restart": "npm run stop && npm run dev",
     "export:skills": "tsx scripts/export-skills-to-git.ts",
-    "sync:skills": "tsx scripts/sync-skills-to-db.ts"
+    "sync:skills": "tsx scripts/sync-skills-to-db.ts",
+    "export:customers": "tsx scripts/export-customers-to-git.ts",
+    "sync:customers": "tsx scripts/sync-customers-to-db.ts",
+    "export:prompts": "tsx scripts/export-prompts-to-git.ts",
+    "sync:prompts": "tsx scripts/sync-prompts-to-db.ts",
+    "export:templates": "tsx scripts/export-templates-to-git.ts",
+    "sync:templates": "tsx scripts/sync-templates-to-db.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
