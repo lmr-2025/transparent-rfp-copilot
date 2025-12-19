@@ -6,6 +6,10 @@ import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/aud
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { cacheGetOrSet, CacheKeys, CacheTTL, invalidateSkillCache } from "@/lib/cache";
+import { getSkillSlug } from "@/lib/skillFiles";
+import { saveSkillAndCommit } from "@/lib/skillGitSync";
+import { getInitialSkillStatus } from "@/lib/reviewConfig";
+import type { SkillFile } from "@/lib/skillFiles";
 
 /**
  * GET /api/skills - List all skills
@@ -141,6 +145,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = validation.data;
+
+    // Determine initial status based on review mode
+    const initialStatus = await getInitialSkillStatus(data.categories || []);
+
     const skill = await prisma.skill.create({
       data: {
         title: data.title,
@@ -150,6 +158,7 @@ export async function POST(request: NextRequest) {
         edgeCases: data.edgeCases,
         sourceUrls: data.sourceUrls,
         isActive: data.isActive,
+        status: initialStatus, // PUBLISHED if reviews disabled (default), DRAFT if enabled
         createdBy: auth.session.user.email || undefined,
         ownerId: auth.session.user.id,
         owners: data.owners,
@@ -164,6 +173,58 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Commit to git (only if PUBLISHED - reviews disabled)
+    if (skill.status === "PUBLISHED") {
+      try {
+        const slug = getSkillSlug(skill.title);
+
+        // Parse owners for git commit
+        const owners = [
+          ...(skill.ownerId
+            ? [
+                {
+                  name: auth.session.user.name || "Unknown",
+                  email: auth.session.user.email || undefined,
+                  userId: skill.ownerId,
+                },
+              ]
+            : []),
+          ...((data.owners as Array<{ name: string; email?: string }>) || []),
+        ];
+
+        const skillFile: SkillFile = {
+          id: skill.id,
+          slug,
+          title: skill.title,
+          content: skill.content,
+          categories: skill.categories,
+          owners,
+          sources: (skill.sourceUrls as SkillFile["sources"]) || [],
+          created: skill.createdAt.toISOString(),
+          updated: skill.updatedAt.toISOString(),
+          active: skill.isActive,
+        };
+
+        await saveSkillAndCommit(
+          slug,
+          skillFile,
+          `Create skill: ${skill.title}`,
+          {
+            name: auth.session.user.name || auth.session.user.email || "Unknown",
+            email: auth.session.user.email || "unknown@example.com",
+          }
+        );
+
+        logger.info("Skill committed to git", { skillId: skill.id, slug });
+      } catch (gitError) {
+        // Log git error but don't fail the request - database is source of truth during transition
+        logger.error("Failed to commit skill to git", gitError, {
+          skillId: skill.id,
+          title: skill.title,
+        });
+      }
+    }
+
     // Audit log with request context for IP/User-Agent tracking
     await logSkillChange(
       "CREATED",
@@ -171,7 +232,7 @@ export async function POST(request: NextRequest) {
       skill.title,
       getUserFromSession(auth.session),
       undefined,
-      { categories: data.categories },
+      { categories: data.categories, status: skill.status },
       getRequestContext(request)
     );
 

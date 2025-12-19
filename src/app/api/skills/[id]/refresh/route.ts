@@ -10,6 +10,9 @@ import { SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { getSkillSlug } from "@/lib/skillFiles";
+import { updateSkillAndCommit } from "@/lib/skillGitSync";
+import type { SkillFile } from "@/lib/skillFiles";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -178,6 +181,64 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         history: newHistory,
       },
     });
+
+    // Commit refresh to git (only if PUBLISHED - reviews disabled)
+    if (updatedSkill.status === "PUBLISHED") {
+      try {
+        const oldSlug = getSkillSlug(skill.title);
+        const newSlug = getSkillSlug(updatedSkill.title);
+
+        // Build commit message with change highlights
+        const changesSummary = Array.isArray(changeHighlights) && changeHighlights.length > 0
+          ? `\n\n${changeHighlights.join("\n")}`
+          : "";
+
+        // Parse owners for git commit
+        const owners = [
+          ...(updatedSkill.ownerId && auth.session.user
+            ? [
+                {
+                  name: auth.session.user.name || "Unknown",
+                  email: auth.session.user.email || undefined,
+                  userId: updatedSkill.ownerId,
+                },
+              ]
+            : []),
+          ...((updatedSkill.owners as Array<{ name: string; email?: string; userId?: string }>) || []),
+        ];
+
+        const skillFile: SkillFile = {
+          id: updatedSkill.id,
+          slug: newSlug,
+          title: updatedSkill.title,
+          content: updatedSkill.content,
+          categories: updatedSkill.categories,
+          owners,
+          sources: (updatedSkill.sourceUrls as SkillFile["sources"]) || [],
+          created: updatedSkill.createdAt.toISOString(),
+          updated: updatedSkill.updatedAt.toISOString(),
+          active: updatedSkill.isActive,
+        };
+
+        await updateSkillAndCommit(
+          oldSlug,
+          skillFile,
+          `Refresh skill: ${updatedSkill.title}${changesSummary}`,
+          {
+            name: auth.session.user.name || auth.session.user.email || "Unknown",
+            email: auth.session.user.email || "unknown@example.com",
+          }
+        );
+
+        logger.info("Skill refresh committed to git", { skillId: updatedSkill.id, oldSlug, newSlug });
+      } catch (gitError) {
+        // Log git error but don't fail the request
+        logger.error("Failed to commit skill refresh to git", gitError, {
+          skillId: updatedSkill.id,
+          title: updatedSkill.title,
+        });
+      }
+    }
 
     // Audit log
     await logSkillChange(
