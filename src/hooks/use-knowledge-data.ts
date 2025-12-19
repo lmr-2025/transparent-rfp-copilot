@@ -231,6 +231,9 @@ export interface SourceDocument {
   uploadedAt: string;
 }
 
+// Sync status type for git-backed skills
+export type SyncStatus = "synced" | "pending" | "failed" | null;
+
 export interface UnifiedLibraryItem {
   id: string;
   type: LibraryItemType;
@@ -247,6 +250,9 @@ export interface UnifiedLibraryItem {
   sourceDocuments?: SourceDocument[];
   history?: HistoryEntry[];
   lastRefreshedAt?: string;
+  // Git sync tracking (skills only)
+  syncStatus?: SyncStatus;
+  lastSyncedAt?: string;
   // Document-specific
   filename?: string;
   fileSize?: number;
@@ -274,6 +280,9 @@ export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
     sourceDocuments: skill.sourceDocuments as SourceDocument[] | undefined,
     history: skill.history,
     lastRefreshedAt: skill.lastRefreshedAt,
+    // Git sync tracking
+    syncStatus: skill.syncStatus as SyncStatus,
+    lastSyncedAt: skill.lastSyncedAt,
   };
 }
 

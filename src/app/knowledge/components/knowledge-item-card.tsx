@@ -7,12 +7,15 @@ import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { UnifiedLibraryItem, LibraryItemType, SkillOwner, RefreshResult } from "@/hooks/use-knowledge-data";
+import { UnifiedLibraryItem, LibraryItemType, SkillOwner, RefreshResult, SyncStatus } from "@/hooks/use-knowledge-data";
 import { OwnerManagementDialog } from "./owner-management-dialog";
 import { SkillRefreshDialog } from "./skill-refresh-dialog";
 import { CategoryManagementDialog } from "./category-management-dialog";
 import { SkillSourcesDialog } from "./skill-sources-dialog";
 import { SkillHistoryDialog } from "./skill-history-dialog";
+import { SkillSyncLogsDialog } from "@/components/knowledge/skill-sync-logs-dialog";
+import { SyncStatusBadge } from "@/components/ui/sync-status-badge";
+import { GitBranch } from "lucide-react";
 
 interface KnowledgeItemCardProps {
   item: UnifiedLibraryItem;
@@ -52,6 +55,7 @@ export function KnowledgeItemCard({
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
   const [showSourcesDialog, setShowSourcesDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
+  const [showSyncLogsDialog, setShowSyncLogsDialog] = useState(false);
   const [refreshResult, setRefreshResult] = useState<RefreshResult | null>(null);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(item.title);
@@ -225,6 +229,13 @@ export function KnowledgeItemCard({
                     Inactive
                   </span>
                 )}
+                {item.type === "skill" && (
+                  <SyncStatusBadge
+                    status={item.syncStatus ?? null}
+                    lastSyncedAt={item.lastSyncedAt}
+                    showLabel={false}
+                  />
+                )}
               </div>
               {item.subtitle && (
                 <p className="text-sm text-muted-foreground truncate mt-0.5">{item.subtitle}</p>
@@ -274,6 +285,18 @@ export function KnowledgeItemCard({
                 title="View history"
               >
                 <History className="h-4 w-4" />
+              </Button>
+            )}
+            {item.type === "skill" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSyncLogsDialog(true)}
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-cyan-600"
+                aria-label="View sync logs"
+                title="View sync logs"
+              >
+                <GitBranch className="h-4 w-4" />
               </Button>
             )}
             {canRefresh && (
@@ -500,6 +523,16 @@ export function KnowledgeItemCard({
           open={showHistoryDialog}
           onOpenChange={setShowHistoryDialog}
           item={item}
+        />
+      )}
+
+      {/* Sync Logs Dialog */}
+      {item.type === "skill" && (
+        <SkillSyncLogsDialog
+          open={showSyncLogsDialog}
+          onOpenChange={setShowSyncLogsDialog}
+          skillId={item.id}
+          skillTitle={item.title}
         />
       )}
     </Card>
