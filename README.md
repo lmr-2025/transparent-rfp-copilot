@@ -191,11 +191,125 @@ src/
 └── types/                # TypeScript definitions
 ```
 
+## AWS Deployment
+
+Complete production-ready infrastructure for deploying to AWS with Terraform modules for all components.
+
+### Infrastructure Modules
+
+All infrastructure is defined as reusable Terraform modules in `/infrastructure`:
+
+| Module | Description | Status |
+|--------|-------------|--------|
+| **IAM** | Roles and policies for all services | ✅ Complete |
+| **VPC** | Multi-AZ networking with public/private subnets | ✅ Complete |
+| **Security Groups** | Fine-grained network access control | ✅ Complete |
+| **ALB** | Application Load Balancer with SSL | ✅ Complete |
+| **ECS/Fargate** | Serverless container orchestration | ✅ Complete |
+| **Amplify** | Alternative: Fully managed hosting | ✅ Complete |
+| **RDS** | PostgreSQL with Multi-AZ, encryption, automated backups | ✅ Complete |
+| **Redis** | ElastiCache or Upstash for rate limiting | ✅ Complete |
+| **S3** | Encrypted storage with lifecycle policies | ✅ Complete |
+| **Secrets Manager** | Secure credential storage with rotation | ✅ Complete |
+| **Monitoring** | CloudWatch dashboards, alarms, SNS alerts | ✅ Complete |
+| **DNS/CDN** | Route 53 + ACM + optional CloudFront | ✅ Complete |
+| **CI/CD** | GitHub Actions or CodePipeline | ✅ Complete |
+| **Compliance** | CloudTrail, Config, GuardDuty, Security Hub | ✅ Complete |
+| **Cost Management** | Budgets, anomaly detection, optimization | ✅ Complete |
+
+### Quick Deploy
+
+```bash
+# 1. Configure AWS credentials
+aws configure
+
+# 2. Initialize Terraform
+cd infrastructure
+terraform init
+
+# 3. Create terraform.tfvars
+cat > terraform.tfvars <<EOF
+project_name = "transparent-trust"
+environment  = "production"
+domain_name  = "yourdomain.com"
+
+# Database
+db_username = "admin"
+db_name     = "rfp_copilot"
+
+# Alerts
+alert_emails = ["ops@example.com"]
+
+# Budget
+monthly_budget = "200"  # USD
+EOF
+
+# 4. Deploy infrastructure
+terraform plan
+terraform apply
+
+# 5. Deploy application (GitHub Actions or CodePipeline)
+git push origin main
+```
+
+### Architecture Options
+
+**Option 1: AWS Amplify (Recommended)**
+- Fully managed hosting with Git-based CI/CD
+- Automatic builds and deployments
+- PR preview environments
+- Cost: ~$5-30/month
+
+**Option 2: ECS Fargate**
+- More control and flexibility
+- Better for complex requirements
+- Auto-scaling and self-healing
+- Cost: ~$30-50/month
+
+### Estimated Monthly Costs
+
+| Configuration | Monthly Cost | Description |
+|--------------|--------------|-------------|
+| **Minimal** | $29-39 | Amplify + Single-AZ RDS + Basic monitoring |
+| **Standard** | $130-163 | ECS + Multi-AZ RDS + Full compliance |
+| **Optimized** | $75-100 | Cost-optimized with Upstash, VPC endpoints |
+
+See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for detailed deployment guide.
+
+### Security & Compliance
+
+All infrastructure modules include:
+- ✅ Encryption at rest and in transit
+- ✅ Multi-AZ high availability
+- ✅ Automated backups and disaster recovery
+- ✅ Least privilege IAM policies
+- ✅ Network isolation (VPC, private subnets)
+- ✅ Comprehensive monitoring and alerting
+- ✅ Audit logging (CloudTrail)
+- ✅ Compliance monitoring (AWS Config)
+- ✅ Threat detection (GuardDuty)
+- ✅ Cost tracking and optimization
+
+**Compliance Frameworks**: SOC 2 Type II, HIPAA, PCI DSS
+
+### Infrastructure Documentation
+
+- **[AWS Deployment Guide](docs/AWS_DEPLOYMENT.md)**: Complete deployment walkthrough
+- **[RDS Security](docs/RDS_SECURITY.md)**: Database security best practices
+- **[Monitoring Runbook](docs/runbooks/rds-security-monitoring.md)**: Operational procedures
+
+Each infrastructure module includes:
+- `README.md` - Usage examples and troubleshooting
+- `variables.tf` - Configurable parameters
+- `outputs.tf` - Values for other modules
+- `main.tf` - Resource definitions
+
 ## Documentation
 
 - **Prompt System**: See `/admin/prompt-blocks` for the composable prompt builder
 - **API**: All routes documented in `/src/app/api/` with JSDoc comments
 - **Database Schema**: See `prisma/schema.prisma` for data models
+- **AWS Infrastructure**: See `/infrastructure` and `docs/AWS_DEPLOYMENT.md`
 
 ## License
 
