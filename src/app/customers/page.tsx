@@ -10,6 +10,7 @@ import {
 import { CustomerProfile } from "@/types/customerProfile";
 import { InlineError } from "@/components/ui/status-display";
 import CustomerDocuments from "./components/CustomerDocuments";
+import { SyncStatusBadge } from "@/components/ui/sync-status-badge";
 
 const styles = {
   container: {
@@ -365,6 +366,11 @@ export default function CustomerProfileLibraryPage() {
                     >
                       {profile.isActive ? "Active" : "Inactive"}
                     </span>
+                    <SyncStatusBadge
+                      status={profile.syncStatus ?? null}
+                      lastSyncedAt={profile.lastSyncedAt}
+                      showLabel={false}
+                    />
                   </div>
                   <div style={{ marginTop: "6px", display: "flex", gap: "8px", alignItems: "center" }}>
                     {profile.industry && (

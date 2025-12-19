@@ -65,6 +65,10 @@ export type CustomerProfile = {
   createdBy?: string;
   owners?: CustomerProfileOwner[];
   history?: CustomerProfileHistoryEntry[];
+  // Git sync tracking (Phase 2 of git-first architecture)
+  syncStatus?: "synced" | "pending" | "failed" | null;
+  lastSyncedAt?: string;
+  gitCommitSha?: string;
 };
 
 // For creating a new profile (omit auto-generated fields)
