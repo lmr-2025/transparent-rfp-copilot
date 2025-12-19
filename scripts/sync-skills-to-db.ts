@@ -20,6 +20,11 @@
 
 import { prisma } from "../src/lib/prisma";
 import { listSkillFiles, readSkillFile } from "../src/lib/skillFiles";
+import { withSyncLogging } from "../src/lib/skillSyncLog";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 async function syncSkills() {
   console.log("🔄 Starting skill sync from git to database...\n");
@@ -56,38 +61,68 @@ async function syncSkills() {
           continue;
         }
 
-        // Update existing skill
-        await prisma.skill.update({
-          where: { id: skillFile.id },
-          data: {
-            title: skillFile.title,
-            content: skillFile.content,
-            categories: skillFile.categories,
-            isActive: skillFile.active,
-            sourceUrls: skillFile.sources,
-            owners: skillFile.owners,
-            updatedAt: new Date(skillFile.updated),
+        // Get current git commit SHA
+        const { stdout } = await execAsync("git rev-parse HEAD");
+        const commitSha = stdout.trim();
+
+        // Update existing skill with sync logging
+        await withSyncLogging(
+          {
+            skillId: skillFile.id,
+            operation: "update",
+            direction: "git-to-db",
+            syncedBy: "sync-script",
           },
-        });
+          async () => {
+            await prisma.skill.update({
+              where: { id: skillFile.id },
+              data: {
+                title: skillFile.title,
+                content: skillFile.content,
+                categories: skillFile.categories,
+                isActive: skillFile.active,
+                sourceUrls: skillFile.sources,
+                owners: skillFile.owners,
+                updatedAt: new Date(skillFile.updated),
+              },
+            });
+            return commitSha;
+          }
+        );
 
         console.log(`    ✅ Updated in database\n`);
         updatedCount++;
       } else {
-        // Create new skill
-        await prisma.skill.create({
-          data: {
-            id: skillFile.id,
-            title: skillFile.title,
-            content: skillFile.content,
-            categories: skillFile.categories,
-            isActive: skillFile.active,
-            sourceUrls: skillFile.sources,
-            owners: skillFile.owners,
-            edgeCases: [], // Empty array for deprecated field
-            createdAt: new Date(skillFile.created),
-            updatedAt: new Date(skillFile.updated),
+        // Get current git commit SHA
+        const { stdout } = await execAsync("git rev-parse HEAD");
+        const commitSha = stdout.trim();
+
+        // Create new skill with sync logging
+        await withSyncLogging(
+          {
+            skillId: skillFile.id,
+            operation: "create",
+            direction: "git-to-db",
+            syncedBy: "sync-script",
           },
-        });
+          async () => {
+            await prisma.skill.create({
+              data: {
+                id: skillFile.id,
+                title: skillFile.title,
+                content: skillFile.content,
+                categories: skillFile.categories,
+                isActive: skillFile.active,
+                sourceUrls: skillFile.sources,
+                owners: skillFile.owners,
+                edgeCases: [], // Empty array for deprecated field
+                createdAt: new Date(skillFile.created),
+                updatedAt: new Date(skillFile.updated),
+              },
+            });
+            return commitSha;
+          }
+        );
 
         console.log(`    ✅ Created in database\n`);
         createdCount++;
