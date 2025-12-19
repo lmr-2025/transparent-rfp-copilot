@@ -1064,12 +1064,19 @@ knowledge/
 
 ## Implementation Progress
 
-| Phase | Status | Completed | Notes |
-|-------|--------|-----------|-------|
-| Phase 1 | ✅ DONE | 2025-12-19 | Skills in git - fully implemented with sync tracking UI |
-| Phase 2 | ✅ DONE | 2025-12-19 | Customer profiles - fully implemented |
-| Phase 3 | ✅ DONE | 2025-12-19 | System prompts - fully implemented |
-| Phase 4 | ✅ DONE | 2025-12-19 | Templates - fully implemented |
+| Phase | Status | Completed | Time Spent | Notes |
+|-------|--------|-----------|------------|-------|
+| Phase 1 | ✅ DONE | 2025-12-19 | ~3 hours | Skills in git - fully implemented with sync tracking UI |
+| Phase 2 | ✅ DONE | 2025-12-19 | ~1.5 hours | Customer profiles - reused patterns from Phase 1 |
+| Phase 3 | ✅ DONE | 2025-12-19 | ~1 hour | System prompts - blocks + modifiers with variant support |
+| Phase 4 | ✅ DONE | 2025-12-19 | ~45 min | Templates - reused patterns, fastest phase |
+
+**Total Implementation Time**: ~6-7 hours across all 4 phases
+
+**Key Efficiency Gains**:
+- Phase 1 established patterns that were reused in Phases 2-4
+- Each subsequent phase was faster due to pattern reuse
+- Copy-paste of library structure with entity-specific modifications
 
 ### Phase 4 Implementation Details (Templates)
 
@@ -1200,12 +1207,68 @@ The same Lambda-based sync architecture applies to **all git-backed knowledge ty
    }
    ```
 
-### Changes for Phase 3+ (Prompts, Templates)
+### Changes for Phase 3 (Prompts)
 
-Same pattern - extend EventBridge rules and Lambda handlers:
+**Extend existing Lambda functions to handle prompts:**
 
-- `prompts/` directory → sync SystemPrompt/PromptBlock tables
-- `templates/` directory → sync Template table
+1. **EventBridge Rule**: Add patterns for `PromptBlock` and `PromptModifier` table changes
+   ```json
+   {
+     "source": ["aws.rds"],
+     "detail-type": ["RDS DB Instance Event"],
+     "detail": {
+       "table": ["Skill", "CustomerProfile", "PromptBlock", "PromptModifier"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add prompt handling
+   ```typescript
+   if (event.detail.table === 'PromptBlock') {
+     const block = await fetchBlockFromRDS(event.detail.blockId);
+     await writeBlockFile(`/tmp/repo/prompts/blocks/${block.blockId}.md`, block);
+   }
+   if (event.detail.table === 'PromptModifier') {
+     const modifier = await fetchModifierFromRDS(event.detail.modifierId);
+     await writeModifierFile(`/tmp/repo/prompts/modifiers/${modifier.modifierId}.md`, modifier);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add prompt sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('prompts/'))) {
+     await exec('npm run sync:prompts', { cwd: '/tmp/repo' });
+   }
+   ```
+
+### Changes for Phase 4 (Templates)
+
+**Extend existing Lambda functions to handle templates:**
+
+1. **EventBridge Rule**: Add pattern for `Template` table changes
+   ```json
+   {
+     "detail": {
+       "table": ["Skill", "CustomerProfile", "PromptBlock", "PromptModifier", "Template"]
+     }
+   }
+   ```
+
+2. **Lambda: knowledge-to-git**: Add template handling
+   ```typescript
+   if (event.detail.table === 'Template') {
+     const template = await fetchTemplateFromRDS(event.detail.id);
+     const slug = getTemplateSlug(template.name);
+     await writeTemplateFile(`/tmp/repo/templates/${slug}.md`, template);
+   }
+   ```
+
+3. **Lambda: git-to-knowledge**: Add template sync
+   ```typescript
+   if (changedFiles.some(f => f.startsWith('templates/'))) {
+     await exec('npm run sync:templates', { cwd: '/tmp/repo' });
+   }
+   ```
 
 ### Cost Estimate (All Phases)
 
@@ -1231,9 +1294,59 @@ The git-first expansion (Phases 2-4) **reuses the same Lambda infrastructure** a
 - Lambda code (add handlers for new entity types)
 - Git directory structure (add `customers/`, `prompts/`, `templates/`)
 
+### AWS Deployment Checklist
+
+For production deployment, extend the existing Lambda infrastructure:
+
+- [ ] Update EventBridge rule to include all 5 tables: `Skill`, `CustomerProfile`, `PromptBlock`, `PromptModifier`, `Template`
+- [ ] Update `knowledge-to-git` Lambda with handlers for each entity type
+- [ ] Update `git-to-knowledge` Lambda to detect directory changes and run appropriate sync scripts
+- [ ] Test bidirectional sync for each entity type
+- [ ] Set up GitHub Actions for automated sync on merge to main
+
+---
+
+## Summary of npm Scripts
+
+All git-first sync operations are available via npm scripts:
+
+| Entity | Export (DB → Git) | Sync (Git → DB) |
+|--------|-------------------|-----------------|
+| Skills | `npm run export:skills` | `npm run sync:skills` |
+| Customers | `npm run export:customers` | `npm run sync:customers` |
+| Prompts | `npm run export:prompts` | `npm run sync:prompts` |
+| Templates | `npm run export:templates` | `npm run sync:templates` |
+
+---
+
+## Directory Structure (Final)
+
+```
+project-root/
+├── skills/                    # Phase 1
+│   ├── README.md
+│   ├── .gitignore
+│   └── {slug}.md              # Individual skill files
+├── customers/                 # Phase 2
+│   ├── README.md
+│   ├── .gitignore
+│   └── {slug}.md              # Individual customer profiles
+├── prompts/                   # Phase 3
+│   ├── README.md
+│   ├── .gitignore
+│   ├── blocks/
+│   │   └── {blockId}.md       # Prompt blocks with variants
+│   └── modifiers/
+│       └── {modifierId}.md    # Prompt modifiers
+└── templates/                 # Phase 4
+    ├── README.md
+    ├── .gitignore
+    └── {slug}.md              # Document templates
+```
+
 ---
 
 Generated: 2025-12-19
 Updated: 2025-12-19
 Author: Claude Code
-Status: All 4 Phases Complete
+Status: All 4 Phases Complete - Implementation Done, AWS Deployment Pending
