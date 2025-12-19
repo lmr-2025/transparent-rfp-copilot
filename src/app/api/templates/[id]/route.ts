@@ -6,6 +6,10 @@ import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 import { validateBody } from "@/lib/validations";
+import { getTemplateSlug } from "@/lib/templateFiles";
+import { updateTemplateAndCommit, deleteTemplateAndCommit } from "@/lib/templateGitSync";
+import { withTemplateSyncLogging } from "@/lib/templateSyncLog";
+import type { TemplateFile, PlaceholderMapping } from "@/lib/templateFiles";
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -81,13 +85,64 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const data = validation.data;
 
+    const userEmail = session.user.email || "unknown";
+    const userName = session.user.name || userEmail;
+
     const template = await prisma.template.update({
       where: { id },
       data: {
         ...data,
-        updatedBy: session.user.id,
+        updatedBy: userEmail,
       },
     });
+
+    // Commit to git
+    try {
+      const oldSlug = getTemplateSlug(existing.name);
+
+      const templateFile: TemplateFile = {
+        id: template.id,
+        slug: getTemplateSlug(template.name),
+        name: template.name,
+        description: template.description || undefined,
+        content: template.content,
+        category: template.category || undefined,
+        outputFormat: (template.outputFormat as "markdown" | "docx" | "pdf") || "markdown",
+        placeholderMappings: (template.placeholderMappings as unknown as PlaceholderMapping[]) || [],
+        instructionPresetId: template.instructionPresetId || undefined,
+        isActive: template.isActive,
+        sortOrder: template.sortOrder,
+        created: template.createdAt.toISOString(),
+        updated: template.updatedAt.toISOString(),
+        createdBy: template.createdBy || undefined,
+        updatedBy: userEmail,
+      };
+
+      await withTemplateSyncLogging(
+        {
+          templateId: template.id,
+          operation: "update",
+          direction: "db-to-git",
+          syncedBy: session.user.id,
+        },
+        async () => {
+          const commitSha = await updateTemplateAndCommit(
+            oldSlug,
+            templateFile,
+            `Update template: ${template.name}`,
+            { name: userName, email: userEmail }
+          );
+          logger.info("Template update committed to git", { templateId: template.id, commitSha });
+          return commitSha;
+        }
+      );
+    } catch (gitError) {
+      // Log git error but don't fail the request
+      logger.error("Failed to commit template update to git", gitError, {
+        templateId: template.id,
+        name: template.name,
+      });
+    }
 
     return apiSuccess(template);
   } catch (error) {
@@ -118,6 +173,37 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     await prisma.template.delete({
       where: { id },
     });
+
+    // Delete from git
+    try {
+      const slug = getTemplateSlug(existing.name);
+      const userEmail = session.user.email || "unknown";
+      const userName = session.user.name || userEmail;
+
+      await withTemplateSyncLogging(
+        {
+          templateId: existing.id,
+          operation: "delete",
+          direction: "db-to-git",
+          syncedBy: session.user.id,
+        },
+        async () => {
+          const commitSha = await deleteTemplateAndCommit(
+            slug,
+            `Delete template: ${existing.name}`,
+            { name: userName, email: userEmail }
+          );
+          logger.info("Template deletion committed to git", { templateId: existing.id, slug, commitSha });
+          return commitSha;
+        }
+      );
+    } catch (gitError) {
+      // Log git error but don't fail the request
+      logger.error("Failed to commit template deletion to git", gitError, {
+        templateId: existing.id,
+        name: existing.name,
+      });
+    }
 
     return apiSuccess({ deleted: true });
   } catch (error) {

@@ -930,10 +930,40 @@ model Template {
   createdBy           String?        // User email who created it
   updatedBy           String?        // User email who last updated
 
+  // Git sync tracking (Phase 4 of git-first architecture)
+  lastSyncedAt    DateTime?  // Last successful sync to/from git
+  syncStatus      String?    // "synced", "pending", "failed", null = unknown
+  gitCommitSha    String?    // Latest git commit SHA for this template
+  syncLogs        TemplateSyncLog[]
+
   @@index([category])
   @@index([isActive])
   @@index([sortOrder])
   @@index([instructionPresetId])
+  @@index([syncStatus])
+  @@index([lastSyncedAt])
+}
+
+// Template Sync Log - Track git sync operations (Phase 4 of git-first architecture)
+// Pattern copied from SkillSyncLog for consistency
+model TemplateSyncLog {
+  id            String   @id @default(cuid())
+  templateId    String
+  operation     String   // "create", "update", "delete"
+  direction     String   // "db-to-git", "git-to-db"
+  status        String   // "pending", "success", "failed"
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  @db.Text
+  gitCommitSha  String?  // Git commit SHA for this sync
+  syncedBy      String?  // User ID or "system" for automated syncs
+
+  template      Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([direction])
 }
 
 // Collateral Output - tracks generated collateral from templates
