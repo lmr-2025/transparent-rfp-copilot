@@ -1062,6 +1062,38 @@ knowledge/
 
 ---
 
+## Implementation Progress
+
+| Phase | Status | Completed | Notes |
+|-------|--------|-----------|-------|
+| Phase 1 | ✅ DONE | 2025-12-19 | Skills in git - fully implemented with sync tracking UI |
+| Phase 2 | 🔄 IN PROGRESS | - | Customer profiles - core infrastructure complete |
+| Phase 3 | ⏳ Pending | - | System prompts - not started |
+| Phase 4 | ⏳ Pending | - | Templates - not started |
+
+### Phase 2 Implementation Details (Customer Profiles)
+
+**Completed:**
+- ✅ Directory structure (`customers/`, `.gitignore`, `README.md`)
+- ✅ `src/lib/customerFiles.ts` - File read/write operations
+- ✅ `src/lib/customerGitSync.ts` - Git commit/sync operations
+- ✅ `src/lib/customerSyncLog.ts` - Sync logging utilities
+- ✅ Prisma schema updates (`syncStatus`, `lastSyncedAt`, `gitCommitSha` fields)
+- ✅ `CustomerSyncLog` model added to schema
+- ✅ `scripts/export-customers-to-git.ts` - Export existing customers
+- ✅ `scripts/sync-customers-to-db.ts` - Sync from git to database
+- ✅ npm scripts (`npm run export:customers`, `npm run sync:customers`)
+
+**Remaining:**
+- [ ] Update Customer API routes to commit to git on save
+- [ ] Add sync status UI to customer profile cards (reuse `SyncStatusBadge`)
+- [ ] Add API endpoints for customer sync status/logs
+- [ ] Test full bidirectional sync workflow
+- [ ] GitHub Actions for automated sync
+
+---
+
 Generated: 2025-12-19
+Updated: 2025-12-19
 Author: Claude Code
-Status: Architecture Expansion Plan - Ready for Review
+Status: Phase 2 In Progress

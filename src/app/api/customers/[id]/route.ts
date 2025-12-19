@@ -6,6 +6,10 @@ import { updateCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { getCustomerSlug } from "@/lib/customerFiles";
+import { updateCustomerAndCommit, deleteCustomerAndCommit } from "@/lib/customerGitSync";
+import { withCustomerSyncLogging } from "@/lib/customerSyncLog";
+import type { CustomerFile } from "@/lib/customerFiles";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -122,6 +126,90 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       },
     });
 
+    // Commit to git (Phase 2 of git-first architecture)
+    try {
+      const oldSlug = getCustomerSlug(existing.name);
+      const newSlug = getCustomerSlug(profile.name);
+
+      // Build content from legacy fields if no unified content
+      let content = profile.content || "";
+      if (!content && profile.overview) {
+        const sections: string[] = [];
+        if (profile.overview) sections.push(`## Overview\n${profile.overview}`);
+        if (profile.products) sections.push(`## Products & Services\n${profile.products}`);
+        if (profile.challenges) sections.push(`## Challenges & Pain Points\n${profile.challenges}`);
+        const facts = profile.keyFacts as Array<{ label: string; value: string }> | null;
+        if (facts && facts.length > 0) {
+          const factsSection = facts.map((f) => `- **${f.label}**: ${f.value}`).join("\n");
+          sections.push(`## Key Facts\n${factsSection}`);
+        }
+        content = `# ${profile.name}\n\n${sections.join("\n\n")}`;
+      }
+
+      // Parse owners for git commit
+      const customerOwners = (profile.owners as Array<{ name: string; email?: string; userId?: string }>) || [];
+
+      // Parse source URLs
+      const sources = (profile.sourceUrls as Array<{ url: string; addedAt: string; lastFetched?: string }>) || [];
+
+      // Parse source documents
+      const sourceDocuments = (profile.sourceDocuments as Array<{ id: string; filename: string; uploadedAt: string }>) || undefined;
+
+      const customerFile: CustomerFile = {
+        id: profile.id,
+        slug: newSlug,
+        name: profile.name,
+        content,
+        industry: profile.industry || undefined,
+        website: profile.website || undefined,
+        salesforceId: profile.salesforceId || undefined,
+        region: profile.region || undefined,
+        tier: profile.tier || undefined,
+        employeeCount: profile.employeeCount || undefined,
+        annualRevenue: profile.annualRevenue || undefined,
+        accountType: profile.accountType || undefined,
+        billingLocation: profile.billingLocation || undefined,
+        lastSalesforceSync: profile.lastSalesforceSync?.toISOString(),
+        owners: customerOwners,
+        sources,
+        documents: sourceDocuments,
+        considerations: profile.considerations || [],
+        created: profile.createdAt.toISOString(),
+        updated: profile.updatedAt.toISOString(),
+        active: profile.isActive,
+      };
+
+      // Commit to git with sync logging
+      await withCustomerSyncLogging(
+        {
+          customerId: profile.id,
+          operation: lastRefreshedAt ? "refresh" : "update",
+          direction: "db-to-git",
+          syncedBy: auth.session.user.id,
+        },
+        async () => {
+          const commitSha = await updateCustomerAndCommit(
+            oldSlug,
+            customerFile,
+            `Update customer profile: ${profile.name}`,
+            {
+              name: auth.session.user.name || auth.session.user.email || "Unknown",
+              email: auth.session.user.email || "unknown@example.com",
+            }
+          );
+
+          logger.info("Customer profile update committed to git", { customerId: profile.id, oldSlug, newSlug, commitSha });
+          return commitSha;
+        }
+      );
+    } catch (gitError) {
+      // Log git error but don't fail the request
+      logger.error("Failed to commit customer profile update to git", gitError, {
+        customerId: profile.id,
+        name: profile.name,
+      });
+    }
+
     // Compute changes for audit log
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
@@ -180,6 +268,40 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
       return profile;
     });
+
+    // Delete from git (Phase 2 of git-first architecture)
+    try {
+      const slug = getCustomerSlug(result.name);
+
+      // Delete from git with sync logging
+      await withCustomerSyncLogging(
+        {
+          customerId: result.id,
+          operation: "delete",
+          direction: "db-to-git",
+          syncedBy: auth.session.user.id,
+        },
+        async () => {
+          const commitSha = await deleteCustomerAndCommit(
+            slug,
+            `Delete customer profile: ${result.name}`,
+            {
+              name: auth.session.user.name || auth.session.user.email || "Unknown",
+              email: auth.session.user.email || "unknown@example.com",
+            }
+          );
+
+          logger.info("Customer profile deletion committed to git", { customerId: result.id, slug, commitSha });
+          return commitSha;
+        }
+      );
+    } catch (gitError) {
+      // Log git error but don't fail the request
+      logger.error("Failed to commit customer profile deletion to git", gitError, {
+        customerId: result.id,
+        name: result.name,
+      });
+    }
 
     // Audit log (outside transaction - non-critical)
     await logCustomerChange(
