@@ -1835,18 +1835,129 @@ jobs:
 
 ### Phase 11: Compliance & Governance (SEC-1061)
 
-- [ ] Enable CloudTrail in all regions
-- [ ] Configure CloudTrail to S3 with encryption
-- [ ] Enable AWS Config
-- [ ] Set up Config rules:
-  - S3 bucket encryption
-  - RDS encryption
-  - Security group compliance
-  - IAM password policy
-- [ ] Enable GuardDuty for threat detection
-- [ ] Set up AWS Security Hub (optional)
-- [ ] Configure log retention policies
-- [ ] Document compliance requirements
+**Implementation**: Use `infrastructure/compliance` module for audit logging and compliance monitoring.
+
+#### Features
+- **CloudTrail**: Complete audit trail of all AWS API calls
+- **AWS Config**: Continuous compliance monitoring with automated rules
+- **GuardDuty**: Intelligent threat detection using machine learning
+- **Security Hub**: Centralized security and compliance dashboard (optional)
+- **Cost**: ~$22-27/month (basic) or $60-85/month (all features)
+
+#### Components
+
+**CloudTrail**:
+- Multi-region trail capturing all API calls
+- S3 storage with encryption and lifecycle policies
+- CloudWatch Logs integration for real-time monitoring
+- Optional: S3/Lambda data events, CloudTrail Insights
+
+**AWS Config**:
+- Resource inventory and configuration history
+- 6 built-in compliance rules (S3 encryption, RDS encryption, security groups, IAM password policy, root MFA, CloudTrail enabled)
+- Automated compliance checks
+
+**GuardDuty**:
+- Analyzes CloudTrail, VPC Flow Logs, DNS logs
+- Detects compromised instances, unauthorized access, malware, data exfiltration
+- Real-time SNS notifications for findings
+
+**Security Hub** (Optional):
+- Aggregates findings from CloudTrail, Config, GuardDuty
+- Compliance scoring against AWS Foundational, CIS, PCI DSS standards
+- Executive security dashboard
+
+#### Usage - Basic Setup
+
+```hcl
+module "compliance" {
+  source = "./infrastructure/compliance"
+
+  # CloudTrail - Audit logging
+  enable_cloudtrail          = true
+  cloudtrail_multi_region    = true
+  cloudtrail_cloudwatch_logs = true
+  cloudtrail_expiration_days = 365
+
+  # AWS Config - Compliance monitoring
+  enable_config       = true
+  enable_config_rules = true
+
+  # GuardDuty - Threat detection
+  enable_guardduty               = true
+  guardduty_notification_enabled = true
+  guardduty_notification_emails  = ["security@example.com"]
+
+  # Security Hub - Optional
+  enable_security_hub = false
+
+  environment = "production"
+}
+```
+
+#### Usage - Advanced Setup
+
+```hcl
+module "compliance" {
+  source = "./infrastructure/compliance"
+
+  # CloudTrail with advanced features
+  enable_cloudtrail             = true
+  cloudtrail_multi_region       = true
+  cloudtrail_s3_data_events     = true  # Log S3 read/write
+  cloudtrail_lambda_data_events = true  # Log Lambda invocations
+  cloudtrail_enable_insights    = true  # Anomaly detection
+
+  # AWS Config
+  enable_config       = true
+  enable_config_rules = true
+
+  # GuardDuty with all protections
+  enable_guardduty             = true
+  guardduty_s3_logs            = true
+  guardduty_malware_protection = true
+  guardduty_finding_frequency  = "FIFTEEN_MINUTES"
+  guardduty_notification_emails = ["security@example.com"]
+
+  # Security Hub with all standards
+  enable_security_hub                  = true
+  security_hub_enable_aws_foundational = true
+  security_hub_enable_cis              = true
+  security_hub_enable_pci_dss          = true
+
+  environment = "production"
+}
+```
+
+#### Setup Steps
+
+1. **Apply Terraform**:
+   ```bash
+   terraform apply
+   ```
+
+2. **Confirm SNS subscriptions**: Check email and click confirmation links
+
+3. **View CloudTrail logs**:
+   ```bash
+   aws cloudtrail lookup-events --max-results 10
+   ```
+
+4. **Check Config compliance**:
+   ```bash
+   aws configservice describe-compliance-by-config-rule
+   ```
+
+5. **Review GuardDuty findings**:
+   ```bash
+   aws guardduty list-findings --detector-id $(terraform output -raw guardduty_detector_id)
+   ```
+
+#### Compliance Frameworks Supported
+
+- **SOC 2 Type II**: Audit logging, access monitoring, system monitoring
+- **HIPAA**: Information system activity review, log-in monitoring, audit controls
+- **PCI DSS**: Track and monitor access, automated audit trails, intrusion detection
 
 ### Phase 12: Cost Management (SEC-1062)
 
