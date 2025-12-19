@@ -36,15 +36,22 @@ This document tracks infrastructure changes that will be needed when deploying g
 - Updated git functions to return commit SHAs
 - Wrapped all git operations in API endpoints with sync logging
 
-**Total time so far**: ~3 hours
+**Sync Status API Endpoints** (Completed: Dec 19, 2025)
+- ⏱️ Time spent: ~20 minutes
+- GET /api/skills/sync/status - Overall sync health
+- GET /api/skills/[id]/sync-logs - Sync history for a skill
+- POST /api/skills/sync/trigger - Manual sync trigger (admin only)
 
-**Next Phase - UI Sync Status** (Not Started)
+**Total time so far**: ~3.3 hours
+
+**Next Phase - UI Components** (Not Started)
 - ⏱️ Estimated: 1-2 hours
-- Add sync status indicator to UI
-- Show last sync time and status
-- Add manual sync trigger button
+- Create SkillSyncBadge component (status indicator)
+- Create SyncStatusBar component (global header)
+- Add sync status to skill list page
+- Add sync history viewer
+- Add manual sync button for admins
 - Display sync errors/warnings
-- Create API endpoints for sync status
 
 ---
 
