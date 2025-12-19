@@ -1,4 +1,4 @@
-# Transparent RFP Copilot
+# Transparent Trust
 
 AI-powered RFP response platform with full transparency. Answer security questionnaires, vendor assessments, and compliance requests at scale with complete visibility into how answers are generated.
 
