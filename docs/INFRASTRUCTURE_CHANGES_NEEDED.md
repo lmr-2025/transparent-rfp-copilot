@@ -6,6 +6,39 @@ This document tracks infrastructure changes that will be needed when deploying g
 
 ---
 
+## Development Timeline
+
+**Week 1 - Foundation** (Completed: Dec 19, 2025)
+- ⏱️ Time spent: ~1 hour
+- Added Prisma schema changes
+- Created skill file operations library
+- Created git sync operations library
+- Built export and sync scripts
+- Set up skills/ directory structure
+
+**Week 2 - API Integration** (Completed: Dec 19, 2025)
+- ⏱️ Time spent: ~30 minutes
+- Integrated git commits into POST/PUT/DELETE endpoints
+- Added conditional git commits (only for PUBLISHED skills)
+- Tested with 3 real skills successfully
+
+**Documentation & AWS Planning** (Completed: Dec 19, 2025)
+- ⏱️ Time spent: ~45 minutes
+- Comprehensive AWS deployment architecture
+- Infrastructure changes tracking document
+- Debug scripts for local development
+
+**Total time so far**: ~2.25 hours
+
+**Next Phase - UI Sync Status** (In Progress)
+- ⏱️ Estimated: 1-2 hours
+- Add sync status indicator to UI
+- Show last sync time and status
+- Add manual sync trigger button
+- Display sync errors/warnings
+
+---
+
 ## Overview
 
 Git-backed skills work perfectly in local development where the app can commit directly to git. However, in AWS production (ECS/Fargate), containers are ephemeral and can't maintain a `.git/` directory or push to GitHub.
@@ -147,6 +180,45 @@ Git-backed skills work perfectly in local development where the app can commit d
 
 ---
 
+### 9. Sync Status Tracking Table (New)
+
+**Purpose**: Track sync operations for UI visibility and debugging
+
+**Prisma Schema Addition**:
+```prisma
+model SkillSyncLog {
+  id            String   @id @default(cuid())
+  skillId       String
+  operation     String   // "create", "update", "delete"
+  direction     String   // "db-to-git", "git-to-db"
+  status        String   // "pending", "success", "failed"
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  @db.Text
+  gitCommitSha  String?
+  syncedBy      String?  // user ID or "system"
+
+  skill         Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// Add to Skill model:
+model Skill {
+  // ... existing fields
+  syncLogs      SkillSyncLog[]
+  lastSyncedAt  DateTime?
+  syncStatus    String?  // "synced", "pending", "failed"
+  gitCommitSha  String?  // Latest git commit SHA for this skill
+}
+```
+
+**Migration**: Will need `prisma migrate dev` to add these fields
+
+---
+
 ## Application Code Changes
 
 ### Required Changes
@@ -172,10 +244,25 @@ Git-backed skills work perfectly in local development where the app can commit d
    - Admin UI button: "Sync Skills from Git"
    - Calls Lambda directly or triggers EventBridge event
 
-5. **Sync Status Dashboard**:
-   - Show last sync time
-   - Show pending sync queue
-   - Show recent sync errors
+5. **Sync Status Dashboard** (HIGH PRIORITY):
+   - **Goal**: Make sync status transparent and visible to all users
+   - Show sync status badge on skill list and detail pages
+   - Display last sync time for each skill
+   - Show sync errors/warnings prominently
+   - Add global sync health indicator in header/footer
+   - Provide "Force Sync" button for admins when things go wrong
+
+   **UI Components Needed**:
+   - `SkillSyncBadge` - Status indicator (✓ Synced, ⏳ Pending, ❌ Failed)
+   - `SyncStatusBar` - Global header showing overall sync health
+   - `SyncLogViewer` - Detailed sync history for debugging
+   - `ManualSyncButton` - Admin tool to force sync
+
+   **API Endpoints Needed**:
+   - `GET /api/skills/sync/status` - Overall sync health
+   - `GET /api/skills/[id]/sync-logs` - Sync history for a skill
+   - `POST /api/skills/sync/trigger` - Manual sync trigger
+   - `GET /api/skills/sync/drift` - Detect DB/git differences
 
 ---
 

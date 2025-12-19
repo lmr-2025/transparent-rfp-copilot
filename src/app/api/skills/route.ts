@@ -9,6 +9,7 @@ import { cacheGetOrSet, CacheKeys, CacheTTL, invalidateSkillCache } from "@/lib/
 import { getSkillSlug } from "@/lib/skillFiles";
 import { saveSkillAndCommit } from "@/lib/skillGitSync";
 import { getInitialSkillStatus } from "@/lib/reviewConfig";
+import { withSyncLogging } from "@/lib/skillSyncLog";
 import type { SkillFile } from "@/lib/skillFiles";
 
 /**
@@ -205,17 +206,29 @@ export async function POST(request: NextRequest) {
           active: skill.isActive,
         };
 
-        await saveSkillAndCommit(
-          slug,
-          skillFile,
-          `Create skill: ${skill.title}`,
+        // Commit to git with sync logging
+        await withSyncLogging(
           {
-            name: auth.session.user.name || auth.session.user.email || "Unknown",
-            email: auth.session.user.email || "unknown@example.com",
+            skillId: skill.id,
+            operation: "create",
+            direction: "db-to-git",
+            syncedBy: auth.session.user.id,
+          },
+          async () => {
+            const commitSha = await saveSkillAndCommit(
+              slug,
+              skillFile,
+              `Create skill: ${skill.title}`,
+              {
+                name: auth.session.user.name || auth.session.user.email || "Unknown",
+                email: auth.session.user.email || "unknown@example.com",
+              }
+            );
+
+            logger.info("Skill committed to git", { skillId: skill.id, slug, commitSha });
+            return commitSha;
           }
         );
-
-        logger.info("Skill committed to git", { skillId: skill.id, slug });
       } catch (gitError) {
         // Log git error but don't fail the request - database is source of truth during transition
         logger.error("Failed to commit skill to git", gitError, {

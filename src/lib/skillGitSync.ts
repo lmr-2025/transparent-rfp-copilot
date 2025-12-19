@@ -19,13 +19,14 @@ export interface GitAuthor {
  * @param skill - The skill data
  * @param commitMessage - Git commit message
  * @param author - Git author info
+ * @returns Git commit SHA if a commit was created, null if no changes
  */
 export async function saveSkillAndCommit(
   slug: string,
   skill: SkillFile,
   commitMessage: string,
   author: GitAuthor
-): Promise<void> {
+): Promise<string | null> {
   // 1. Write skill file
   await writeSkillFile(slug, skill);
 
@@ -37,7 +38,7 @@ export async function saveSkillAndCommit(
   try {
     await execAsync("git diff --staged --quiet");
     // No changes, skip commit
-    return;
+    return null;
   } catch (error) {
     // Has changes, proceed with commit
   }
@@ -49,6 +50,10 @@ export async function saveSkillAndCommit(
   await execAsync(
     `git commit -m "${escapedMessage}" --author="${authorString}"`
   );
+
+  // 5. Get the commit SHA
+  const { stdout } = await execAsync("git rev-parse HEAD");
+  return stdout.trim();
 }
 
 /**
@@ -58,13 +63,14 @@ export async function saveSkillAndCommit(
  * @param skill - Updated skill data
  * @param commitMessage - Git commit message
  * @param author - Git author info
+ * @returns Git commit SHA if a commit was created, null if no changes
  */
 export async function updateSkillAndCommit(
   oldSlug: string,
   skill: SkillFile,
   commitMessage: string,
   author: GitAuthor
-): Promise<void> {
+): Promise<string | null> {
   const newSlug = getSkillSlug(skill.title);
 
   // If slug changed (title changed), rename the file
@@ -80,7 +86,7 @@ export async function updateSkillAndCommit(
   // Check if there are changes to commit
   try {
     await execAsync("git diff --staged --quiet");
-    return; // No changes
+    return null; // No changes
   } catch (error) {
     // Has changes, proceed
   }
@@ -92,6 +98,10 @@ export async function updateSkillAndCommit(
   await execAsync(
     `git commit -m "${escapedMessage}" --author="${authorString}"`
   );
+
+  // Get the commit SHA
+  const { stdout } = await execAsync("git rev-parse HEAD");
+  return stdout.trim();
 }
 
 /**
@@ -99,12 +109,13 @@ export async function updateSkillAndCommit(
  * @param slug - The skill slug to delete
  * @param commitMessage - Git commit message
  * @param author - Git author info
+ * @returns Git commit SHA if a commit was created, null if no changes
  */
 export async function deleteSkillAndCommit(
   slug: string,
   commitMessage: string,
   author: GitAuthor
-): Promise<void> {
+): Promise<string | null> {
   const filepath = `skills/${slug}.md`;
 
   // Delete file
@@ -116,7 +127,7 @@ export async function deleteSkillAndCommit(
   // Check if there are changes to commit
   try {
     await execAsync("git diff --staged --quiet");
-    return; // No changes
+    return null; // No changes
   } catch (error) {
     // Has changes, proceed
   }
@@ -128,6 +139,10 @@ export async function deleteSkillAndCommit(
   await execAsync(
     `git commit -m "${escapedMessage}" --author="${authorString}"`
   );
+
+  // Get the commit SHA
+  const { stdout } = await execAsync("git rev-parse HEAD");
+  return stdout.trim();
 }
 
 /**

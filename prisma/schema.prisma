@@ -401,10 +401,18 @@ model Skill {
   reviewRequestedBy   String?    // User ID or email who requested review
   reviewComments      Json?      // Array of {author, comment, timestamp, lineNumber?}
 
+  // Git sync tracking
+  lastSyncedAt        DateTime?  // Last successful sync to/from git
+  syncStatus          String?    // "synced", "pending", "failed", null = unknown
+  gitCommitSha        String?    // Latest git commit SHA for this skill
+  syncLogs            SkillSyncLog[]
+
   @@index([isActive, updatedAt])
   @@index([ownerId])
   @@index([status])
   @@index([reviewRequestedAt])
+  @@index([syncStatus])
+  @@index([lastSyncedAt])
 }
 
 // Skill status for review workflow
@@ -431,6 +439,27 @@ model SkillCategory {
   approvers      String[] @default([]) // Email addresses or user IDs of allowed approvers
 
   @@index([sortOrder])
+}
+
+// Skill Sync Log - Track git sync operations for debugging and UI visibility
+model SkillSyncLog {
+  id            String   @id @default(cuid())
+  skillId       String
+  operation     String   // "create", "update", "delete", "refresh"
+  direction     String   // "db-to-git", "git-to-db"
+  status        String   // "pending", "success", "failed"
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  error         String?  @db.Text
+  gitCommitSha  String?  // Git commit SHA for this sync
+  syncedBy      String?  // User ID or "system" for automated syncs
+
+  skill         Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+  @@index([status])
+  @@index([startedAt])
+  @@index([direction])
 }
 
 // System Prompts (DEPRECATED - use PromptBlock instead)

@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { invalidateSkillCache } from "@/lib/cache";
 import { getSkillSlug } from "@/lib/skillFiles";
 import { updateSkillAndCommit, deleteSkillAndCommit } from "@/lib/skillGitSync";
+import { withSyncLogging } from "@/lib/skillSyncLog";
 import type { SkillFile } from "@/lib/skillFiles";
 
 type RouteContext = {
@@ -149,17 +150,29 @@ export async function PUT(request: NextRequest, context: RouteContext) {
           active: skill.isActive,
         };
 
-        await updateSkillAndCommit(
-          oldSlug,
-          skillFile,
-          `Update skill: ${skill.title}${changesSummary}`,
+        // Commit to git with sync logging
+        await withSyncLogging(
           {
-            name: auth.session.user.name || auth.session.user.email || "Unknown",
-            email: auth.session.user.email || "unknown@example.com",
+            skillId: skill.id,
+            operation: "update",
+            direction: "db-to-git",
+            syncedBy: auth.session.user.id,
+          },
+          async () => {
+            const commitSha = await updateSkillAndCommit(
+              oldSlug,
+              skillFile,
+              `Update skill: ${skill.title}${changesSummary}`,
+              {
+                name: auth.session.user.name || auth.session.user.email || "Unknown",
+                email: auth.session.user.email || "unknown@example.com",
+              }
+            );
+
+            logger.info("Skill update committed to git", { skillId: skill.id, oldSlug, newSlug, commitSha });
+            return commitSha;
           }
         );
-
-        logger.info("Skill update committed to git", { skillId: skill.id, oldSlug, newSlug });
       } catch (gitError) {
         // Log git error but don't fail the request
         logger.error("Failed to commit skill update to git", gitError, {
@@ -233,16 +246,28 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       try {
         const slug = getSkillSlug(skill.title);
 
-        await deleteSkillAndCommit(
-          slug,
-          `Delete skill: ${skill.title}`,
+        // Delete from git with sync logging
+        await withSyncLogging(
           {
-            name: auth.session.user.name || auth.session.user.email || "Unknown",
-            email: auth.session.user.email || "unknown@example.com",
+            skillId: skill.id,
+            operation: "delete",
+            direction: "db-to-git",
+            syncedBy: auth.session.user.id,
+          },
+          async () => {
+            const commitSha = await deleteSkillAndCommit(
+              slug,
+              `Delete skill: ${skill.title}`,
+              {
+                name: auth.session.user.name || auth.session.user.email || "Unknown",
+                email: auth.session.user.email || "unknown@example.com",
+              }
+            );
+
+            logger.info("Skill deletion committed to git", { skillId: skill.id, slug, commitSha });
+            return commitSha;
           }
         );
-
-        logger.info("Skill deletion committed to git", { skillId: skill.id, slug });
       } catch (gitError) {
         // Log git error but don't fail the request
         logger.error("Failed to commit skill deletion to git", gitError, {
