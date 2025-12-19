@@ -58,3 +58,7 @@ A: Yes, you can use regex patterns to filter and customize lineage displays.
 
 **Q: What types of lineage does Monte Carlo track?**
 A: Monte Carlo tracks both table-level lineage (table-to-table relationships) and field-level lineage (column-to-column mappings).
+
+---
+
+_Test edit made directly to markdown file at 2025-12-19T17:15:00Z to test git→database sync._
