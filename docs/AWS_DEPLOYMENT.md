@@ -34,7 +34,7 @@ All subtasks are tracked in Linear under the Security team.
 | **4.1 S3 Buckets** | [SEC-1054](https://linear.app/montecarlodata/issue/SEC-1054) | 🔴 Not Started |
 | **4.2 S3 Policies** | [SEC-1055](https://linear.app/montecarlodata/issue/SEC-1055) | 🔴 Not Started |
 | **5. Secrets Manager** | [SEC-1056](https://linear.app/montecarlodata/issue/SEC-1056) | ✅ Complete |
-| **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | 🔴 Not Started |
+| **6a. ECS/Fargate** | [SEC-1047](https://linear.app/montecarlodata/issue/SEC-1047) | ✅ Complete |
 | **6b. Amplify** | [SEC-1048](https://linear.app/montecarlodata/issue/SEC-1048) | 🔴 Not Started |
 | **7. Redis** | [SEC-1057](https://linear.app/montecarlodata/issue/SEC-1057) | 🔴 Not Started |
 | **8. Monitoring** | [SEC-1058](https://linear.app/montecarlodata/issue/SEC-1058) | 🔴 Not Started |
@@ -1092,18 +1092,122 @@ See [infrastructure/secrets-manager/README.md](../infrastructure/secrets-manager
 ### Phase 6: Compute & Application
 
 #### Option A: ECS/Fargate (SEC-1047)
-- [ ] Create ECS cluster
-- [ ] Create ECR repository for container images
-- [ ] Build and push Docker image
-- [ ] Create Fargate task definition:
+- [x] Create ECS cluster
+- [x] Create ECR repository for container images
+- [x] Build and push Docker image
+- [x] Create Fargate task definition:
   - Container: Next.js app
   - CPU: 512-1024
   - Memory: 1024-2048 MB
   - Environment variables from Secrets Manager
-- [ ] Create ECS service
-- [ ] Configure auto-scaling (CPU/memory based)
-- [ ] Set up health checks
-- [ ] Link to ALB target group
+- [x] Create ECS service
+- [x] Configure auto-scaling (CPU/memory based)
+- [x] Set up health checks
+- [x] Link to ALB target group
+
+**Implementation Details**:
+- **Location**: `infrastructure/ecs/`
+- **Terraform Modules**: main.tf, variables.tf, outputs.tf, README.md
+
+**Components Created**:
+1. **ECS Cluster** - Fargate serverless cluster with Container Insights
+2. **ECR Repository** - Docker image registry with lifecycle policies and vulnerability scanning
+3. **ECS Task Definition** - Containerized Next.js app with secrets injection
+4. **ECS Service** - Auto-scaling service with ALB integration
+5. **Security Groups** - Network isolation for ECS tasks
+6. **CloudWatch Logs** - Centralized application logging
+7. **Auto Scaling** - CPU and memory-based scaling (min 2, max 10 tasks)
+8. **CloudWatch Alarms** - Monitoring for CPU, memory, and task health
+
+**Key Features**:
+- Serverless Fargate (no EC2 management)
+- Multi-AZ high availability
+- Zero-downtime rolling deployments
+- Automatic secrets injection from Secrets Manager
+- Container Insights for advanced monitoring
+- ECR vulnerability scanning on image push
+- Health checks (container + ALB)
+- Optional Fargate Spot for cost savings
+- KMS encryption for logs and images
+- Security group with least privilege access
+
+**Task Configuration**:
+- Default: 512 CPU (.5 vCPU), 1024 MB memory
+- Production: 1024 CPU (1 vCPU), 2048 MB memory
+- Supports: 256-4096 CPU, 512 MB-30 GB memory
+
+**Auto Scaling**:
+- Target: 70% CPU, 80% memory utilization
+- Scale in cooldown: 300 seconds
+- Scale out cooldown: 60 seconds
+- Min capacity: 2 tasks
+- Max capacity: 10 tasks
+
+**Cost Estimates** (us-east-1):
+- Development (256 CPU, 512 MB, 1 task): ~$10/month
+- Production (512 CPU, 1024 MB, 2 tasks): ~$30/month
+- High availability (1024 CPU, 2048 MB, 3 tasks): ~$90/month
+
+**Usage Example**:
+```hcl
+module "ecs" {
+  source = "./infrastructure/ecs"
+
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+  alb_security_group_id = module.alb.security_group_id
+  target_group_arn   = module.alb.target_group_arn
+
+  ecs_execution_role_arn = module.iam.ecs_task_execution_role_arn
+  ecs_task_role_arn      = module.iam.app_runtime_role_arn
+
+  database_secret_arn        = module.secrets.database_secret_arn
+  nextauth_secret_arn        = module.secrets.nextauth_secret_arn
+  anthropic_secret_arn       = module.secrets.anthropic_secret_arn
+  google_oauth_secret_arn    = module.secrets.google_oauth_secret_arn
+  encryption_key_secret_arn  = module.secrets.encryption_key_secret_arn
+  redis_secret_arn           = module.secrets.redis_secret_arn
+
+  nextauth_url = "https://app.example.com"
+  environment  = "production"
+}
+```
+
+**Deployment Workflow**:
+```bash
+# 1. Build Docker image
+docker build -t transparent-trust:latest .
+
+# 2. Tag and push to ECR
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ecr-url>
+docker tag transparent-trust:latest <ecr-url>/transparent-trust-production:latest
+docker push <ecr-url>/transparent-trust-production:latest
+
+# 3. Deploy to ECS
+aws ecs update-service --cluster transparent-trust-cluster-production \
+  --service transparent-trust-service-production --force-new-deployment
+
+# 4. Monitor deployment
+aws logs tail /aws/ecs/transparent-trust-production --follow
+```
+
+**Dockerfile Requirements**:
+- Multi-stage build for optimization
+- Next.js standalone output mode
+- Non-root user for security
+- Health check endpoint at `/api/health`
+- Expose port 3000
+
+**CI/CD Integration**:
+Complete GitHub Actions workflow included in README for automated deployments on push to main branch.
+
+See [infrastructure/ecs/README.md](../infrastructure/ecs/README.md) for complete documentation including:
+- Detailed architecture diagrams
+- Full Dockerfile example
+- CI/CD pipeline templates
+- Monitoring and troubleshooting guides
+- Security best practices
+- Cost optimization strategies
 
 #### Option B: AWS Amplify (SEC-1048)
 *Simpler alternative for Next.js apps*
