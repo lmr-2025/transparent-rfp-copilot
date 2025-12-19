@@ -1,13 +1,13 @@
 # Transparent RFP Copilot
 
-A comprehensive, AI-powered RFP response platform with full transparency. Built for teams who need to answer security questionnaires, vendor assessments, and compliance requests at scale—while maintaining complete visibility into how answers are generated.
+AI-powered RFP response platform with full transparency. Answer security questionnaires, vendor assessments, and compliance requests at scale with complete visibility into how answers are generated.
 
 ## Quick Start
 
+### Local Development
+
 ```bash
-# Clone and install
-git clone https://github.com/lmr-2025/transparent-rfp-copilot.git
-cd transparent-rfp-copilot
+# Install dependencies
 npm install
 
 # Configure environment
@@ -24,115 +24,67 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
-## Platform Architecture
+### AWS Deployment
 
-The platform is built as a modern Next.js application with specialized modules:
+The application deploys to AWS using Terraform with Tailscale-only access (no public internet).
 
-| Module | Description | Key Features |
-|--------|-------------|--------------|
-| **Projects** | Bulk questionnaire processing | Excel/CSV upload, multi-tab merge, per-question review |
-| **Chat** | Conversational knowledge access | Skill selection, customer context, instruction presets |
-| **Knowledge** | Centralized content library | Skills, documents, URLs, auto-categorization |
-| **Contracts** | Document analysis | Key term extraction, risk identification, obligation tracking |
-| **Admin** | Platform configuration | Prompts, categories, integrations, user management |
+**Prerequisites:**
 
-## Core Capabilities
+- AWS CLI configured with appropriate credentials
+- Terraform >= 1.0 installed
+- ACM certificate for `*.mcdinternal.io`
+- Route53 private hosted zone for `mcdinternal.io`
+
+**Bootstrap Terraform State (one-time setup):**
+
+```bash
+cd infrastructure/bootstrap
+terraform init
+terraform apply
+```
+
+After bootstrap completes, copy the backend configuration from the outputs and add it to your environment files.
+
+**Deploy Environment:**
+
+```bash
+cd infrastructure/env/dev-us-security  # or prod-us-security
+terraform init
+terraform plan
+terraform apply
+```
+
+**Access:** Applications are deployed as internal ALBs on private subnets. Access requires Tailscale VPN connected to the VPC. Domains:
+
+- Dev: `transparent-trust-dev.mcdinternal.io`
+- Prod: `transparent-trust-prod.mcdinternal.io`
+
+See [infrastructure/env/TAILSCALE_CONFIGURATION.md](infrastructure/env/TAILSCALE_CONFIGURATION.md) for complete setup details.
+
+## Features
 
 ### RFP Projects
-- **Bulk Upload**: Import Excel workbooks or CSV files with automatic column detection
-- **Multi-Tab Merge**: Combine questions from multiple worksheets into a single project
-- **AI Responses**: Generate answers grounded in your knowledge base
-- **Review Workflow**: Per-question approval with Slack notifications
-- **Export**: Download completed questionnaires in original format
+Bulk questionnaire processing with Excel/CSV upload, multi-tab merge, AI-generated answers grounded in your knowledge base, per-question review workflow with Slack notifications, and export to original format.
 
 ### Knowledge Management
-- **Skills**: Structured knowledge chunks with quick facts, edge cases, and source tracking
-- **Documents**: Upload PDFs, Word docs, or text files for AI reference
-- **URLs**: Add web pages that are fetched and indexed for context
-- **Auto-Categorization**: AI suggests categories during skill creation
-- **Refresh**: Update skills from source URLs with diff preview
+Build your response library with Skills (structured knowledge chunks), Documents (PDFs, Word, text), and URLs (auto-fetched web pages). AI auto-categorization, source tracking, and refresh capabilities with diff preview.
 
 ### Full Transparency
-Every AI response includes:
-- **Confidence Scores**: High/Medium/Low rating based on source coverage
-- **Source Citations**: Which skills, documents, and URLs contributed
-- **Reasoning**: How the answer was derived, what was inferred vs. found directly
-- **Editable Prompts**: View and customize system prompts via the Prompt Builder
+Every AI response includes confidence scores (High/Medium/Low), source citations (which skills/documents contributed), reasoning (how the answer was derived), and editable prompts via the Prompt Builder.
 
 ### Chat Interface
-- **Skill Selection**: Choose which knowledge areas to include in responses
-- **Customer Context**: Load customer profiles for tailored answers
-- **Instruction Presets**: Save and reuse prompt configurations
-- **Conversation History**: Full audit trail of all interactions
+Conversational knowledge access with skill selection, customer context loading, instruction presets, and full conversation history audit trail.
+
+### Contract Analysis
+Extract key terms and obligations, identify risks and compliance concerns, generate summaries and recommendations.
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| **Framework** | Next.js 15 with App Router |
-| **AI** | Claude API (Anthropic) - Sonnet, Opus, Haiku |
-| **Database** | PostgreSQL 16 with Prisma ORM |
-| **Auth** | NextAuth.js with Google/Okta OAuth, SSO group mappings |
-| **UI** | React 19, Tailwind CSS, shadcn/ui, Radix primitives |
-| **State** | React Query (server), Zustand (client) |
-| **Rate Limiting** | Upstash Redis (optional, falls back to in-memory) |
-| **Notifications** | Slack integration for review workflows |
+Next.js 15, React 19, Claude API (Anthropic), PostgreSQL 16 with Prisma, NextAuth.js with Google/Okta OAuth, Tailwind CSS with shadcn/ui, React Query, Zustand, Upstash Redis (optional), Slack integration.
 
-## Module Details
+## Permissions
 
-### Projects (`/projects`)
-Manage RFP questionnaires as reusable projects:
-- Upload Excel/CSV with automatic sheet detection
-- Map question columns across multiple tabs
-- Generate AI responses with knowledge grounding
-- Review and approve answers before export
-- Track project status and completion
-
-### Knowledge (`/knowledge`)
-Build and maintain your response library:
-- **Skills**: Create from URLs, documents, or manual entry
-- **Bulk Import**: Add multiple URLs at once with AI grouping
-- **Categories**: Organize skills (Security, Integrations, Pricing, etc.)
-- **Owners**: Assign subject matter experts to skills
-- **History**: Track all changes with full audit trail
-
-### Chat (`/chat`)
-Interactive knowledge exploration:
-- Select specific skills to include in context
-- Configure response style with instruction presets
-- View transparency details for every response
-- Export conversations for documentation
-
-### Contracts (`/contracts`)
-Analyze legal documents:
-- Extract key terms and obligations
-- Identify risks and compliance concerns
-- Generate summaries and recommendations
-
-### Admin (`/admin`)
-Platform configuration:
-- **Prompt Builder**: Customize system prompts with live preview
-- **Categories**: Manage skill categories
-- **Auth Groups**: Map SSO groups to capabilities
-- **Settings**: Branding, integrations, rate limits
-- **Question Log**: View all questions asked across the platform
-
-## Permissions & Capabilities
-
-The platform uses a capability-based permission system:
-
-| Capability | Description |
-|------------|-------------|
-| `ASK_QUESTIONS` | Use chat, view own history |
-| `CREATE_PROJECTS` | Create/manage bulk projects, upload documents |
-| `REVIEW_ANSWERS` | Verify, correct, flag/resolve answers |
-| `MANAGE_KNOWLEDGE` | Create/edit skills, documents, URLs |
-| `MANAGE_PROMPTS` | Edit system prompts via Prompt Builder |
-| `VIEW_ORG_DATA` | See org-wide question log, accuracy metrics |
-| `MANAGE_USERS` | Assign capabilities, manage SSO group mappings |
-| `ADMIN` | Full access to all features |
-
-Capabilities are assigned via SSO group mappings (Okta, Azure AD, Google) or directly to users.
+Capability-based system with `ASK_QUESTIONS`, `CREATE_PROJECTS`, `REVIEW_ANSWERS`, `MANAGE_KNOWLEDGE`, `MANAGE_PROMPTS`, `VIEW_ORG_DATA`, `MANAGE_USERS`, and `ADMIN`. Capabilities assigned via SSO group mappings (Okta, Azure AD, Google) or directly to users.
 
 ## Environment Variables
 
@@ -163,93 +115,16 @@ SLACK_WEBHOOK_URL="your-slack-webhook-url"
 npm run dev        # Start development server
 npm run build      # Production build
 npm run lint       # Run ESLint
-npm run test       # Run tests
 npx prisma studio  # Open database GUI
 ```
 
 ## Project Structure
 
 ```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/               # API routes
-│   ├── chat/              # Chat interface
-│   ├── contracts/         # Contract analysis
-│   ├── knowledge/         # Knowledge base management
-│   ├── projects/          # RFP project management
-│   ├── admin/             # Admin settings & tools
-│   └── accuracy/          # Accuracy tracking dashboard
-├── components/            # Reusable React components
-│   └── ui/               # shadcn/ui components
-├── hooks/                 # Custom React hooks
-├── lib/                   # Utilities and helpers
-│   ├── promptBlocks.ts   # Composable prompt system
-│   ├── auth.ts           # Authentication config
-│   ├── capabilities.ts   # Permission checks
-│   └── prisma.ts         # Database client
-├── stores/               # Zustand state stores
-└── types/                # TypeScript definitions
-```
-
-## AWS Deployment
-
-Complete production-ready infrastructure for deploying to AWS with Terraform modules for all components.
-
-### Infrastructure Modules
-
-All infrastructure is defined as reusable Terraform modules in `/infrastructure`:
-
-| Module | Description | Status |
-|--------|-------------|--------|
-| **IAM** | Roles and policies for all services | ✅ Complete |
-| **VPC** | Multi-AZ networking with public/private subnets | ✅ Complete |
-| **Security Groups** | Fine-grained network access control | ✅ Complete |
-| **ALB** | Application Load Balancer with SSL | ✅ Complete |
-| **ECS/Fargate** | Serverless container orchestration | ✅ Complete |
-| **Amplify** | Alternative: Fully managed hosting | ✅ Complete |
-| **RDS** | PostgreSQL with Multi-AZ, encryption, automated backups | ✅ Complete |
-| **Redis** | ElastiCache or Upstash for rate limiting | ✅ Complete |
-| **S3** | Encrypted storage with lifecycle policies | ✅ Complete |
-| **Secrets Manager** | Secure credential storage with rotation | ✅ Complete |
-| **Monitoring** | CloudWatch dashboards, alarms, SNS alerts | ✅ Complete |
-| **DNS/CDN** | Route 53 + ACM + optional CloudFront | ✅ Complete |
-| **CI/CD** | GitHub Actions or CodePipeline | ✅ Complete |
-| **Compliance** | CloudTrail, Config, GuardDuty, Security Hub | ✅ Complete |
-| **Cost Management** | Budgets, anomaly detection, optimization | ✅ Complete |
-
-### Quick Deploy
-
-```bash
-# 1. Configure AWS credentials
-aws configure
-
-# 2. Initialize Terraform
-cd infrastructure
-terraform init
-
-# 3. Create terraform.tfvars
-cat > terraform.tfvars <<EOF
-project_name = "transparent-trust"
-environment  = "production"
-domain_name  = "yourdomain.com"
-
-# Database
-db_username = "admin"
-db_name     = "rfp_copilot"
-
-# Alerts
-alert_emails = ["ops@example.com"]
-
-# Budget
-monthly_budget = "200"  # USD
-EOF
-
-# 4. Deploy infrastructure
-terraform plan
-terraform apply
-
-# 5. Deploy application (GitHub Actions or CodePipeline)
-git push origin main
+src/app/              # Next.js App Router (api, chat, contracts, knowledge, projects, admin)
+src/components/       # React components + shadcn/ui
+src/lib/              # Utilities (promptBlocks, auth, capabilities, prisma)
+infrastructure/       # Terraform modules for AWS deployment
 ```
 
 ### Architecture Options
@@ -329,7 +204,3 @@ All integrations are **optional**. The platform works fully without any external
 ## License
 
 Apache-2.0 - See [LICENSE](LICENSE) for details.
-
----
-
-Built with transparency in mind. Every answer is traceable, every source is cited, every decision is visible.
