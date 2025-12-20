@@ -16,7 +16,7 @@ export const chatQueryKeys = {
   customers: ["customers"] as const,
   categories: ["categories"] as const,
   presets: ["instruction-presets"] as const,
-  sessions: (limit?: number) => ["chat-sessions", limit] as const,
+  sessions: ["chat-sessions"] as const,
 };
 
 // Fetch skills
@@ -95,7 +95,7 @@ export interface ChatSessionItem {
   id: string;
   createdAt: string;
   updatedAt: string;
-  messages?: { role: string; content: string; timestamp?: string }[];
+  messages?: { role: string; content: string; timestamp?: string; confidence?: string; notes?: string }[];
   skillsUsed?: { id: string; title: string }[];
   documentsUsed?: { id: string; title: string }[];
   customersUsed?: { id: string; name: string }[];
@@ -105,7 +105,7 @@ export interface ChatSessionItem {
 // Fetch chat sessions
 export function useChatSessions(limit = 20) {
   return useQuery({
-    queryKey: chatQueryKeys.sessions(limit),
+    queryKey: chatQueryKeys.sessions,
     queryFn: async (): Promise<ChatSessionItem[]> => {
       const res = await fetch(`/api/chat-sessions?limit=${limit}`);
       if (!res.ok) throw new Error("Failed to fetch sessions");
@@ -138,6 +138,7 @@ type SendMessageParams = {
   conversationHistory: { role: string; content: string }[];
   userInstructions: string;
   quickMode?: boolean; // Use Haiku for faster responses
+  callMode?: boolean; // Ultra-brief responses for live customer calls
 };
 
 type SendMessageResponse = {
@@ -183,7 +184,7 @@ export function useSendMessage() {
 // Save chat session mutation
 type SaveSessionParams = {
   sessionId: string | null;
-  messages: { role: string; content: string; timestamp: string }[];
+  messages: { role: string; content: string; timestamp: string; confidence?: string; notes?: string }[];
   skillsUsed: { id: string; title: string }[];
   documentsUsed: { id: string; title: string }[];
   customersUsed: { id: string; name: string }[];
@@ -219,7 +220,7 @@ export function useSaveSession() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions() });
+      queryClient.invalidateQueries({ queryKey: chatQueryKeys.sessions });
     },
   });
 }

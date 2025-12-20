@@ -490,6 +490,7 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
         headerExtras={headerExtras}
         systemPrompt={systemPrompt}
         systemPromptTitle="Planning System Prompt"
+        textareaSize="lg"
       />
 
       {/* Resizable Divider */}

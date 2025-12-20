@@ -108,7 +108,7 @@ export function ChatHistoryPanel({
 
   if (isLoading) {
     return (
-      <Card className="absolute top-full left-0 right-0 z-50 mt-2 shadow-lg">
+      <Card className="shadow-lg bg-background border">
         <CardContent className="py-8 flex items-center justify-center">
           <InlineLoader size="md" className="text-muted-foreground" />
         </CardContent>
@@ -118,7 +118,7 @@ export function ChatHistoryPanel({
 
   return (
     <>
-      <Card className="absolute top-full left-0 right-0 z-50 mt-2 shadow-lg max-h-80 overflow-hidden">
+      <Card className="shadow-lg max-h-80 overflow-hidden bg-background border">
         <CardHeader className="py-3 px-4 border-b border-border">
           <div className="flex items-center justify-between">
             <CardTitle className="text-sm">Chat History</CardTitle>
@@ -152,14 +152,14 @@ export function ChatHistoryPanel({
                   key={session.id}
                   onClick={() => onLoadSession(session)}
                   className={cn(
-                    "w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors",
+                    "w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors text-foreground",
                     currentSessionId === session.id && "bg-primary/5"
                   )}
                 >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
                     <MessageSquare className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-sm truncate">{getSessionPreview(session)}</p>
+                    <div className="min-w-0 flex-1 overflow-hidden">
+                      <p className="text-sm text-foreground truncate max-w-full">{getSessionPreview(session)}</p>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                         <span>{formatDate(session.updatedAt)}</span>
                         {session.messages && (

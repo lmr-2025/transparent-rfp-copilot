@@ -2,6 +2,7 @@ import { defaultSkillPrompt } from "./skillPrompt";
 import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL, getModel, type ModelSpeed } from "./config";
+import { buildCacheableSystem } from "./anthropicCache";
 
 // Re-export ModelSpeed for consumers
 export type { ModelSpeed } from "./config";
@@ -10,6 +11,10 @@ export type UsageInfo = {
   inputTokens: number;
   outputTokens: number;
   model: string;
+  /** Tokens written to Anthropic prompt cache (1.25x cost) */
+  cacheCreationTokens?: number;
+  /** Tokens read from Anthropic prompt cache (0.1x cost - 90% savings!) */
+  cacheReadTokens?: number;
 };
 
 export type SkillDraft = {
@@ -172,12 +177,18 @@ export async function answerQuestionWithPrompt(
 
   const model = getModel(modelSpeed);
 
+  // Build cacheable system prompt (caches if above token threshold)
+  const systemContent = buildCacheableSystem({
+    cachedContent: promptText,
+    model,
+  });
+
   try {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 16000,
       temperature: 0.2,
-      system: promptText,
+      system: systemContent,
       messages: [
         {
           role: "user",
@@ -208,6 +219,8 @@ export async function answerQuestionWithPrompt(
         inputTokens: response.usage?.input_tokens || 0,
         outputTokens: response.usage?.output_tokens || 0,
         model,
+        cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
+        cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
       },
     };
   } catch (error) {
@@ -345,12 +358,18 @@ export async function answerQuestionsBatch(
 
   const model = getModel(modelSpeed);
 
+  // Build cacheable system prompt (caches if above token threshold)
+  const systemContent = buildCacheableSystem({
+    cachedContent: promptText,
+    model,
+  });
+
   try {
     const response = await anthropic.messages.create({
       model,
       max_tokens: 16000,
       temperature: 0.2,
-      system: promptText,
+      system: systemContent,
       messages: [
         {
           role: "user",
@@ -396,6 +415,8 @@ export async function answerQuestionsBatch(
         inputTokens: response.usage?.input_tokens || 0,
         outputTokens: response.usage?.output_tokens || 0,
         model,
+        cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
+        cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
       },
     };
   } catch (error) {

@@ -3,7 +3,7 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3 } from "lucide-react";
+import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3, ArrowUpDown, LayoutGrid, List, Lightbulb } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import LibraryAnalysisModal from "./components/LibraryAnalysisModal";
 import Link from "next/link";
@@ -30,6 +30,8 @@ import {
 } from "@/hooks/use-knowledge-data";
 import { useSyncHealthStatus } from "@/hooks/useSkillSyncStatus";
 import { SyncHealthBar } from "@/components/knowledge/sync-health-bar";
+import { useSession } from "next-auth/react";
+import { canManageKnowledge, type UserSession } from "@/lib/permissions";
 import {
   Select,
   SelectContent,
@@ -39,25 +41,45 @@ import {
 } from "@/components/ui/select";
 import { LibraryTabs, TabType } from "./components/library-tabs";
 import { KnowledgeItemCard } from "./components/knowledge-item-card";
+import { KnowledgeGridTile } from "./components/knowledge-grid-tile";
+import { CollapsibleCategorySection } from "./components/collapsible-category-section";
+import { RequestKnowledgeDialog } from "./components/request-knowledge-dialog";
 import { cn } from "@/lib/utils";
+
+// View mode
+type ViewMode = "list" | "grid";
 
 // Source type filter for Sources tab
 type SourceTypeFilter = "all" | "document" | "url";
 
+// Sort options
+type SortOption = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "category";
+
 function KnowledgeLibraryContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab") as TabType | null;
+  const { data: session } = useSession();
+
+  // Check if user can manage knowledge (edit skills)
+  // Dev override: add ?testRequestUI=true to see the "Request Knowledge" button as a non-manager
+  const testRequestUI = searchParams.get("testRequestUI") === "true";
+  const userCanManageKnowledge = testRequestUI
+    ? false
+    : canManageKnowledge(session?.user as UserSession | undefined);
 
   // State
   const [activeTab, setActiveTab] = useState<TabType>(tabParam || "skills");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
+  const [sortOption, setSortOption] = useState<SortOption>("updated-desc");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
+  const [showRequestDialog, setShowRequestDialog] = useState(false);
 
   // React Query data
   const { data: skills = [], isLoading: skillsLoading } = useAllSkills();
@@ -185,12 +207,52 @@ function KnowledgeLibraryContent() {
     return items;
   }, [allItems, searchQuery, selectedCategory]);
 
-  // Sort by updated date (newest first)
+  // Sort items based on selected sort option
   const sortedItems = useMemo(() => {
-    return [...filteredItems].sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  }, [filteredItems]);
+    return [...filteredItems].sort((a, b) => {
+      switch (sortOption) {
+        case "name-asc":
+          return a.title.localeCompare(b.title);
+        case "name-desc":
+          return b.title.localeCompare(a.title);
+        case "updated-asc":
+          return new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+        case "category":
+          // Sort by first category, then by name
+          const catA = a.categories?.[0] || "zzz"; // Items without category go last
+          const catB = b.categories?.[0] || "zzz";
+          const catCompare = catA.localeCompare(catB);
+          return catCompare !== 0 ? catCompare : a.title.localeCompare(b.title);
+        case "updated-desc":
+        default:
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+      }
+    });
+  }, [filteredItems, sortOption]);
+
+  // Group items by category (only used when sortOption is "category")
+  const groupedByCategory = useMemo(() => {
+    if (sortOption !== "category") return null;
+
+    const groups: Record<string, typeof sortedItems> = {};
+
+    for (const item of sortedItems) {
+      const category = item.categories?.[0] || "Uncategorized";
+      if (!groups[category]) {
+        groups[category] = [];
+      }
+      groups[category].push(item);
+    }
+
+    // Sort category names alphabetically, but put "Uncategorized" last
+    const sortedCategories = Object.keys(groups).sort((a, b) => {
+      if (a === "Uncategorized") return 1;
+      if (b === "Uncategorized") return -1;
+      return a.localeCompare(b);
+    });
+
+    return { groups, sortedCategories };
+  }, [sortedItems, sortOption]);
 
   // Selection helpers
   const toggleSelection = (id: string) => {
@@ -310,6 +372,17 @@ function KnowledgeLibraryContent() {
     }
   };
 
+  // Handle update content (inline editing for skills)
+  const handleUpdateContent = async (id: string, title: string, content: string) => {
+    try {
+      await updateSkillMutation.mutateAsync({ id, updates: { title, content } });
+      toast.success("Skill content updated");
+    } catch (err) {
+      toast.error("Failed to update content");
+      throw err;
+    }
+  };
+
   // Update source URL title (for URLs derived from skills)
   const handleUpdateSourceUrlTitle = async (itemId: string, newTitle: string) => {
     // itemId format: skill-url-{skillId}-{url}
@@ -382,7 +455,7 @@ function KnowledgeLibraryContent() {
   const addLink = { href: "/knowledge/add", label: "Add Knowledge" };
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className={cn("mx-auto p-6", viewMode === "grid" ? "max-w-7xl" : "max-w-5xl")}>
       <ConfirmDialog />
 
       {/* Header */}
@@ -413,12 +486,19 @@ function KnowledgeLibraryContent() {
                 <CheckSquare className="h-4 w-4 mr-2" />
                 Select
               </Button>
-              <Button asChild>
-                <Link href={addLink.href} className="gap-2">
-                  <Plus className="h-4 w-4" />
-                  {addLink.label}
-                </Link>
-              </Button>
+              {userCanManageKnowledge ? (
+                <Button asChild>
+                  <Link href={addLink.href} className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    {addLink.label}
+                  </Link>
+                </Button>
+              ) : (
+                <Button onClick={() => setShowRequestDialog(true)}>
+                  <Lightbulb className="h-4 w-4 mr-2" />
+                  Request Knowledge
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -513,6 +593,47 @@ function KnowledgeLibraryContent() {
             </SelectContent>
           </Select>
         )}
+        {/* Sort dropdown */}
+        <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+          <SelectTrigger className="w-[180px]">
+            <ArrowUpDown className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="Sort by" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="updated-desc">Newest First</SelectItem>
+            <SelectItem value="updated-asc">Oldest First</SelectItem>
+            <SelectItem value="name-asc">Name A-Z</SelectItem>
+            <SelectItem value="name-desc">Name Z-A</SelectItem>
+            <SelectItem value="category">By Category</SelectItem>
+          </SelectContent>
+        </Select>
+        {/* View toggle */}
+        <div className="flex border rounded-md overflow-hidden">
+          <button
+            onClick={() => setViewMode("grid")}
+            className={cn(
+              "p-2 transition-colors",
+              viewMode === "grid"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background hover:bg-muted text-muted-foreground"
+            )}
+            title="Grid view"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+          <button
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "p-2 transition-colors",
+              viewMode === "list"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background hover:bg-muted text-muted-foreground"
+            )}
+            title="List view"
+          >
+            <List className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -546,19 +667,71 @@ function KnowledgeLibraryContent() {
             ) : (
               <>
                 <p className="text-muted-foreground mb-4">
-                  No {activeTab} yet. Add your first one to get started.
+                  No {activeTab} yet. {userCanManageKnowledge ? "Add your first one to get started." : "Request knowledge to be added."}
                 </p>
-                <Button asChild>
-                  <Link href={addLink.href}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    {addLink.label}
-                  </Link>
-                </Button>
+                {userCanManageKnowledge ? (
+                  <Button asChild>
+                    <Link href={addLink.href}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      {addLink.label}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button onClick={() => setShowRequestDialog(true)}>
+                    <Lightbulb className="h-4 w-4 mr-2" />
+                    Request Knowledge
+                  </Button>
+                )}
               </>
             )}
           </CardContent>
         </Card>
+      ) : viewMode === "grid" ? (
+        // Grid view
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {sortedItems.map((item) => (
+            <KnowledgeGridTile
+              key={item.id}
+              item={item}
+              selectionMode={selectionMode}
+              isSelected={selectedIds.has(item.id)}
+              onToggleSelection={() => toggleSelection(item.id)}
+            />
+          ))}
+        </div>
+      ) : sortOption === "category" && groupedByCategory ? (
+        // List view - grouped by category with collapsible sections
+        <div>
+          {groupedByCategory.sortedCategories.map((categoryName) => (
+            <CollapsibleCategorySection
+              key={categoryName}
+              categoryName={categoryName}
+              itemCount={groupedByCategory.groups[categoryName].length}
+            >
+              {groupedByCategory.groups[categoryName].map((item) => (
+                <KnowledgeItemCard
+                  key={item.id}
+                  item={item}
+                  onDelete={selectionMode ? undefined : () => handleDelete(item)}
+                  isDeleting={deletingId === item.id}
+                  onUpdateOwners={item.type === "skill" && !selectionMode ? handleUpdateOwners : undefined}
+                  onUpdateContent={item.type === "skill" && !selectionMode && userCanManageKnowledge ? handleUpdateContent : undefined}
+                  onUpdateCategories={item.type === "skill" && !selectionMode ? handleUpdateCategories : undefined}
+                  onRefresh={item.type === "skill" && !selectionMode ? handleRefreshSkill : undefined}
+                  onApplyRefresh={item.type === "skill" && !selectionMode ? handleApplyRefresh : undefined}
+                  onUpdateTitle={item.type === "url" && item.linkedSkillId && !selectionMode ? handleUpdateSourceUrlTitle : undefined}
+                  isRefreshing={refreshSkillMutation.isPending}
+                  selectionMode={selectionMode}
+                  isSelected={selectedIds.has(item.id)}
+                  onToggleSelection={() => toggleSelection(item.id)}
+                  linkedSkillName={item.linkedSkillId ? skillIdToTitle.get(item.linkedSkillId) : undefined}
+                />
+              ))}
+            </CollapsibleCategorySection>
+          ))}
+        </div>
       ) : (
+        // List view - flat list
         <div className="space-y-3">
           {sortedItems.map((item) => (
             <KnowledgeItemCard
@@ -567,6 +740,7 @@ function KnowledgeLibraryContent() {
               onDelete={selectionMode ? undefined : () => handleDelete(item)}
               isDeleting={deletingId === item.id}
               onUpdateOwners={item.type === "skill" && !selectionMode ? handleUpdateOwners : undefined}
+              onUpdateContent={item.type === "skill" && !selectionMode && userCanManageKnowledge ? handleUpdateContent : undefined}
               onUpdateCategories={item.type === "skill" && !selectionMode ? handleUpdateCategories : undefined}
               onRefresh={item.type === "skill" && !selectionMode ? handleRefreshSkill : undefined}
               onApplyRefresh={item.type === "skill" && !selectionMode ? handleApplyRefresh : undefined}
@@ -595,6 +769,12 @@ function KnowledgeLibraryContent() {
         skills={skills}
         isOpen={showAnalysisModal}
         onClose={() => setShowAnalysisModal(false)}
+      />
+
+      {/* Request Knowledge Dialog - for users without MANAGE_KNOWLEDGE capability */}
+      <RequestKnowledgeDialog
+        open={showRequestDialog}
+        onOpenChange={setShowRequestDialog}
       />
     </div>
   );

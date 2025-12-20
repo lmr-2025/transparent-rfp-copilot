@@ -758,6 +758,7 @@ Use the provided customer information and knowledge sources to fill in template 
               loadingText="Analyzing..."
               placeholder="Describe your template or paste placeholder list..."
               showSystemPromptButton={false}
+              textareaSize="lg"
             />
           )}
 
@@ -773,6 +774,7 @@ Use the provided customer information and knowledge sources to fill in template 
               placeholder={selectedCustomer ? `Generate content for ${selectedCustomer.name}...` : "Select a customer to get started..."}
               systemPrompt={systemPrompt}
               systemPromptTitle="Collateral Builder Prompt"
+              textareaSize="lg"
             />
           )}
 

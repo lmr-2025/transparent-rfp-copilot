@@ -72,6 +72,8 @@ interface CollapsibleKnowledgeSidebarProps {
   customers: CustomerProfile[];
   selectedCustomer: CustomerProfile | null;
   isLoading?: boolean;
+  isCollapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 type SectionId = "knowledge" | "customer" | "output";
@@ -83,8 +85,13 @@ export function CollapsibleKnowledgeSidebar({
   customers,
   selectedCustomer,
   isLoading,
+  isCollapsed: controlledIsCollapsed,
+  onCollapsedChange,
 }: CollapsibleKnowledgeSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalIsCollapsed, setInternalIsCollapsed] = useState(false);
+
+  // Use controlled state if provided, otherwise use internal state
+  const isCollapsed = controlledIsCollapsed !== undefined ? controlledIsCollapsed : internalIsCollapsed;
   const [expandedSections, setExpandedSections] = useState<Record<SectionId, boolean>>({
     knowledge: true,
     customer: true,
@@ -95,14 +102,22 @@ export function CollapsibleKnowledgeSidebar({
   useEffect(() => {
     const saved = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     if (saved === "true") {
-      setIsCollapsed(true);
+      if (onCollapsedChange) {
+        onCollapsedChange(true);
+      } else {
+        setInternalIsCollapsed(true);
+      }
     }
-  }, []);
+  }, [onCollapsedChange]);
 
   // Save collapsed state
   const toggleCollapsed = () => {
     const newState = !isCollapsed;
-    setIsCollapsed(newState);
+    if (onCollapsedChange) {
+      onCollapsedChange(newState);
+    } else {
+      setInternalIsCollapsed(newState);
+    }
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newState));
   };
 
@@ -231,7 +246,7 @@ export function CollapsibleKnowledgeSidebar({
   // Collapsed view - icon strip
   if (isCollapsed) {
     return (
-      <div className="h-full w-12 border-l border-border bg-muted/30 flex flex-col items-center py-2 gap-2">
+      <div className="h-full w-full border-l border-border bg-muted/30 flex flex-col items-center py-2 gap-2">
         <TooltipProvider delayDuration={0}>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -251,7 +266,12 @@ export function CollapsibleKnowledgeSidebar({
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => {
-                  setIsCollapsed(false);
+                  if (onCollapsedChange) {
+                    onCollapsedChange(false);
+                  } else {
+                    setInternalIsCollapsed(false);
+                  }
+                  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
                   setExpandedSections((prev) => ({ ...prev, knowledge: true }));
                 }}
               >
@@ -268,7 +288,12 @@ export function CollapsibleKnowledgeSidebar({
                 size="icon"
                 className="h-8 w-8"
                 onClick={() => {
-                  setIsCollapsed(false);
+                  if (onCollapsedChange) {
+                    onCollapsedChange(false);
+                  } else {
+                    setInternalIsCollapsed(false);
+                  }
+                  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
                   setExpandedSections((prev) => ({ ...prev, customer: true }));
                 }}
               >

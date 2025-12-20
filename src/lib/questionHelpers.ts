@@ -7,13 +7,16 @@ export type ParsedAnswerSections = {
   reasoning: string;
   inference: string;
   remarks: string;
+  notes: string; // New: combined "show your work" field for chat
 };
 
 /**
  * Parses an LLM answer into structured sections: response, confidence, sources, reasoning, inference, and remarks.
  * Looks for section headers like "Confidence:", "Sources:", "Reasoning:", "Inference:", "Remarks:" and separates content accordingly.
+ * Also handles inline format like "Confidence: High Notes: explanation here"
  */
 export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
+  console.log("[parseAnswerSections] Raw answer:", answer);
   const lines = answer.split("\n");
   const sectionBuckets: Record<string, string[]> = {
     confidence: [],
@@ -21,9 +24,10 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     reasoning: [],
     inference: [],
     remarks: [],
+    notes: [],
   };
 
-  let currentSection: "answer" | "confidence" | "sources" | "reasoning" | "inference" | "remarks" | null = null;
+  let currentSection: "answer" | "confidence" | "sources" | "reasoning" | "inference" | "remarks" | "notes" | null = null;
   let responseBody = "";
   const responseLinesBeforeFirstSection: string[] = [];
   const answerLines: string[] = [];
@@ -31,6 +35,33 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
   for (const rawLine of lines) {
     const line = rawLine.trim();
     const lineLower = line.toLowerCase();
+
+    // Check for **Confidence**: High pattern (standalone line)
+    const confLineMatch = line.match(/^\*{0,2}confidence\*{0,2}:\s*(\w+)/i);
+    if (confLineMatch) {
+      console.log("[parseAnswerSections] Found confidence line:", line, confLineMatch[1]);
+      sectionBuckets.confidence.push(confLineMatch[1].trim());
+      continue;
+    }
+
+    // Check for **Notes**: text pattern (standalone line)
+    const notesLineMatch = line.match(/^\*{0,2}notes\*{0,2}:\s*(.+)/i);
+    if (notesLineMatch) {
+      console.log("[parseAnswerSections] Found notes line:", line);
+      sectionBuckets.notes.push(notesLineMatch[1].replace(/\*+$/, '').trim());
+      continue;
+    }
+
+    // Check for inline "Confidence: X Notes: Y" pattern on same line (legacy format)
+    if (lineLower.includes("confidence") && lineLower.includes("notes")) {
+      const confMatch = line.match(/confidence[*]*:\s*(\w+)/i);
+      const notesMatch = line.match(/notes[*]*:\s*(.+)/i);
+      if (confMatch && notesMatch) {
+        sectionBuckets.confidence.push(confMatch[1].trim());
+        sectionBuckets.notes.push(notesMatch[1].replace(/\*+$/, '').trim());
+        continue;
+      }
+    }
 
     // Check for Answer: or Response: section header (handle both for backwards compatibility)
     // Also handle markdown ## headers
@@ -147,6 +178,25 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
       continue;
     }
 
+    // New: Notes section for "show your work" in chat context
+    if (
+      lineLower.startsWith("notes:") ||
+      lineLower.startsWith("**notes:**") ||
+      lineLower === "notes" ||
+      lineLower === "**notes**" ||
+      lineLower.startsWith("## notes:")
+    ) {
+      currentSection = "notes";
+      const colonIndex = line.indexOf(":");
+      if (colonIndex !== -1) {
+        const rest = line.substring(colonIndex + 1).trim();
+        if (rest.length > 0) {
+          sectionBuckets.notes.push(rest);
+        }
+      }
+      continue;
+    }
+
     if (currentSection === "answer") {
       answerLines.push(rawLine);
     } else if (currentSection) {
@@ -166,6 +216,7 @@ export const parseAnswerSections = (answer: string): ParsedAnswerSections => {
     reasoning: sectionBuckets.reasoning.join("\n"),
     inference: sectionBuckets.inference.join("\n"),
     remarks: sectionBuckets.remarks.join("\n"),
+    notes: sectionBuckets.notes.join("\n"),
   };
 };
 

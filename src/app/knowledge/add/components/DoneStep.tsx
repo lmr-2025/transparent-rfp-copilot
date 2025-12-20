@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { type SkillGroup } from "@/stores/bulk-import-store";
 import { styles, getGroupStatusStyle } from "./styles";
 
@@ -9,13 +10,20 @@ type DoneStepProps = {
 };
 
 export default function DoneStep({ skillGroups, onReset }: DoneStepProps) {
+  const router = useRouter();
+
   return (
     <div style={styles.card}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
         <h3 style={{ margin: 0 }}>Import Complete</h3>
-        <button onClick={onReset} style={{ padding: "10px 20px", backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: "6px", fontWeight: 600, cursor: "pointer" }}>
-          Import More
-        </button>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button onClick={() => router.push("/knowledge")} style={{ padding: "10px 20px", backgroundColor: "#fff", color: "#2563eb", border: "1px solid #2563eb", borderRadius: "6px", fontWeight: 600, cursor: "pointer" }}>
+            Go to Library
+          </button>
+          <button onClick={onReset} style={{ padding: "10px 20px", backgroundColor: "#2563eb", color: "#fff", border: "none", borderRadius: "6px", fontWeight: 600, cursor: "pointer" }}>
+            Add More
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>

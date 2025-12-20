@@ -306,8 +306,7 @@ export default function BuilderTab({ onPresetSaved }: BuilderTabProps) {
         systemPrompt={builderSystemPrompt}
         systemPromptTitle="Builder System Prompt"
         inputBackgroundColor="#fff"
-        textareaRows={2}
-        autoResizeTextarea={false}
+        textareaSize="lg"
         inputControlsRight={
           <div style={{
             display: "flex",

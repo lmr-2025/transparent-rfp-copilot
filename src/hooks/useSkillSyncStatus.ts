@@ -56,7 +56,11 @@ export function useSkillSyncLogs(skillId: string, limit = 10) {
         `/api/skills/${skillId}/sync-logs?limit=${limit}`
       );
       if (!response.ok) {
-        throw new Error("Failed to fetch sync logs");
+        const errorData = await response.json().catch(() => null);
+        const errorMessage = typeof errorData?.error === 'string'
+          ? errorData.error
+          : `HTTP ${response.status}`;
+        throw new Error(errorMessage);
       }
       return response.json();
     },

@@ -356,6 +356,8 @@ export const knowledgeChatSchema = z.object({
   userInstructions: z.string().max(50000).optional(), // User-facing behavior/persona instructions
   // Quick mode uses Haiku for faster responses (2-5s vs 10-30s)
   quickMode: z.boolean().optional(),
+  // Call mode for live customer calls - produces ultra-brief responses
+  callMode: z.boolean().optional(),
   // GTM data from Snowflake (Gong, HubSpot, Looker)
   gtmData: gtmDataContextSchema.optional(),
 });

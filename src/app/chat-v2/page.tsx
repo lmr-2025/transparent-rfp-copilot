@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useCallback, useState, useRef } from "react";
+import { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { History, Plus, Eye, MessageSquareOff } from "lucide-react";
+import { History, Plus, MessageSquareOff, Eye, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
@@ -30,6 +30,7 @@ import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseAnswerSections } from "@/lib/questionHelpers";
+import { estimateTokens, formatTokenCount, TOKEN_LIMITS } from "@/lib/tokenUtils";
 
 // Sidebar resize constants
 const SIDEBAR_MIN_WIDTH = 280;
@@ -47,10 +48,13 @@ export default function ChatV2Page() {
   const [lastTransparency, setLastTransparency] = useState<TransparencyData | null>(null);
   // Quick mode for faster LLM responses (Haiku vs Sonnet)
   const [quickMode, setQuickMode] = useState(false);
+  // Call mode for concise, rapid-fire responses during live calls
+  const [callMode, setCallMode] = useState(false);
 
   // V2 specific state
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [focusedCustomerId, setFocusedCustomerId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   // Zustand stores
   const {
@@ -66,6 +70,7 @@ export default function ChatV2Page() {
     setCurrentSessionId,
     setUserInstructions,
     clearChat,
+    trimMessages,
   } = useChatStore();
 
   const {
@@ -195,11 +200,17 @@ ${keyFactsText}`;
         }).join("\n\n---\n\n")
       : "";
 
-    // Build system prompt
+    // Build system prompt preview - mirrors API structure
     const blockSystemPrompt = getDefaultPrompt("chat");
-    const baseSystemPrompt = userInstructions
+    let baseSystemPrompt = userInstructions
       ? `${blockSystemPrompt}\n\n## User Instructions\n${userInstructions}`
       : blockSystemPrompt;
+
+    // Call mode appears at the very end (after knowledge context in full prompt)
+    // For preview, we append it to show it will be included
+    if (callMode) {
+      baseSystemPrompt += `\n\n## CRITICAL: LIVE CALL MODE ACTIVE\n[Call mode instructions will appear here, after all knowledge context]`;
+    }
 
     return {
       systemPrompt: baseSystemPrompt,
@@ -212,7 +223,7 @@ ${keyFactsText}`;
       maxTokens: 4000,
       temperature: 0.3,
     };
-  }, [skills, documents, urls, customers, userInstructions, getSelectedSkillIds, getSelectedDocumentIds, getSelectedUrlIds, getSelectedCustomerIds]);
+  }, [skills, documents, urls, customers, userInstructions, callMode, getSelectedSkillIds, getSelectedDocumentIds, getSelectedUrlIds, getSelectedCustomerIds]);
 
   // Handle sending a message
   const handleSend = useCallback(async () => {
@@ -280,6 +291,7 @@ ${keyFactsText}`;
         conversationHistory,
         userInstructions,
         quickMode,
+        callMode, // Send as separate flag - API handles positioning at end of prompt
       });
 
       // Parse the response to extract transparency metadata
@@ -299,6 +311,7 @@ ${keyFactsText}`;
         ...(parsed.reasoning && { reasoning: parsed.reasoning }),
         ...(parsed.inference && { inference: parsed.inference }),
         ...(parsed.remarks && { remarks: parsed.remarks }),
+        ...(parsed.notes && { notes: parsed.notes }),
       };
 
       addMessage(assistantMessage);
@@ -318,6 +331,8 @@ ${keyFactsText}`;
           role: m.role,
           content: m.content,
           timestamp: m.timestamp.toISOString(),
+          confidence: m.confidence,
+          notes: m.notes,
         })),
         skillsUsed: response.skillsUsed || [],
         documentsUsed: response.documentsUsed || [],
@@ -347,6 +362,7 @@ ${keyFactsText}`;
     userInstructions,
     currentSessionId,
     quickMode,
+    callMode,
     addMessage,
     setInputValue,
     setIsLoading,
@@ -374,6 +390,8 @@ ${keyFactsText}`;
       role: m.role as "user" | "assistant",
       content: m.content,
       timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
+      confidence: m.confidence,
+      notes: m.notes,
     }));
     setMessages(loadedMessages);
     setCurrentSessionId(sessionItem.id);
@@ -402,6 +420,15 @@ ${keyFactsText}`;
     setShowTransparency(true);
   };
 
+  // Compact history - keep last 10 messages
+  const handleCompactHistory = useCallback(() => {
+    const keepCount = 10;
+    const removed = trimMessages(keepCount);
+    if (removed > 0) {
+      toast.success(`Removed ${removed} older messages to free up context`);
+    }
+  }, [trimMessages]);
+
   const handlePreviewPrompt = () => {
     setTransparencyData(buildTransparencyData());
     setShowTransparency(true);
@@ -413,50 +440,56 @@ ${keyFactsText}`;
 
   const focusedCustomer = customers.find((c) => c.id === focusedCustomerId) || null;
 
+  // Estimate token usage for current conversation
+  const tokenEstimate = useMemo(() => {
+    // Conversation history tokens
+    const historyText = messages.map(m => m.content).join(" ");
+    const historyTokens = estimateTokens(historyText);
+
+    // Selected knowledge context tokens (rough estimate based on content length)
+    const selectedSkillIds = getSelectedSkillIds();
+    const selectedDocIds = getSelectedDocumentIds();
+    const selectedCustomerIds = getSelectedCustomerIds();
+
+    const skillsText = skills
+      .filter(s => selectedSkillIds.includes(s.id))
+      .map(s => s.content)
+      .join(" ");
+    const skillTokens = estimateTokens(skillsText);
+
+    // Documents - we don't have content loaded, estimate per doc
+    const docTokens = selectedDocIds.length * TOKEN_LIMITS.DOC_ESTIMATE;
+
+    // Customers - estimate per profile
+    const customerTokens = selectedCustomerIds.length * TOKEN_LIMITS.CUSTOMER_ESTIMATE;
+
+    // System prompt base + user instructions
+    const systemTokens = TOKEN_LIMITS.SYSTEM_PROMPT_BASE + estimateTokens(userInstructions);
+
+    const totalTokens = historyTokens + skillTokens + docTokens + customerTokens + systemTokens;
+
+    // Claude's context window is ~200k tokens, but we use a practical limit
+    const maxTokens = TOKEN_LIMITS.CHAT_MAX;
+    const usagePercent = Math.min(100, Math.round((totalTokens / maxTokens) * 100));
+
+    return {
+      total: totalTokens,
+      history: historyTokens,
+      context: skillTokens + docTokens + customerTokens,
+      maxTokens,
+      usagePercent,
+      isHigh: usagePercent > 70,
+      isCritical: usagePercent > 90,
+    };
+  }, [messages, skills, userInstructions, getSelectedSkillIds, getSelectedDocumentIds, getSelectedCustomerIds]);
+
   return (
     <div ref={containerRef} className="flex h-screen overflow-hidden bg-background">
       {/* Left - Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
-        {/* Page Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">Knowledge Chat</h1>
-          </div>
-          <a
-            href="/collateral"
-            className="text-sm text-muted-foreground hover:text-primary transition-colors"
-          >
-            Need to build slides or collateral? →
-          </a>
-        </div>
-
-        {/* Controls Row */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-muted/30">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handlePreviewPrompt}
-              className="gap-2"
-            >
-              <Eye className="h-4 w-4" />
-              System Prompt
-            </Button>
-            {lastTransparency && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setTransparencyData(lastTransparency);
-                  setShowTransparency(true);
-                }}
-                className="gap-2 text-green-600 border-green-200 bg-green-50 hover:bg-green-100"
-              >
-                <Eye className="h-4 w-4" />
-                View Last Prompt
-              </Button>
-            )}
-          </div>
+        {/* Header Bar */}
+        <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+          <h1 className="text-lg font-semibold">Knowledge Chat</h1>
           <div className="flex items-center gap-2">
             {session?.user && (
               <Button
@@ -487,12 +520,14 @@ ${keyFactsText}`;
           </div>
         </div>
 
-        {/* Combined Persona + Customer Controls */}
+        {/* Controls Bar */}
         <ContextControlsBar
           selectedPresetId={selectedPresetId}
           onPresetChange={handlePresetChange}
           userInstructions={userInstructions}
           onUserInstructionsChange={setUserInstructions}
+          callMode={callMode}
+          onCallModeChange={setCallMode}
           customers={customers}
           selectedCustomerId={focusedCustomerId}
           onCustomerSelect={handleCustomerFocusChange}
@@ -500,54 +535,92 @@ ${keyFactsText}`;
         />
 
         {/* Messages */}
-        <div className="relative flex-1 min-h-0">
+        <div className="relative flex-1 min-h-0 overflow-hidden">
           <MessageList
             messages={messages}
             onViewTransparency={handleViewTransparency}
           />
 
-          {/* Chat History Panel */}
+          {/* Chat History Panel - positioned inside relative container */}
           {showHistory && session?.user && (
-            <ChatHistoryPanel
-              sessions={chatSessions}
-              currentSessionId={currentSessionId}
-              isLoading={sessionsLoading}
-              onLoadSession={handleLoadSession}
-              onDeleteSession={handleDeleteSession}
-              onClose={() => setShowHistory(false)}
-            />
+            <div className="absolute top-2 right-2 z-50 w-96">
+              <ChatHistoryPanel
+                sessions={chatSessions}
+                currentSessionId={currentSessionId}
+                isLoading={sessionsLoading}
+                onLoadSession={handleLoadSession}
+                onDeleteSession={handleDeleteSession}
+                onClose={() => setShowHistory(false)}
+              />
+            </div>
           )}
         </div>
 
         {/* Input */}
-        <div className="border-t border-border">
-          <ChatInput
-            value={inputValue}
-            onChange={setInputValue}
-            onSend={handleSend}
-            isLoading={isLoading}
-            placeholder={
-              totalSelected === 0
-                ? "Select at least one knowledge item to start chatting..."
-                : "Type your message..."
-            }
-            quickMode={quickMode}
-            onQuickModeChange={setQuickMode}
-          />
-        </div>
+        <ChatInput
+          value={inputValue}
+          onChange={setInputValue}
+          onSend={handleSend}
+          isLoading={isLoading}
+          placeholder={
+            totalSelected === 0
+              ? "Select at least one knowledge item to start chatting..."
+              : "Type your message..."
+          }
+          quickMode={quickMode}
+          onQuickModeChange={setQuickMode}
+          leftContent={
+            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+              <span>
+                Context: {getSelectedSkillIds().length} skills, {getSelectedDocumentIds().length} docs, {getSelectedUrlIds().length} URLs
+              </span>
+              {focusedCustomer && (
+                <span className="text-primary">
+                  Customer: {focusedCustomer.name}
+                </span>
+              )}
+              <span className={tokenEstimate.isCritical ? "text-red-500 font-medium" : tokenEstimate.isHigh ? "text-amber-500" : ""}>
+                Tokens: ~{formatTokenCount(tokenEstimate.total)} / {formatTokenCount(tokenEstimate.maxTokens)} ({tokenEstimate.usagePercent}%)
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCompactHistory}
+                disabled={tokenEstimate.history <= TOKEN_LIMITS.COMPACT_THRESHOLD || messages.length <= 10}
+                className="gap-1 h-6 px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Scissors className="h-3 w-3" />
+                Compact
+              </Button>
+            </div>
+          }
+          rightContent={
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handlePreviewPrompt}
+              className="gap-1.5 text-xs text-muted-foreground hover:text-foreground h-7"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              Preview prompt
+            </Button>
+          }
+        />
       </div>
 
-      {/* Resizable Divider */}
-      <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+      {/* Resizable Divider - hidden when collapsed */}
+      {!sidebarCollapsed && (
+        <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+      )}
 
       {/* Right - Context Sidebar (full height) */}
       <div
         style={{
-          width: `${sidebarWidth}px`,
-          minWidth: `${sidebarMinWidth}px`,
-          maxWidth: `${sidebarMaxWidth}px`,
+          width: sidebarCollapsed ? '48px' : `${sidebarWidth}px`,
+          minWidth: sidebarCollapsed ? '48px' : `${sidebarMinWidth}px`,
+          maxWidth: sidebarCollapsed ? '48px' : `${sidebarMaxWidth}px`,
         }}
-        className="flex-shrink-0 flex flex-col h-full"
+        className="flex-shrink-0 flex flex-col h-full transition-all duration-200"
       >
         <CollapsibleKnowledgeSidebar
           skills={skills}
@@ -556,6 +629,8 @@ ${keyFactsText}`;
           customers={customers}
           selectedCustomer={focusedCustomer}
           isLoading={isDataLoading}
+          isCollapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
         />
       </div>
 

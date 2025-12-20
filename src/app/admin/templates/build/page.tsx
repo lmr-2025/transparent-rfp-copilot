@@ -320,6 +320,7 @@ What would you like to create?`,
           onErrorDismiss={() => setError(null)}
           header={header}
           showSystemPromptButton={false}
+          textareaSize="lg"
         />
       </div>
 

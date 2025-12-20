@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth } from "@/lib/apiAuth";
+import { requireAuth, requireAnyCapability } from "@/lib/apiAuth";
 import { createSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
@@ -112,6 +112,7 @@ export async function GET(request: NextRequest) {
  * becomes the owner of the skill automatically.
  *
  * @authentication Required - returns 401 if not authenticated
+ * @authorization Requires MANAGE_KNOWLEDGE or ADMIN capability
  *
  * @body {string} title - Skill title (required)
  * @body {string} content - Main skill content/knowledge (required)
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest) {
  * @returns {Skill} 201 - Created skill object
  * @returns {{ error: string }} 400 - Validation error
  * @returns {{ error: string }} 401 - Unauthorized
+ * @returns {{ error: string }} 403 - Forbidden (missing capability)
  * @returns {{ error: string }} 500 - Server error
  *
  * @example
@@ -132,7 +134,8 @@ export async function GET(request: NextRequest) {
  * { "title": "SOC2 Compliance", "content": "Our SOC2 Type II..." }
  */
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth();
+  // Require MANAGE_KNOWLEDGE or ADMIN capability to create skills
+  const auth = await requireAnyCapability(["MANAGE_KNOWLEDGE", "ADMIN"]);
   if (!auth.authorized) {
     return auth.response;
   }

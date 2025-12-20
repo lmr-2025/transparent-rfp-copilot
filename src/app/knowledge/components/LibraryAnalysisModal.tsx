@@ -288,6 +288,7 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
           header={header}
           systemPrompt={systemPrompt}
           systemPromptTitle="Analysis System Prompt"
+          textareaSize="md"
         />
 
         {/* Right Column - Analysis Summary */}

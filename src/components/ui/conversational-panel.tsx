@@ -16,6 +16,15 @@ export type Message = {
   content: string;
 };
 
+/** Textarea height presets */
+export type TextareaSize = "sm" | "md" | "lg";
+
+const TEXTAREA_SIZES: Record<TextareaSize, { min: number; max: number }> = {
+  sm: { min: 44, max: 120 },   // ~1-4 lines (original)
+  md: { min: 80, max: 160 },   // ~3-6 lines
+  lg: { min: 120, max: 240 },  // ~5-10 lines
+};
+
 export type ConversationalPanelProps = {
   /** Chat messages to display */
   messages: Message[];
@@ -59,6 +68,8 @@ export type ConversationalPanelProps = {
   textareaRows?: number;
   /** Auto-resize textarea */
   autoResizeTextarea?: boolean;
+  /** Textarea height preset - defaults to "sm" for backward compatibility */
+  textareaSize?: TextareaSize;
 };
 
 // ============================================
@@ -290,7 +301,9 @@ export function ConversationalPanel({
   inputBackgroundColor = "#fafafa",
   textareaRows = 1,
   autoResizeTextarea = true,
+  textareaSize = "sm",
 }: ConversationalPanelProps) {
+  const { min: minHeight, max: maxHeight } = TEXTAREA_SIZES[textareaSize];
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [showSystemPromptModal, setShowSystemPromptModal] = useState(false);
@@ -310,8 +323,8 @@ export function ConversationalPanel({
   const handleTextareaInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     if (!autoResizeTextarea) return;
     const target = e.target as HTMLTextAreaElement;
-    target.style.height = "44px";
-    target.style.height = Math.min(target.scrollHeight, 120) + "px";
+    target.style.height = `${minHeight}px`;
+    target.style.height = Math.min(target.scrollHeight, maxHeight) + "px";
   };
 
   // Show post-initial content only when we have exactly one assistant message
@@ -458,8 +471,8 @@ export function ConversationalPanel({
               resize: "none",
               outline: "none",
               fontFamily: "inherit",
-              minHeight: "44px",
-              maxHeight: "120px",
+              minHeight: `${minHeight}px`,
+              maxHeight: `${maxHeight}px`,
             }}
           />
           <button

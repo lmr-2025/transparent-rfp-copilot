@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { User, Users, Building2, MapPin, Star, Filter, X, ChevronDown } from "lucide-react";
+import { User, Users, Building2, MapPin, Star, Filter, X, ChevronDown, Phone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,11 +38,18 @@ interface ContextControlsBarProps {
   onPresetChange: (preset: InstructionPreset | null) => void;
   userInstructions: string;
   onUserInstructionsChange: (instructions: string) => void;
+  // Call mode props (optional - only shown in chat context)
+  callMode?: boolean;
+  onCallModeChange?: (enabled: boolean) => void;
   // Customer props
   customers: CustomerProfile[];
   selectedCustomerId: string | null;
   onCustomerSelect: (customerId: string | null) => void;
   customersLoading?: boolean;
+  // Optional left content (e.g., title)
+  leftContent?: React.ReactNode;
+  // Optional right content (e.g., action buttons)
+  rightContent?: React.ReactNode;
 }
 
 export function ContextControlsBar({
@@ -50,10 +57,14 @@ export function ContextControlsBar({
   onPresetChange,
   userInstructions,
   onUserInstructionsChange,
+  callMode,
+  onCallModeChange,
   customers,
   selectedCustomerId,
   onCustomerSelect,
   customersLoading,
+  leftContent,
+  rightContent,
 }: ContextControlsBarProps) {
   // Persona state
   const [presets, setPresets] = useState<InstructionPreset[]>([]);
@@ -153,13 +164,18 @@ export function ContextControlsBar({
   if (isLoading) {
     return (
       <div className="flex items-center gap-6 px-4 py-2 border-b border-border bg-muted/30">
+        {leftContent}
         <span className="text-sm text-muted-foreground">Loading...</span>
+        {rightContent && <div className="ml-auto flex items-center gap-2">{rightContent}</div>}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-6 px-4 py-2 border-b border-border bg-muted/30">
+    <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-muted/30">
+      {/* Left content (e.g., title) */}
+      {leftContent}
+
       {/* Assistant Persona Section */}
       <div className="flex items-center gap-2">
         <User className="h-4 w-4 text-muted-foreground" />
@@ -229,8 +245,26 @@ export function ContextControlsBar({
         </DropdownMenu>
       </div>
 
-      {/* Divider */}
-      <div className="h-5 w-px bg-border" />
+      {/* Call Mode Toggle - only shown when props are provided */}
+      {onCallModeChange && (
+        <>
+          <Button
+            variant={callMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => onCallModeChange(!callMode)}
+            className={`gap-2 ${callMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}`}
+          >
+            <Phone className="h-4 w-4" />
+            Call Mode
+          </Button>
+
+          {/* Divider */}
+          <div className="h-5 w-px bg-border" />
+        </>
+      )}
+
+      {/* Divider (when no call mode) */}
+      {!onCallModeChange && <div className="h-5 w-px bg-border" />}
 
       {/* Customer Focus Section */}
       <div className="flex items-center gap-2">
@@ -290,8 +324,8 @@ export function ContextControlsBar({
         </DropdownMenu>
       </div>
 
-      {/* Segment Filters - pushed to the right */}
-      <div className="flex items-center gap-2 ml-auto">
+      {/* Segment Filters */}
+      <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="sm" className="gap-2">
@@ -373,6 +407,13 @@ export function ContextControlsBar({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {/* Right content (e.g., action buttons) - pushed to the right */}
+      {rightContent && (
+        <div className="flex items-center gap-2 ml-auto">
+          {rightContent}
+        </div>
+      )}
     </div>
   );
 }

@@ -56,10 +56,11 @@ model User {
   ownedSkills      Skill[]             @relation("SkillOwner")
   ownedCustomers   CustomerProfile[]   @relation("CustomerOwner")
   ownedDocuments   KnowledgeDocument[] @relation("DocumentOwner")
-  ownedUrls        ReferenceUrl[]      @relation("UrlOwner")
-  collateralOutputs CollateralOutput[]
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  ownedUrls           ReferenceUrl[]      @relation("UrlOwner")
+  collateralOutputs   CollateralOutput[]
+  knowledgeRequests   KnowledgeRequest[]  @relation("KnowledgeRequests")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
 }
 
 // User Preferences - per-user settings including LLM speed preferences
@@ -598,6 +599,45 @@ model ReferenceUrl {
   @@index([addedAt])
   @@index([ownerId])
   @@index([skillId])
+}
+
+// Knowledge Requests - Allows users without MANAGE_KNOWLEDGE to request new knowledge
+model KnowledgeRequest {
+  id            String                 @id @default(uuid())
+  title         String                 // Proposed skill/knowledge title
+  description   String                 @db.Text // What knowledge is needed and why
+  suggestedUrls String[]               // Optional URLs that could help build this knowledge
+  categories    String[]               // Suggested categories
+  status        KnowledgeRequestStatus @default(PENDING)
+
+  // Who requested
+  requestedById    String
+  requestedByEmail String?
+  requestedByName  String?
+  requestedBy      User              @relation("KnowledgeRequests", fields: [requestedById], references: [id], onDelete: Cascade)
+
+  // Review fields
+  reviewedAt       DateTime?
+  reviewedById     String?
+  reviewedByEmail  String?
+  reviewNote       String?           @db.Text // Admin's response/notes
+
+  // If approved and converted to a skill
+  skillId          String?           // Link to created skill
+
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([status])
+  @@index([requestedById])
+  @@index([createdAt])
+}
+
+enum KnowledgeRequestStatus {
+  PENDING     // Awaiting review
+  APPROVED    // Admin approved, may be converted to skill
+  REJECTED    // Admin rejected with reason
+  COMPLETED   // Skill was created from this request
 }
 
 // Chat Prompts (prompt library for The Oracle)

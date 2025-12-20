@@ -20,6 +20,7 @@ export type ChatMessage = {
   reasoning?: string;
   inference?: string;
   remarks?: string;
+  notes?: string; // "Show your work" combined field for chat
   // Feedback data
   feedback?: {
     rating: FeedbackRating;
@@ -60,6 +61,7 @@ interface ChatState {
   setUserInstructions: (instructions: string) => void;
   setSelectedPresetId: (id: string | null) => void;
   clearChat: () => void;
+  trimMessages: (keepCount: number) => number; // Returns number of messages removed
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -98,4 +100,17 @@ export const useChatStore = create<ChatState>((set) => ({
       currentSessionId: null,
       error: null,
     }),
+  trimMessages: (keepCount: number) => {
+    let removed = 0;
+    set((state) => {
+      if (state.messages.length <= keepCount) {
+        return state; // Nothing to trim
+      }
+      removed = state.messages.length - keepCount;
+      return {
+        messages: state.messages.slice(-keepCount),
+      };
+    });
+    return removed;
+  },
 }));

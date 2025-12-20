@@ -37,21 +37,42 @@ export interface UsageData {
   model: string;
   inputTokens: number;
   outputTokens: number;
+  /** Tokens written to Anthropic prompt cache (1.25x cost) */
+  cacheCreationTokens?: number;
+  /** Tokens read from Anthropic prompt cache (0.1x cost - 90% savings!) */
+  cacheReadTokens?: number;
   metadata?: Record<string, unknown>;
 }
 
 /**
- * Calculate the estimated cost for a given usage
+ * Calculate the estimated cost for a given usage.
+ * Accounts for prompt caching pricing:
+ * - Cache writes cost 1.25x base input price
+ * - Cache reads cost 0.1x base input price (90% savings!)
  */
 export function calculateCost(
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
+  cacheCreationTokens?: number,
+  cacheReadTokens?: number
 ): number {
   const pricing = PRICING[model as ModelKey] || PRICING.default;
-  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+
+  // Base input cost (non-cached tokens)
+  const nonCachedInputTokens = inputTokens - (cacheCreationTokens || 0) - (cacheReadTokens || 0);
+  const baseCost = (Math.max(0, nonCachedInputTokens) / 1_000_000) * pricing.input;
+
+  // Cache write cost (1.25x base price)
+  const cacheWriteCost = ((cacheCreationTokens || 0) / 1_000_000) * pricing.input * 1.25;
+
+  // Cache read cost (0.1x base price - 90% discount!)
+  const cacheReadCost = ((cacheReadTokens || 0) / 1_000_000) * pricing.input * 0.1;
+
+  // Output cost (unchanged)
   const outputCost = (outputTokens / 1_000_000) * pricing.output;
-  return inputCost + outputCost;
+
+  return baseCost + cacheWriteCost + cacheReadCost + outputCost;
 }
 
 /**
@@ -63,8 +84,17 @@ export async function logUsage(data: UsageData): Promise<void> {
     const estimatedCost = calculateCost(
       data.model,
       data.inputTokens,
-      data.outputTokens
+      data.outputTokens,
+      data.cacheCreationTokens,
+      data.cacheReadTokens
     );
+
+    // Include cache metrics in metadata for analysis
+    const metadata = {
+      ...data.metadata,
+      ...(data.cacheCreationTokens !== undefined && { cacheCreationTokens: data.cacheCreationTokens }),
+      ...(data.cacheReadTokens !== undefined && { cacheReadTokens: data.cacheReadTokens }),
+    };
 
     await prisma.apiUsage.create({
       data: {
@@ -76,7 +106,7 @@ export async function logUsage(data: UsageData): Promise<void> {
         outputTokens: data.outputTokens,
         totalTokens,
         estimatedCost,
-        metadata: data.metadata as Prisma.InputJsonValue || undefined,
+        metadata: Object.keys(metadata).length > 0 ? metadata as Prisma.InputJsonValue : undefined,
       },
     });
   } catch (error) {
@@ -86,15 +116,40 @@ export async function logUsage(data: UsageData): Promise<void> {
 }
 
 /**
- * Extract token usage from Anthropic API response
+ * Extract token usage from Anthropic API response, including cache metrics.
  */
 export function extractUsageFromResponse(response: {
-  usage?: { input_tokens?: number; output_tokens?: number };
-}): { inputTokens: number; outputTokens: number } {
-  return {
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_creation_input_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+}): {
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationTokens?: number;
+  cacheReadTokens?: number;
+} {
+  const result: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens?: number;
+    cacheReadTokens?: number;
+  } = {
     inputTokens: response.usage?.input_tokens || 0,
     outputTokens: response.usage?.output_tokens || 0,
   };
+
+  // Only include cache metrics if they're present (indicates caching was used)
+  if (response.usage?.cache_creation_input_tokens !== undefined) {
+    result.cacheCreationTokens = response.usage.cache_creation_input_tokens;
+  }
+  if (response.usage?.cache_read_input_tokens !== undefined) {
+    result.cacheReadTokens = response.usage.cache_read_input_tokens;
+  }
+
+  return result;
 }
 
 /**

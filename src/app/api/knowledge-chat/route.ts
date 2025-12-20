@@ -13,6 +13,7 @@ import { CONTEXT_LIMITS } from "@/lib/constants";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { buildGTMContextString, type CustomerGTMData } from "@/types/gtmData";
+import { buildCacheableSystem, type SystemContent } from "@/lib/anthropicCache";
 
 export const maxDuration = 60;
 
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest) {
   const conversationHistory = data.conversationHistory || [];
   const userInstructions = data.userInstructions || "";
   const quickMode = data.quickMode;
+  const callMode = data.callMode;
   const gtmData = data.gtmData;
 
   // Determine model speed (request override > user preference > system default)
@@ -268,20 +270,57 @@ ${profileContent}${considerationsText}${customerDocsText}`;
       ? await interpolateSnippets(userInstructions)
       : "";
 
-    // Build full system prompt by adding context sections
-    const contextParts: string[] = [baseSystemPrompt];
+    // Build system prompt with caching support
+    // CACHED: Base prompt + knowledge context + customer context (stable reference data)
+    // DYNAMIC: User instructions + call mode (per-request customization)
 
-    if (expandedInstructions) {
-      contextParts.push(`## User Instructions\n${expandedInstructions}`);
-    }
+    const cachedParts: string[] = [baseSystemPrompt];
 
     if (finalCustomerContext) {
-      contextParts.push(`## Customer Context\n${finalCustomerContext}`);
+      cachedParts.push(`## Customer Context\n${finalCustomerContext}`);
     }
 
-    contextParts.push(`## Knowledge Base\n${combinedKnowledgeContext}`);
+    cachedParts.push(`## Knowledge Base\n${combinedKnowledgeContext}`);
 
-    const systemPrompt = contextParts.join("\n\n");
+    const cachedContent = cachedParts.join("\n\n");
+
+    // Dynamic content that changes per request (not cached)
+    const dynamicParts: string[] = [];
+
+    if (expandedInstructions) {
+      dynamicParts.push(`## User Instructions\n${expandedInstructions}`);
+    }
+
+    // Call mode goes LAST for maximum impact - it needs to override verbosity from knowledge context
+    if (callMode) {
+      dynamicParts.push(`## CRITICAL: LIVE CALL MODE ACTIVE
+
+**YOU ARE ON A LIVE CUSTOMER CALL RIGHT NOW.**
+
+OVERRIDE ALL OTHER INSTRUCTIONS - your response MUST be:
+- **MAXIMUM 2-3 sentences** - no exceptions
+- **Direct answer first** - no preamble, no "great question"
+- **No elaboration** unless explicitly asked
+- **Bullet points only** for any lists
+
+If you cannot answer briefly, say: "Let me get you that info after the call."
+
+DO NOT write paragraphs. DO NOT explain context. Answer and STOP.`);
+    }
+
+    const dynamicContent = dynamicParts.length > 0 ? dynamicParts.join("\n\n") : undefined;
+
+    // Build cacheable system content (returns array with cache_control if above threshold)
+    const systemContent: SystemContent = buildCacheableSystem({
+      cachedContent,
+      dynamicContent,
+      model,
+    });
+
+    // For transparency, we still need the full system prompt as a string
+    const systemPrompt = dynamicContent
+      ? `${cachedContent}\n\n${dynamicContent}`
+      : cachedContent;
 
     // Build messages array with conversation history
     // For PDFs with fileData, include them as native document content in the user message
@@ -332,7 +371,7 @@ ${profileContent}${considerationsText}${customerDocsText}`;
       model,
       max_tokens: 4000,
       temperature: 0.3,
-      system: systemPrompt,
+      system: systemContent, // Uses cached content blocks when above token threshold
       messages: messages as Parameters<typeof anthropic.messages.create>[0]["messages"],
     });
 
@@ -341,7 +380,7 @@ ${profileContent}${considerationsText}${customerDocsText}`;
       throw new Error("Unexpected response format");
     }
 
-    // Log usage asynchronously
+    // Log usage asynchronously (including cache metrics for cost tracking)
     logUsage({
       userId: authSession?.user?.id,
       userEmail: authSession?.user?.email,
@@ -349,6 +388,8 @@ ${profileContent}${considerationsText}${customerDocsText}`;
       model,
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
+      cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
+      cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
       metadata: {
         skillCount: skills.length,
         documentCount: documents.length,
