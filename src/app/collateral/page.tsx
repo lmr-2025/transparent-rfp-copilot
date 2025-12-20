@@ -249,7 +249,7 @@ export default function CollateralBuilderPage() {
   const { data: skills = [], isLoading: skillsLoading } = useApiQuery<Skill[]>({
     queryKey: ["skills"],
     url: "/api/skills",
-    responseKey: "data",
+    responseKey: "skills",
     transform: (data) => (Array.isArray(data) ? data : []),
   });
 
