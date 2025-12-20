@@ -1,7 +1,16 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ModalContainer } from "@/components/ui/modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface User {
   id: string;
@@ -31,135 +40,6 @@ interface FlagReviewModalProps {
   /** Number of items queued for review (shown in badge) */
   queuedCount?: number;
 }
-
-const styles = {
-  title: {
-    fontSize: "18px",
-    fontWeight: 600,
-    color: "#1e293b",
-    marginBottom: "8px",
-  },
-  subtitle: {
-    fontSize: "14px",
-    color: "#64748b",
-    lineHeight: 1.5,
-    marginBottom: "20px",
-  },
-  label: {
-    display: "block",
-    fontSize: "14px",
-    fontWeight: 500,
-    color: "#374151",
-    marginBottom: "6px",
-  },
-  select: {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: "14px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    marginBottom: "16px",
-    outline: "none",
-    backgroundColor: "#fff",
-  },
-  textarea: {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: "14px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    marginBottom: "20px",
-    outline: "none",
-    minHeight: "80px",
-    resize: "vertical" as const,
-    fontFamily: "inherit",
-    lineHeight: 1.5,
-  },
-  buttonRow: {
-    display: "flex",
-    gap: "12px",
-    justifyContent: "flex-end",
-    flexWrap: "wrap" as const,
-  },
-  button: {
-    padding: "10px 20px",
-    borderRadius: "8px",
-    fontSize: "14px",
-    fontWeight: 500,
-    cursor: "pointer",
-    transition: "all 0.15s ease",
-    border: "none",
-  },
-  cancelButton: {
-    backgroundColor: "#f1f5f9",
-    color: "#475569",
-    border: "1px solid #e2e8f0",
-  },
-  sendNowButton: {
-    backgroundColor: "#0ea5e9",
-    color: "#fff",
-  },
-  queueButton: {
-    backgroundColor: "#8b5cf6",
-    color: "#fff",
-  },
-  flagButton: {
-    backgroundColor: "#f59e0b",
-    color: "#fff",
-  },
-  hint: {
-    fontSize: "12px",
-    color: "#94a3b8",
-    marginTop: "-12px",
-    marginBottom: "16px",
-  },
-  actionTabs: {
-    display: "flex",
-    gap: "8px",
-    marginBottom: "20px",
-  },
-  tab: {
-    flex: 1,
-    padding: "12px 16px",
-    borderRadius: "8px",
-    border: "2px solid #e2e8f0",
-    backgroundColor: "#fff",
-    cursor: "pointer",
-    textAlign: "center" as const,
-    transition: "all 0.15s ease",
-  },
-  tabActive: {
-    borderColor: "#0ea5e9",
-    backgroundColor: "#f0f9ff",
-  },
-  tabIcon: {
-    fontSize: "20px",
-    marginBottom: "4px",
-    display: "block",
-  },
-  tabLabel: {
-    fontSize: "14px",
-    fontWeight: 500,
-    color: "#1e293b",
-  },
-  tabDescription: {
-    fontSize: "12px",
-    color: "#64748b",
-    marginTop: "2px",
-  },
-  queueBadge: {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#8b5cf6",
-    color: "#fff",
-    borderRadius: "12px",
-    padding: "2px 8px",
-    fontSize: "12px",
-    fontWeight: 600,
-    marginLeft: "8px",
-  },
-};
 
 export default function FlagReviewModal({
   isOpen,
@@ -216,119 +96,122 @@ export default function FlagReviewModal({
   };
 
   return (
-    <ModalContainer
-      isOpen={isOpen}
-      onClose={onCancel}
-      width="520px"
-      ariaLabelledBy="flag-review-modal-title"
-    >
-      <h2 id="flag-review-modal-title" style={styles.title}>
-          Flag or Request Review
-        </h2>
-        <p style={styles.subtitle}>
-          Mark this answer for attention or get help from a colleague.
-        </p>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-[520px]">
+        <DialogHeader>
+          <DialogTitle>Flag or Request Review</DialogTitle>
+          <DialogDescription>
+            Mark this answer for attention or get help from a colleague.
+          </DialogDescription>
+        </DialogHeader>
 
-        {/* Action Tabs */}
-        <div style={styles.actionTabs}>
-          <button
-            type="button"
-            onClick={() => setAction("flag")}
-            style={{
-              ...styles.tab,
-              ...(action === "flag" ? styles.tabActive : {}),
-            }}
-          >
-            <span style={styles.tabIcon}>🚩</span>
-            <span style={styles.tabLabel}>Flag</span>
-            <span style={styles.tabDescription}>Mark for your attention</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setAction("need-help")}
-            style={{
-              ...styles.tab,
-              ...(action === "need-help" ? styles.tabActive : {}),
-            }}
-          >
-            <span style={styles.tabIcon}>🤚</span>
-            <span style={styles.tabLabel}>Need Help?</span>
-            <span style={styles.tabDescription}>Request a review</span>
-          </button>
+        <div className="space-y-5">
+          {/* Action Tabs */}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAction("flag")}
+              className={cn(
+                "flex-1 p-3 rounded-lg border-2 bg-white cursor-pointer text-center transition-all",
+                action === "flag"
+                  ? "border-sky-500 bg-sky-50"
+                  : "border-slate-200"
+              )}
+            >
+              <span className="text-xl mb-1 block">🚩</span>
+              <span className="text-sm font-medium text-slate-800">Flag</span>
+              <span className="text-xs text-slate-500 mt-0.5 block">Mark for your attention</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAction("need-help")}
+              className={cn(
+                "flex-1 p-3 rounded-lg border-2 bg-white cursor-pointer text-center transition-all",
+                action === "need-help"
+                  ? "border-sky-500 bg-sky-50"
+                  : "border-slate-200"
+              )}
+            >
+              <span className="text-xl mb-1 block">🤚</span>
+              <span className="text-sm font-medium text-slate-800">Need Help?</span>
+              <span className="text-xs text-slate-500 mt-0.5 block">Request a review</span>
+            </button>
+          </div>
+
+          {/* Reviewer selection - only for "need-help" */}
+          {action === "need-help" && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                Assign to reviewer (optional)
+              </label>
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                disabled={loadingUsers}
+                className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+              >
+                <option value="">Anyone can review</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name || user.email || "Unknown user"}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-400 mt-1.5">
+                Leave blank to allow anyone to review, or select a specific person.
+              </p>
+            </div>
+          )}
+
+          {/* Note input */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              {action === "flag" ? "Note (optional)" : "Note for reviewer (optional)"}
+            </label>
+            <textarea
+              ref={textareaRef}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder={
+                action === "flag"
+                  ? "e.g., 'Need to verify compliance claim' or 'Check with legal'"
+                  : "e.g., 'Please verify the SOC 2 claims' or 'Not sure about this'"
+              }
+              className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg min-h-[80px] resize-y font-inherit leading-relaxed focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+            />
+          </div>
         </div>
 
-        {/* Reviewer selection - only for "need-help" */}
-        {action === "need-help" && (
-          <>
-            <label style={styles.label}>Assign to reviewer (optional)</label>
-            <select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value)}
-              style={styles.select}
-              disabled={loadingUsers}
-            >
-              <option value="">Anyone can review</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name || user.email || "Unknown user"}
-                </option>
-              ))}
-            </select>
-            <p style={styles.hint}>
-              Leave blank to allow anyone to review, or select a specific person.
-            </p>
-          </>
-        )}
-
-        {/* Note input */}
-        <label style={styles.label}>
-          {action === "flag" ? "Note (optional)" : "Note for reviewer (optional)"}
-        </label>
-        <textarea
-          ref={textareaRef}
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder={
-            action === "flag"
-              ? "e.g., 'Need to verify compliance claim' or 'Check with legal'"
-              : "e.g., 'Please verify the SOC 2 claims' or 'Not sure about this'"
-          }
-          style={styles.textarea}
-        />
-
         {/* Action buttons */}
-        <div style={styles.buttonRow}>
-          <button
-            onClick={onCancel}
-            style={{ ...styles.button, ...styles.cancelButton }}
-          >
+        <DialogFooter className="flex-wrap gap-2">
+          <Button variant="outline" onClick={onCancel}>
             Cancel
-          </button>
+          </Button>
 
           {/* Queue for End - only available for "need-help" action (flags are instant, not queueable) */}
           {allowQueueing && action === "need-help" && (
-            <button
+            <Button
               onClick={() => handleSubmit("later")}
-              style={{ ...styles.button, ...styles.queueButton }}
+              className="bg-violet-500 hover:bg-violet-600"
             >
               Queue for End
               {queuedCount > 0 && (
-                <span style={styles.queueBadge}>{queuedCount}</span>
+                <span className="inline-flex items-center justify-center bg-violet-400 text-white rounded-full px-2 py-0.5 text-xs font-semibold ml-2">
+                  {queuedCount}
+                </span>
               )}
-            </button>
+            </Button>
           )}
 
-          <button
+          <Button
             onClick={() => handleSubmit("now")}
-            style={{
-              ...styles.button,
-              ...(action === "flag" ? styles.flagButton : styles.sendNowButton),
-            }}
+            className={action === "flag" ? "bg-amber-500 hover:bg-amber-600" : "bg-sky-500 hover:bg-sky-600"}
           >
             {action === "flag" ? "Flag Now" : "Send Now"}
-          </button>
-        </div>
-    </ModalContainer>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

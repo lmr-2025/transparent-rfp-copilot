@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ModalContainer } from "@/components/ui/modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type PromptSection = {
   id: string;
@@ -58,116 +66,48 @@ export default function PromptBuilderModal({
   };
 
   return (
-    <ModalContainer
-      isOpen={isOpen}
-      onClose={onClose}
-      width="full"
-      padding={false}
-      contentStyle={{
-        borderRadius: "16px",
-        maxHeight: "90vh",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}
-      overlayStyle={{ padding: "20px" }}
-      ariaLabelledBy="prompt-builder-modal-title"
-    >
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col p-0">
         {/* Header */}
-        <div style={{
-          padding: "20px 24px",
-          borderBottom: "1px solid #e2e8f0",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-        }}>
+        <DialogHeader className="px-6 py-5 border-b flex flex-row justify-between items-start">
           <div>
-            <h2 id="prompt-builder-modal-title" style={{ margin: 0, fontSize: "20px", fontWeight: 600 }}>{title}</h2>
+            <DialogTitle className="text-xl">{title}</DialogTitle>
             {subtitle && (
-              <p style={{ margin: "4px 0 0 0", fontSize: "14px", color: "#64748b" }}>{subtitle}</p>
+              <DialogDescription className="text-slate-500 mt-1">
+                {subtitle}
+              </DialogDescription>
             )}
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "8px 12px",
-              backgroundColor: "transparent",
-              border: "1px solid #e2e8f0",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "14px",
-            }}
-          >
+          <Button variant="outline" size="sm" onClick={onClose}>
             Close
-          </button>
-        </div>
+          </Button>
+        </DialogHeader>
 
         {/* Content */}
-        <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+        <div className="flex flex-1 overflow-hidden">
           {/* Left: Components */}
-          <div style={{
-            flex: 1,
-            padding: "20px 24px",
-            overflowY: "auto",
-            borderRight: "1px solid #e2e8f0",
-          }}>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "16px",
-            }}>
-              <h3 style={{
-                margin: 0,
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "#64748b",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px",
-              }}>
+          <div className="flex-1 p-5 overflow-y-auto border-r">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 Components
               </h3>
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div className="flex gap-2">
                 <button
                   onClick={expandAll}
-                  style={{
-                    padding: "4px 8px",
-                    backgroundColor: "transparent",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    color: "#64748b",
-                    cursor: "pointer",
-                  }}
+                  className="px-2 py-1 bg-transparent border border-slate-200 rounded text-xs text-slate-500 hover:bg-slate-50"
                 >
                   Expand All
                 </button>
                 <button
                   onClick={collapseAll}
-                  style={{
-                    padding: "4px 8px",
-                    backgroundColor: "transparent",
-                    border: "1px solid #e2e8f0",
-                    borderRadius: "4px",
-                    fontSize: "11px",
-                    color: "#64748b",
-                    cursor: "pointer",
-                  }}
+                  className="px-2 py-1 bg-transparent border border-slate-200 rounded text-xs text-slate-500 hover:bg-slate-50"
                 >
                   Collapse All
                 </button>
                 {onReset && (
                   <button
                     onClick={onReset}
-                    style={{
-                      padding: "4px 8px",
-                      backgroundColor: "transparent",
-                      border: "1px solid #fecaca",
-                      borderRadius: "4px",
-                      fontSize: "11px",
-                      color: "#dc2626",
-                      cursor: "pointer",
-                    }}
+                    className="px-2 py-1 bg-transparent border border-red-200 rounded text-xs text-red-600 hover:bg-red-50"
                   >
                     Reset
                   </button>
@@ -180,13 +120,8 @@ export default function PromptBuilderModal({
               return (
                 <div
                   key={section.id}
-                  style={{
-                    backgroundColor: "#fff",
-                    border: `2px solid ${section.borderColor}`,
-                    borderRadius: "12px",
-                    marginBottom: "12px",
-                    overflow: "hidden",
-                  }}
+                  className="bg-white rounded-xl mb-3 overflow-hidden"
+                  style={{ border: `2px solid ${section.borderColor}` }}
                 >
                   {/* Dropdown Header */}
                   <div
@@ -201,46 +136,34 @@ export default function PromptBuilderModal({
                         toggleSection(section.id);
                       }
                     }}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      padding: "14px 16px",
-                      cursor: "pointer",
-                      userSelect: "none",
-                      backgroundColor: isExpanded ? section.bgColor : "#fff",
-                    }}
+                    className="flex items-center justify-between px-4 py-3.5 cursor-pointer select-none"
+                    style={{ backgroundColor: isExpanded ? section.bgColor : "#fff" }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <div style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "8px",
-                        backgroundColor: section.color,
-                        color: "#fff",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "13px",
-                        fontWeight: 700,
-                      }}>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold text-white"
+                        style={{ backgroundColor: section.color }}
+                      >
                         {idx + 1}
                       </div>
                       <div>
-                        <div style={{ fontWeight: 600, fontSize: "14px", color: section.textColor }}>
+                        <div
+                          className="font-semibold text-sm"
+                          style={{ color: section.textColor }}
+                        >
                           {section.label}
                         </div>
                         {section.hint && (
-                          <div style={{ fontSize: "11px", color: "#64748b" }}>{section.hint}</div>
+                          <div className="text-xs text-slate-500">{section.hint}</div>
                         )}
                       </div>
                     </div>
-                    <div style={{
-                      fontSize: "12px",
-                      color: "#94a3b8",
-                      transform: isExpanded ? "rotate(180deg)" : "rotate(0deg)",
-                      transition: "transform 0.2s",
-                    }}>
+                    <div
+                      className={cn(
+                        "text-xs text-slate-400 transition-transform",
+                        isExpanded && "rotate-180"
+                      )}
+                    >
                       ▼
                     </div>
                   </div>
@@ -249,8 +172,8 @@ export default function PromptBuilderModal({
                   {isExpanded && (
                     <div
                       id={`section-content-${section.id}`}
+                      className="p-4"
                       style={{
-                        padding: "16px",
                         borderTop: `1px solid ${section.borderColor}`,
                         backgroundColor: section.bgColor,
                       }}
@@ -259,31 +182,23 @@ export default function PromptBuilderModal({
                         <textarea
                           value={section.editableValue || ""}
                           onChange={(e) => section.onEdit?.(e.target.value)}
+                          className="w-full min-h-[150px] p-3 rounded-lg bg-white font-mono text-xs resize-y"
                           style={{
-                            width: "100%",
-                            minHeight: "150px",
-                            padding: "12px",
-                            borderRadius: "8px",
                             border: `1px solid ${section.borderColor}`,
-                            backgroundColor: "#fff",
-                            fontFamily: "monospace",
-                            fontSize: "12px",
                             color: section.textColor,
-                            resize: "vertical",
                           }}
                         />
                       ) : (
-                        <div style={{
-                          backgroundColor: section.placeholder ? "transparent" : "#fff",
-                          border: section.placeholder ? "none" : `1px solid ${section.borderColor}`,
-                          borderRadius: "8px",
-                          padding: "12px",
-                          fontSize: "12px",
-                          fontFamily: "monospace",
-                          color: section.textColor,
-                          whiteSpace: "pre-wrap",
-                          opacity: section.placeholder ? 0.7 : 1,
-                        }}>
+                        <div
+                          className={cn(
+                            "rounded-lg p-3 text-xs font-mono whitespace-pre-wrap",
+                            section.placeholder ? "bg-transparent border-none opacity-70" : "bg-white"
+                          )}
+                          style={{
+                            border: section.placeholder ? "none" : `1px solid ${section.borderColor}`,
+                            color: section.textColor,
+                          }}
+                        >
                           {section.content}
                         </div>
                       )}
@@ -295,53 +210,33 @@ export default function PromptBuilderModal({
           </div>
 
           {/* Right: Assembled Preview */}
-          <div style={{
-            flex: 1,
-            padding: "20px 24px",
-            backgroundColor: "#1e293b",
-            overflowY: "auto",
-          }}>
-            <h3 style={{
-              margin: "0 0 16px 0",
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "#94a3b8",
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-            }}>
+          <div className="flex-1 p-5 bg-slate-800 overflow-y-auto">
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">
               Assembled Prompt Preview
             </h3>
 
             {sections.map((section) => (
-              <div key={section.id} style={{ marginBottom: "20px" }}>
-                <div style={{
-                  display: "inline-block",
-                  padding: "3px 10px",
-                  backgroundColor: section.color,
-                  color: "#fff",
-                  borderRadius: "4px",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  marginBottom: "10px",
-                  textTransform: "uppercase",
-                }}>
+              <div key={section.id} className="mb-5">
+                <div
+                  className="inline-block px-2.5 py-1 text-white rounded text-[10px] font-semibold mb-2.5 uppercase"
+                  style={{ backgroundColor: section.color }}
+                >
                   {section.label}
                 </div>
-                <pre style={{
-                  margin: 0,
-                  fontSize: "12px",
-                  fontFamily: "monospace",
-                  color: section.bgColor,
-                  whiteSpace: "pre-wrap",
-                  opacity: section.placeholder ? 0.6 : 1,
-                  lineHeight: 1.5,
-                }}>
+                <pre
+                  className={cn(
+                    "text-xs font-mono whitespace-pre-wrap leading-relaxed",
+                    section.placeholder && "opacity-60"
+                  )}
+                  style={{ color: section.bgColor }}
+                >
                   {section.editable ? (section.editableValue || section.content) : section.content}
                 </pre>
               </div>
             ))}
           </div>
         </div>
-    </ModalContainer>
+      </DialogContent>
+    </Dialog>
   );
 }

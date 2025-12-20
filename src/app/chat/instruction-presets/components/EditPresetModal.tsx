@@ -2,8 +2,15 @@
 
 import { useRef } from "react";
 import SnippetPicker from "@/components/SnippetPicker";
-import { ModalContainer } from "@/components/ui/modal";
-import { InstructionPreset, styles, insertAtCursor } from "./types";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { InstructionPreset, insertAtCursor } from "./types";
 
 type EditPresetModalProps = {
   isOpen: boolean;
@@ -33,103 +40,75 @@ export default function EditPresetModal({
   actionInProgress,
 }: EditPresetModalProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isSaving = actionInProgress === preset?.id;
 
   return (
-    <ModalContainer
-      isOpen={isOpen}
-      onClose={onClose}
-      width="wide"
-      contentStyle={{ maxHeight: "90vh", overflow: "auto" }}
-      ariaLabelledBy="edit-preset-modal-title"
-    >
-      <h3 id="edit-preset-modal-title" style={{ margin: "0 0 16px 0" }}>Edit Preset</h3>
-      <div style={{ marginBottom: "12px" }}>
-        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}>
-          Name
-        </label>
-        <input
-          type="text"
-          value={editName}
-          onChange={(e) => onSetEditName(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid #e2e8f0",
-            borderRadius: "6px",
-            fontSize: "14px",
-          }}
-        />
-      </div>
-      <div style={{ marginBottom: "12px" }}>
-        <label style={{ display: "block", fontSize: "13px", fontWeight: 500, marginBottom: "4px" }}>
-          Description
-        </label>
-        <input
-          type="text"
-          value={editDescription}
-          onChange={(e) => onSetEditDescription(e.target.value)}
-          placeholder="Brief description (optional)"
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            border: "1px solid #e2e8f0",
-            borderRadius: "6px",
-            fontSize: "14px",
-          }}
-        />
-      </div>
-      <div style={{ marginBottom: "16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
-          <label style={{ fontSize: "13px", fontWeight: 500 }}>
-            Instructions
-          </label>
-          <SnippetPicker
-            onInsert={(snippet) => insertAtCursor(textareaRef, snippet, onSetEditContent, editContent)}
-          />
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Preset</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Name
+            </label>
+            <input
+              type="text"
+              value={editName}
+              onChange={(e) => onSetEditName(e.target.value)}
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">
+              Description
+            </label>
+            <input
+              type="text"
+              value={editDescription}
+              onChange={(e) => onSetEditDescription(e.target.value)}
+              placeholder="Brief description (optional)"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="text-sm font-medium">
+                Instructions
+              </label>
+              <SnippetPicker
+                onInsert={(snippet) => insertAtCursor(textareaRef, snippet, onSetEditContent, editContent)}
+              />
+            </div>
+            <textarea
+              ref={textareaRef}
+              value={editContent}
+              onChange={(e) => onSetEditContent(e.target.value)}
+              className="w-full min-h-[200px] p-3 border border-slate-200 rounded-md text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Use {"{{snippet_key}}"} to insert context snippets. They&apos;ll be expanded when the preset is applied.
+            </p>
+          </div>
         </div>
-        <textarea
-          ref={textareaRef}
-          value={editContent}
-          onChange={(e) => onSetEditContent(e.target.value)}
-          style={{
-            width: "100%",
-            minHeight: "200px",
-            padding: "12px",
-            border: "1px solid #e2e8f0",
-            borderRadius: "6px",
-            fontSize: "13px",
-            fontFamily: "monospace",
-            resize: "vertical",
-          }}
-        />
-        <p style={{ marginTop: "4px", fontSize: "11px", color: "#94a3b8" }}>
-          Use {"{{snippet_key}}"} to insert context snippets. They&apos;ll be expanded when the preset is applied.
-        </p>
-      </div>
-      <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
-        <button
-          onClick={onClose}
-          style={{
-            ...styles.button,
-            backgroundColor: "#f1f5f9",
-            color: "#475569",
-          }}
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onSave}
-          disabled={actionInProgress === preset?.id}
-          style={{
-            ...styles.button,
-            backgroundColor: "#6366f1",
-            color: "#fff",
-            opacity: actionInProgress === preset?.id ? 0.6 : 1,
-          }}
-        >
-          {actionInProgress === preset?.id ? "Saving..." : "Save Changes"}
-        </button>
-      </div>
-    </ModalContainer>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={onSave}
+            disabled={isSaving}
+            className="bg-indigo-500 hover:bg-indigo-600"
+          >
+            {isSaving ? "Saving..." : "Save Changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -126,32 +126,18 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P1: High Priority
 
-### 35. Modal/Dialog System Consolidation
-**Files:** 10+ modal components across codebase
-**Issue:** Two conflicting modal systems coexist:
-- Custom `ModalContainer` + primitives in `src/components/ui/modal.tsx`
-- Radix UI `Dialog` in `src/components/ui/dialog.tsx`
-- Individual modals with inline styles: `TransparencyModal`, `PromptBuilderModal`, `FlagReviewModal`, `ConfirmModal`, etc.
-- `ConfirmModal` re-exports modal primitives, creating implicit coupling
+### 35. ✅ FIXED: Modal/Dialog System Consolidation
+**Status:** Completed 2025-12-20
+**Resolution:** All modals now use Radix UI Dialog. Migrated 7 modal components:
+- `TransparencyModal` - Uses Dialog with Tailwind styling
+- `FlagReviewModal` - Uses Dialog with Tailwind styling
+- `PromptBuilderModal` - Uses Dialog with Tailwind styling
+- `LibraryAnalysisModal` - Uses Dialog with Tailwind styling
+- `CreatePresetModal` - Uses Dialog with Tailwind styling
+- `EditPresetModal` - Uses Dialog with Tailwind styling
+- `ConfirmModal` (+ PromptModal, TextareaPromptModal) - Uses Dialog with Tailwind styling
 
-**Affected Files:**
-- `src/components/ui/modal.tsx` (base custom modal)
-- `src/components/ui/dialog.tsx` (Radix UI wrapper)
-- `src/components/TransparencyModal.tsx`
-- `src/components/PromptBuilderModal.tsx`
-- `src/components/FlagReviewModal.tsx`
-- `src/components/ConfirmModal.tsx`
-- `src/components/chat/transparency-modal.tsx`
-- `src/components/chat/chat-feedback-modal.tsx`
-
-**Risk:** Inconsistent UX, duplicated styling, maintenance burden
-**Fix:**
-1. Standardize on Radix UI Dialog
-2. Create reusable `ModalBase` component with standard props
-3. Extract color schemes to shared constants
-4. Update all modals to use common base
-
-**Effort:** Medium-High
+Removed deprecated `src/components/ui/modal.tsx`. Inline styles replaced with Tailwind classes throughout.
 
 ### 36. Type Inconsistencies - Deprecated Fields
 **Files:** `src/types/skill.ts`, `src/types/customerProfile.ts`

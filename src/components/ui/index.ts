@@ -62,15 +62,9 @@ export {
   TooltipTrigger,
 } from "./tooltip";
 
-// Custom modal (legacy - prefer Dialog for new code)
-export {
-  ModalContainer,
-  ModalHeader,
-  ModalFooter,
-  modalStyles,
-  variantColors,
-} from "./modal";
-export type { ModalVariant } from "./modal";
+// Modal variants and colors (exported from ConfirmModal)
+export { variantColors } from "../ConfirmModal";
+export type { ModalVariant } from "../ConfirmModal";
 
 // Loading states
 export {

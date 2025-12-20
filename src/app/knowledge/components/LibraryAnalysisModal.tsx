@@ -4,7 +4,10 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { X, AlertTriangle, Merge, Split, Tag, Lightbulb, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ModalContainer } from "@/components/ui/modal";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
 import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
 import { Skill } from "@/types/skill";
 
@@ -260,20 +263,8 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
   );
 
   return (
-    <ModalContainer
-      isOpen={isOpen}
-      onClose={onClose}
-      width="xlarge"
-      padding={false}
-      contentStyle={{
-        borderRadius: "16px",
-        width: "90vw",
-        height: "80vh",
-        display: "flex",
-        overflow: "hidden",
-      }}
-      ariaLabelledBy="library-analysis-modal-title"
-    >
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-6xl w-[90vw] h-[80vh] overflow-hidden flex p-0">
         {/* Left Column - Chat */}
         <ConversationalPanel
           messages={messages}
@@ -292,107 +283,70 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
         />
 
         {/* Right Column - Analysis Summary */}
-        <div style={{
-          width: "320px",
-          flexShrink: 0,
-          display: "flex",
-          flexDirection: "column",
-          backgroundColor: "#f8fafc",
-          borderLeft: "1px solid #e2e8f0",
-        }}>
+        <div className="w-80 flex-shrink-0 flex flex-col bg-slate-50 border-l">
           {/* Health Score */}
-          <div style={{
-            padding: "20px",
-            borderBottom: "1px solid #e2e8f0",
-          }}>
-            <h4 style={{ fontSize: "13px", color: "#64748b", margin: "0 0 12px 0", textTransform: "uppercase", fontWeight: 500 }}>
+          <div className="p-5 border-b">
+            <h4 className="text-xs text-slate-500 uppercase font-medium mb-3">
               Library Health
             </h4>
             {analysis.healthScore !== null ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                <div style={{
-                  width: "60px",
-                  height: "60px",
-                  borderRadius: "50%",
-                  backgroundColor: analysis.healthScore >= 80 ? "#dcfce7" : analysis.healthScore >= 60 ? "#fef3c7" : "#fee2e2",
-                  color: analysis.healthScore >= 80 ? "#166534" : analysis.healthScore >= 60 ? "#92400e" : "#dc2626",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "20px",
-                  fontWeight: 700,
-                }}>
+              <div className="flex items-center gap-3">
+                <div
+                  className={`w-[60px] h-[60px] rounded-full flex items-center justify-center text-xl font-bold ${
+                    analysis.healthScore >= 80
+                      ? "bg-green-100 text-green-800"
+                      : analysis.healthScore >= 60
+                      ? "bg-amber-100 text-amber-800"
+                      : "bg-red-100 text-red-600"
+                  }`}
+                >
                   {analysis.healthScore}
                 </div>
-                <div style={{ fontSize: "13px", color: "#64748b" }}>
+                <div className="text-sm text-slate-500">
                   {analysis.healthScore >= 80 ? "Well organized" : analysis.healthScore >= 60 ? "Needs attention" : "Needs work"}
                 </div>
               </div>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+              <div className="text-slate-400 text-sm">
                 {isLoading ? "Calculating..." : "Ask me to analyze your library"}
               </div>
             )}
           </div>
 
           {/* Recommendations */}
-          <div style={{
-            flex: 1,
-            overflowY: "auto",
-            padding: "20px",
-          }}>
-            <h4 style={{ fontSize: "13px", color: "#64748b", margin: "0 0 12px 0", textTransform: "uppercase", fontWeight: 500 }}>
+          <div className="flex-1 overflow-y-auto p-5">
+            <h4 className="text-xs text-slate-500 uppercase font-medium mb-3">
               Recommendations
             </h4>
             {analysis.recommendations.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div className="flex flex-col gap-3">
                 {analysis.recommendations.map((rec, idx) => {
                   const Icon = RECOMMENDATION_ICONS[rec.type] || Lightbulb;
                   const colors = PRIORITY_COLORS[rec.priority] || PRIORITY_COLORS.medium;
                   return (
                     <div
                       key={idx}
-                      style={{
-                        backgroundColor: "#fff",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "10px",
-                        padding: "12px",
-                      }}
+                      className="bg-white border rounded-lg p-3"
                     >
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      <div className="flex items-center gap-2 mb-2">
                         <Icon size={14} style={{ color: colors.text }} />
-                        <span style={{ fontSize: "12px", fontWeight: 600, color: "#1e293b" }}>
+                        <span className="text-xs font-semibold text-slate-800">
                           {rec.title}
                         </span>
-                        <span style={{
-                          fontSize: "10px",
-                          backgroundColor: colors.bg,
-                          color: colors.text,
-                          padding: "2px 6px",
-                          borderRadius: "4px",
-                          marginLeft: "auto",
-                        }}>
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded ml-auto"
+                          style={{ backgroundColor: colors.bg, color: colors.text }}
+                        >
                           {rec.priority}
                         </span>
                       </div>
-                      <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 8px 0", lineHeight: "1.4" }}>
+                      <p className="text-xs text-slate-500 mb-2 leading-relaxed">
                         {rec.description}
                       </p>
                       {canTakeAction(rec) && (
                         <button
                           onClick={() => handleRecommendationAction(rec)}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                            fontSize: "11px",
-                            fontWeight: 500,
-                            color: "#6366f1",
-                            background: "none",
-                            border: "none",
-                            padding: 0,
-                            cursor: "pointer",
-                          }}
+                          className="flex items-center gap-1 text-xs font-medium text-indigo-500 hover:text-indigo-600 bg-transparent border-none p-0 cursor-pointer"
                         >
                           {getActionButtonText(rec.type)}
                           <ArrowRight size={12} />
@@ -403,12 +357,13 @@ export default function LibraryAnalysisModal({ skills, isOpen, onClose }: Librar
                 })}
               </div>
             ) : (
-              <div style={{ color: "#94a3b8", fontSize: "13px" }}>
+              <div className="text-slate-400 text-sm">
                 {isLoading ? "Finding issues..." : "No recommendations yet"}
               </div>
             )}
           </div>
         </div>
-    </ModalContainer>
+      </DialogContent>
+    </Dialog>
   );
 }

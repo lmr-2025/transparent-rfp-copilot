@@ -2,17 +2,30 @@
 
 import { useEffect, useRef, useCallback } from "react";
 import {
-  ModalContainer,
-  ModalHeader,
-  ModalFooter,
-  modalStyles,
-  variantColors,
-  ModalVariant,
-} from "./ui/modal";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Button } from "./ui/button";
 
-// Re-export modal utilities for use by other components
-export { ModalContainer, ModalHeader, ModalFooter, modalStyles, variantColors };
-export type { ModalVariant };
+export type ModalVariant = "danger" | "warning" | "default" | "success";
+
+export const variantColors: Record<ModalVariant, string> = {
+  danger: "#dc2626",
+  warning: "#f59e0b",
+  default: "#3b82f6",
+  success: "#16a34a",
+};
+
+const variantButtonClasses: Record<ModalVariant, string> = {
+  danger: "bg-red-600 hover:bg-red-700",
+  warning: "bg-amber-500 hover:bg-amber-600",
+  default: "bg-blue-500 hover:bg-blue-600",
+  success: "bg-green-600 hover:bg-green-700",
+};
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -24,9 +37,6 @@ interface ConfirmModalProps {
   onConfirm: () => void;
   onCancel: () => void;
 }
-
-// Keep local styles ref for backward compatibility with existing code
-const styles = modalStyles;
 
 export default function ConfirmModal({
   isOpen,
@@ -49,28 +59,26 @@ export default function ConfirmModal({
   }, [isOpen]);
 
   return (
-    <ModalContainer isOpen={isOpen} onClose={onCancel} ariaLabelledBy="confirm-title">
-      <ModalHeader title={title} subtitle={message} titleId="confirm-title" />
-      <div style={styles.buttonRow}>
-        <button
-          onClick={onCancel}
-          style={{ ...styles.button, ...styles.cancelButton }}
-        >
-          {cancelLabel}
-        </button>
-        <button
-          ref={confirmButtonRef}
-          onClick={onConfirm}
-          style={{
-            ...styles.button,
-            ...styles.primaryButton,
-            backgroundColor: variantColors[variant],
-          }}
-        >
-          {confirmLabel}
-        </button>
-      </div>
-    </ModalContainer>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{message}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            {cancelLabel}
+          </Button>
+          <Button
+            ref={confirmButtonRef}
+            onClick={onConfirm}
+            className={variantButtonClasses[variant]}
+          >
+            {confirmLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -151,18 +159,6 @@ interface PromptModalProps {
   onCancel: () => void;
 }
 
-const promptStyles = {
-  input: {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: "14px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    marginBottom: "20px",
-    outline: "none",
-  },
-};
-
 export function PromptModal({
   isOpen,
   title,
@@ -193,43 +189,40 @@ export function PromptModal({
   };
 
   return (
-    <ModalContainer isOpen={isOpen} onClose={onCancel} ariaLabelledBy="prompt-title">
-      <ModalHeader title={title} subtitle={message} titleId="prompt-title" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={value}
-        onChange={(e) => setValueState(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            handleSubmit();
-          }
-        }}
-        placeholder={placeholder}
-        style={promptStyles.input}
-      />
-      <div style={styles.buttonRow}>
-        <button
-          onClick={onCancel}
-          style={{ ...styles.button, ...styles.cancelButton }}
-        >
-          {cancelLabel}
-        </button>
-        <button
-          onClick={handleSubmit}
-          disabled={!value.trim()}
-          style={{
-            ...styles.button,
-            ...styles.primaryButton,
-            backgroundColor: value.trim() ? variantColors.default : "#94a3b8",
-            cursor: value.trim() ? "pointer" : "not-allowed",
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {message && <DialogDescription>{message}</DialogDescription>}
+        </DialogHeader>
+        <input
+          ref={inputRef}
+          type="text"
+          value={value}
+          onChange={(e) => setValueState(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleSubmit();
+            }
           }}
-        >
-          {submitLabel}
-        </button>
-      </div>
-    </ModalContainer>
+          placeholder={placeholder}
+          className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            {cancelLabel}
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!value.trim()}
+            className="bg-blue-500 hover:bg-blue-600"
+          >
+            {submitLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -310,22 +303,6 @@ interface TextareaPromptModalProps {
   onCancel: () => void;
 }
 
-const textareaStyles = {
-  textarea: {
-    width: "100%",
-    padding: "10px 12px",
-    fontSize: "14px",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    marginBottom: "20px",
-    outline: "none",
-    minHeight: "150px",
-    resize: "vertical" as const,
-    fontFamily: "inherit",
-    lineHeight: 1.5,
-  },
-};
-
 export function TextareaPromptModal({
   isOpen,
   title,
@@ -353,34 +330,29 @@ export function TextareaPromptModal({
   };
 
   return (
-    <ModalContainer isOpen={isOpen} onClose={onCancel} width="wide" ariaLabelledBy="textarea-prompt-title">
-      <ModalHeader title={title} subtitle={message} titleId="textarea-prompt-title" />
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(e) => setValueState(e.target.value)}
-        placeholder={placeholder}
-        style={textareaStyles.textarea}
-      />
-      <div style={styles.buttonRow}>
-        <button
-          onClick={onCancel}
-          style={{ ...styles.button, ...styles.cancelButton }}
-        >
-          {cancelLabel}
-        </button>
-        <button
-          onClick={handleSubmit}
-          style={{
-            ...styles.button,
-            ...styles.primaryButton,
-            backgroundColor: variantColors.default,
-          }}
-        >
-          {submitLabel}
-        </button>
-      </div>
-    </ModalContainer>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {message && <DialogDescription>{message}</DialogDescription>}
+        </DialogHeader>
+        <textarea
+          ref={textareaRef}
+          value={value}
+          onChange={(e) => setValueState(e.target.value)}
+          placeholder={placeholder}
+          className="w-full px-3 py-2.5 text-sm border border-slate-300 rounded-lg min-h-[150px] resize-y leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>
+            {cancelLabel}
+          </Button>
+          <Button onClick={handleSubmit} className="bg-blue-500 hover:bg-blue-600">
+            {submitLabel}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

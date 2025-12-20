@@ -1,7 +1,15 @@
 "use client";
 
 import React from "react";
-import { ModalContainer } from "@/components/ui/modal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export type TransparencyConfig = {
   label: string;
@@ -23,23 +31,23 @@ export type TransparencyModalProps = {
   headerColor?: "purple" | "blue" | "gray";
 };
 
-const colorSchemes = {
-  purple: { bg: "#faf5ff", border: "#c4b5fd", label: "#6d28d9", value: "#4c1d95" },
-  blue: { bg: "#f0f9ff", border: "#bae6fd", label: "#0369a1", value: "#0c4a6e" },
-  yellow: { bg: "#fef3c7", border: "#fcd34d", label: "#92400e", value: "#78350f" },
-  green: { bg: "#f0fdf4", border: "#86efac", label: "#166534", value: "#14532d" },
+const colorSchemeClasses = {
+  purple: { bg: "bg-purple-50", border: "border-purple-300", label: "text-purple-700", value: "text-purple-900" },
+  blue: { bg: "bg-blue-50", border: "border-blue-300", label: "text-sky-700", value: "text-sky-900" },
+  yellow: { bg: "bg-amber-100", border: "border-amber-300", label: "text-amber-800", value: "text-amber-900" },
+  green: { bg: "bg-green-50", border: "border-green-300", label: "text-green-700", value: "text-green-900" },
 };
 
-const headerColors = {
-  purple: "#faf5ff",
-  blue: "#f0f9ff",
-  gray: "#f8fafc",
+const headerColorClasses = {
+  purple: "bg-purple-50",
+  blue: "bg-blue-50",
+  gray: "bg-slate-50",
 };
 
-const titleColors = {
-  purple: "#6d28d9",
-  blue: "#0369a1",
-  gray: "#1e293b",
+const titleColorClasses = {
+  purple: "text-purple-700",
+  blue: "text-sky-700",
+  gray: "text-slate-800",
 };
 
 export default function TransparencyModal({
@@ -55,79 +63,48 @@ export default function TransparencyModal({
   headerColor = "gray",
 }: TransparencyModalProps) {
   return (
-    <ModalContainer
-      isOpen={true}
-      onClose={onClose}
-      width="large"
-      padding={false}
-      contentStyle={{
-        maxHeight: "90vh",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
-      }}
-      overlayStyle={{ padding: "20px" }}
-      ariaLabelledBy="transparency-modal-title"
-    >
-        {/* Header */}
-        <div
-          style={{
-            padding: "20px 24px",
-            borderBottom: "1px solid #e2e8f0",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            backgroundColor: headerColors[headerColor],
-          }}
-        >
-          <div>
-            <h3 id="transparency-modal-title" style={{ margin: 0, fontSize: "18px", fontWeight: 600, color: titleColors[headerColor] }}>
-              {title}
-            </h3>
-            <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "#64748b" }}>
-              {subtitle}
-            </p>
+    <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col p-0">
+        {/* Custom Header */}
+        <DialogHeader className={cn("px-6 py-5 border-b", headerColorClasses[headerColor])}>
+          <div className="flex justify-between items-center">
+            <div>
+              <DialogTitle className={cn("text-lg", titleColorClasses[headerColor])}>
+                {title}
+              </DialogTitle>
+              <DialogDescription className="text-slate-500 mt-1">
+                {subtitle}
+              </DialogDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={onClose}>
+              Close
+            </Button>
           </div>
-          <button
-            onClick={onClose}
-            style={{
-              padding: "8px 12px",
-              backgroundColor: "#f1f5f9",
-              border: "1px solid #e2e8f0",
-              borderRadius: "6px",
-              cursor: "pointer",
-              fontSize: "14px",
-            }}
-          >
-            Close
-          </button>
-        </div>
+        </DialogHeader>
 
         {/* Content */}
-        <div style={{ flex: 1, overflow: "auto", padding: "24px" }}>
+        <div className="flex-1 overflow-auto p-6">
           {/* Config Cards */}
-          <div style={{ marginBottom: "24px" }}>
-            <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 600, color: "#374151" }}>
+          <div className="mb-6">
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">
               Model Configuration
             </h4>
-            <div style={{ display: "flex", gap: "16px", flexWrap: "wrap" }}>
+            <div className="flex gap-4 flex-wrap">
               {configs.map((config, idx) => {
-                const scheme = colorSchemes[config.color];
+                const scheme = colorSchemeClasses[config.color];
                 return (
                   <div
                     key={idx}
-                    style={{
-                      padding: "12px 16px",
-                      backgroundColor: scheme.bg,
-                      borderRadius: "8px",
-                      border: `1px solid ${scheme.border}`,
-                    }}
+                    className={cn(
+                      "px-4 py-3 rounded-lg border",
+                      scheme.bg,
+                      scheme.border
+                    )}
                   >
-                    <div style={{ fontSize: "11px", color: scheme.label, fontWeight: 600, marginBottom: "4px" }}>
+                    <div className={cn("text-xs font-semibold mb-1", scheme.label)}>
                       {config.label}
                     </div>
-                    <div style={{ fontSize: "14px", color: scheme.value, fontFamily: "monospace" }}>
+                    <div className={cn("text-sm font-mono", scheme.value)}>
                       {typeof config.value === "number" ? config.value.toLocaleString() : config.value}
                     </div>
                   </div>
@@ -137,35 +114,17 @@ export default function TransparencyModal({
           </div>
 
           {/* System Prompt */}
-          <div style={{ marginBottom: userPrompt ? "24px" : 0 }}>
-            <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 600, color: "#374151" }}>
+          <div className={userPrompt ? "mb-6" : ""}>
+            <h4 className="text-sm font-semibold text-gray-700 mb-3">
               System Prompt
             </h4>
-            <div
-              style={{
-                backgroundColor: "#1e293b",
-                borderRadius: "8px",
-                padding: "16px",
-                overflow: "auto",
-                maxHeight: "300px",
-              }}
-            >
-              <pre
-                style={{
-                  margin: 0,
-                  fontSize: "13px",
-                  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                  color: "#e2e8f0",
-                  whiteSpace: "pre-wrap",
-                  wordBreak: "break-word",
-                  lineHeight: 1.6,
-                }}
-              >
+            <div className="bg-slate-800 rounded-lg p-4 overflow-auto max-h-[300px]">
+              <pre className="text-sm font-mono text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
                 {systemPrompt}
               </pre>
             </div>
             {systemPromptNote && (
-              <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+              <p className="mt-2 text-xs text-slate-500">
                 {systemPromptNote}
               </p>
             )}
@@ -174,47 +133,29 @@ export default function TransparencyModal({
           {/* User Prompt / Context */}
           {userPrompt && (
             <div>
-              <h4 style={{ margin: "0 0 12px 0", fontSize: "14px", fontWeight: 600, color: "#374151" }}>
+              <h4 className="text-sm font-semibold text-gray-700 mb-3">
                 {userPromptLabel}
               </h4>
-              <div
-                style={{
-                  backgroundColor: "#fafafa",
-                  borderRadius: "8px",
-                  border: "1px solid #e2e8f0",
-                  padding: "16px",
-                  maxHeight: "300px",
-                  overflow: "auto",
-                }}
-              >
-                <pre
-                  style={{
-                    margin: 0,
-                    fontSize: "12px",
-                    fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-                    color: "#475569",
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    lineHeight: 1.5,
-                  }}
-                >
+              <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 max-h-[300px] overflow-auto">
+                <pre className="text-xs font-mono text-slate-600 whitespace-pre-wrap break-words leading-relaxed">
                   {userPrompt.length > 5000
                     ? userPrompt.substring(0, 5000) + "\n\n... (truncated for display)"
                     : userPrompt}
                 </pre>
               </div>
               {userPromptNote ? (
-                <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                <p className="mt-2 text-xs text-slate-500">
                   {userPromptNote}
                 </p>
               ) : (
-                <p style={{ margin: "8px 0 0 0", fontSize: "12px", color: "#64748b" }}>
+                <p className="mt-2 text-xs text-slate-500">
                   Total: {userPrompt.length.toLocaleString()} characters
                 </p>
               )}
             </div>
           )}
         </div>
-    </ModalContainer>
+      </DialogContent>
+    </Dialog>
   );
 }
