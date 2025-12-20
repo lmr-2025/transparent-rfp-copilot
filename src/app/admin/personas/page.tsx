@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Sparkles,
@@ -17,7 +18,16 @@ type TabType = "overview" | "personas" | "builder";
 
 export default function PersonasPage() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab") as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || "overview");
+
+  // Handle tab change with URL sync
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    router.push(`/admin/personas?tab=${tab}`, { scroll: false });
+  };
 
   // Fetch presets for overview
   const { data: presetsData } = useApiQuery<{ presets: InstructionPreset[] }>({
@@ -74,7 +84,7 @@ export default function PersonasPage() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={cn(
                 "flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors",
                 activeTab === tab.id
@@ -92,7 +102,7 @@ export default function PersonasPage() {
       {/* Content */}
       {activeTab === "overview" && <OverviewTab presets={presets} />}
       {activeTab === "personas" && <PersonasTab />}
-      {activeTab === "builder" && <BuilderTab onPresetSaved={() => setActiveTab("personas")} />}
+      {activeTab === "builder" && <BuilderTab onPresetSaved={() => handleTabChange("personas")} />}
     </div>
   );
 }

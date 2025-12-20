@@ -321,6 +321,13 @@ export function KnowledgeItemCard({
                 {item.sourceUrls.length}
               </span>
             )}
+            {/* Show skill count for URL sources */}
+            {item.type === "url" && item.skillCount !== undefined && item.skillCount > 0 && (
+              <span className="flex items-center gap-0.5 text-blue-600" title={`Used by ${item.skillCount} skill${item.skillCount !== 1 ? 's' : ''}`}>
+                <BookOpen className="h-3 w-3" />
+                {item.skillCount}
+              </span>
+            )}
             {linkedSkillName && (
               <span className="flex items-center gap-0.5 text-blue-600" title={`Linked to: ${linkedSkillName}`}>
                 <Link2 className="h-3 w-3" />
@@ -333,24 +340,61 @@ export function KnowledgeItemCard({
             {new Date(item.updatedAt).toLocaleDateString()}
           </span>
 
-          {/* Expand/collapse button */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsExpanded(!isExpanded);
-            }}
-            className="h-6 w-6 p-0 flex-shrink-0"
-            aria-expanded={isExpanded}
-            aria-label={isExpanded ? "Collapse details" : "Expand details"}
-          >
-            {isExpanded ? (
-              <ChevronUp className="h-4 w-4" />
-            ) : (
-              <ChevronDown className="h-4 w-4" />
-            )}
-          </Button>
+          {/* URL external link */}
+          {item.type === "url" && item.subtitle && (
+            <a
+              href={item.subtitle}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="h-6 w-6 p-0 flex items-center justify-center text-muted-foreground hover:text-blue-600 transition-colors flex-shrink-0"
+              title="Open URL"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+            </a>
+          )}
+
+          {/* Delete button for URLs (inline since they don't expand) */}
+          {item.type === "url" && onDelete && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              disabled={isDeleting}
+              className="h-6 w-6 p-0 flex-shrink-0 text-muted-foreground hover:text-destructive"
+              title="Delete"
+            >
+              {isDeleting ? (
+                <InlineLoader size="sm" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
+
+          {/* Expand/collapse button - not for URLs */}
+          {item.type !== "url" && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsExpanded(!isExpanded);
+              }}
+              className="h-6 w-6 p-0 flex-shrink-0"
+              aria-expanded={isExpanded}
+              aria-label={isExpanded ? "Collapse details" : "Expand details"}
+            >
+              {isExpanded ? (
+                <ChevronUp className="h-4 w-4" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+            </Button>
+          )}
 
           {/* Close button for modal/overlay usage */}
           {onClose && (

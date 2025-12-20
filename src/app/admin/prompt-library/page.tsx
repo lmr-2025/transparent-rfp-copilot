@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Map, Pencil, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,16 @@ type TabType = "overview" | "builder";
 
 export default function PromptBuilderV5Page() {
   const { data: session, status } = useSession();
-  const [activeTab, setActiveTab] = useState<TabType>("overview");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab") as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || "overview");
+
+  // Handle tab change with URL sync
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    router.push(`/admin/prompt-library?tab=${tab}`, { scroll: false });
+  };
 
   const userCapabilities = session?.user?.capabilities || [];
   const isAdmin = userCapabilities.includes("MANAGE_PROMPTS") || userCapabilities.includes("ADMIN");
@@ -49,7 +59,7 @@ export default function PromptBuilderV5Page() {
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg transition-colors",
                   activeTab === tab.id

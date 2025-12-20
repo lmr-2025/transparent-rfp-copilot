@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   Search,
@@ -143,6 +144,8 @@ function StatusIcon({ status }: { status: QuestionLogStatus }) {
 
 export default function AccuracyPage() {
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const { confirm, ConfirmDialog } = useConfirm({
     title: "Delete Question",
     message: "Are you sure you want to delete this question? This action cannot be undone.",
@@ -157,8 +160,15 @@ export default function AccuracyPage() {
     (session?.user as { role?: string })?.role === "ADMIN" ||
     (session?.user as { role?: string })?.role === "PROMPT_ADMIN";
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState<ActiveTab>("accuracy");
+  // Tab state - read from URL on initial load
+  const tabParam = searchParams.get("tab") as ActiveTab | null;
+  const [activeTab, setActiveTab] = useState<ActiveTab>(tabParam || "accuracy");
+
+  // Handle tab change with URL sync
+  const handleTabChange = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    router.push(`/accuracy?tab=${tab}`, { scroll: false });
+  };
 
   // Accuracy tab state
   const [days, setDays] = useState(30);
@@ -282,7 +292,7 @@ export default function AccuracyPage() {
       {/* Tabs */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "24px", borderBottom: "2px solid #e2e8f0" }}>
         <button
-          onClick={() => setActiveTab("accuracy")}
+          onClick={() => handleTabChange("accuracy")}
           style={{
             padding: "12px 20px",
             fontSize: "0.95rem",
@@ -298,7 +308,7 @@ export default function AccuracyPage() {
           Dashboard
         </button>
         <button
-          onClick={() => setActiveTab("question-log")}
+          onClick={() => handleTabChange("question-log")}
           style={{
             padding: "12px 20px",
             fontSize: "0.95rem",

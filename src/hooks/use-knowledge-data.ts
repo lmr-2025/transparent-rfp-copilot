@@ -261,6 +261,8 @@ export interface UnifiedLibraryItem {
   snippetKey?: string;
   // Linked skill info (for sources)
   linkedSkillId?: string;
+  // Skill count (for sources) - via SkillSource join table
+  skillCount?: number;
 }
 
 // Transform skills to unified items
@@ -300,7 +302,7 @@ export function documentToUnifiedItem(doc: KnowledgeDocument): UnifiedLibraryIte
     filename: doc.filename,
     fileSize: doc.fileSize,
     fileType: doc.fileType,
-    linkedSkillId: doc.skillId,
+    skillCount: doc.skillCount,
   };
 }
 
@@ -315,7 +317,7 @@ export function urlToUnifiedItem(url: ReferenceUrl): UnifiedLibraryItem {
     categories: url.categories,
     createdAt: url.addedAt,
     updatedAt: url.lastUsedAt || url.addedAt,
-    linkedSkillId: url.skillId || undefined,
+    skillCount: url.skillCount,
   };
 }
 

@@ -275,13 +275,12 @@ model KnowledgeDocument {
   owner           User?    @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdBy       String?  // User email for display
   // Unified Knowledge Pipeline fields
-  skillId         String?  // Link to skill if converted to skill
   isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
+  // Note: skillId removed - use SkillSource join table instead
 
   @@index([uploadedAt])
   @@index([isTemplate])
   @@index([ownerId])
-  @@index([skillId])
 }
 
 // Customer Profiles (The Rolodex)
@@ -444,6 +443,27 @@ model Skill {
   @@index([reviewRequestedAt])
   @@index([syncStatus])
   @@index([lastSyncedAt])
+
+  // Relation to source registry (many-to-many via join table)
+  skillSources    SkillSource[]
+}
+
+// SkillSource - Join table linking Skills to their sources (URLs and Documents)
+// This enables many-to-many relationships and efficient queries like "find all skills using URL X"
+// Note: Skills also keep sourceUrls/sourceDocuments JSON for git sync portability
+model SkillSource {
+  id         String   @id @default(cuid())
+  skillId    String
+  sourceId   String   // ReferenceUrl.id or KnowledgeDocument.id
+  sourceType String   // "url" | "document"
+  addedAt    DateTime @default(now())
+  isPrimary  Boolean  @default(false) // Was this the primary source for skill creation?
+
+  skill      Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([skillId, sourceId, sourceType])
+  @@index([sourceId, sourceType])
+  @@index([skillId])
 }
 
 // Skill status for review workflow
@@ -593,12 +613,11 @@ model ReferenceUrl {
   owner       User?    @relation("UrlOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   createdBy   String?  // User email for display
   // Unified Knowledge Pipeline fields
-  skillId         String?  // Link to skill if converted to skill
   isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
+  // Note: skillId removed - use SkillSource join table instead
 
   @@index([addedAt])
   @@index([ownerId])
-  @@index([skillId])
 }
 
 // Knowledge Requests - Allows users without MANAGE_KNOWLEDGE to request new knowledge

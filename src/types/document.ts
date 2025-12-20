@@ -9,6 +9,7 @@ export interface KnowledgeDocument {
   description?: string;
   categories: string[]; // Uses same categories as Skills
   // Unified Knowledge Pipeline fields
-  skillId?: string; // Link to skill if converted to skill
   isReferenceOnly?: boolean; // True if saved as reference without skill conversion
+  // Skill relationship (via SkillSource join table)
+  skillCount?: number; // Number of skills using this document
 }

@@ -9,7 +9,8 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-// GET /api/reference-urls/[id] - Get a single reference URL
+// GET /api/reference-urls/[id] - Get a single reference URL with skill count
+// Categories are derived dynamically from linked skills via SkillSource
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
     const { id } = await context.params;
@@ -22,7 +23,35 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return errors.notFound("Reference URL");
     }
 
-    return apiSuccess({ url });
+    // Get linked skills with their categories via SkillSource
+    const skillSources = await prisma.skillSource.findMany({
+      where: {
+        sourceId: id,
+        sourceType: "url",
+      },
+      include: {
+        skill: {
+          select: { id: true, categories: true },
+        },
+      },
+    });
+
+    // Derive categories from linked skills (union of all)
+    const derivedCategories = new Set<string>();
+    for (const ss of skillSources) {
+      for (const cat of ss.skill.categories) {
+        derivedCategories.add(cat);
+      }
+    }
+
+    return apiSuccess({
+      url: {
+        ...url,
+        skillCount: skillSources.length,
+        // Use derived categories if linked to skills, otherwise fall back to stored
+        categories: derivedCategories.size > 0 ? Array.from(derivedCategories) : url.categories,
+      },
+    });
   } catch (error) {
     logger.error("Failed to fetch reference URL", error, { route: "/api/reference-urls/[id]" });
     return errors.internal("Failed to fetch reference URL");
@@ -55,7 +84,6 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         categories: body.categories,
         lastUsedAt: body.lastUsedAt,
         usageCount: body.usageCount,
-        ...(body.skillId !== undefined && { skillId: body.skillId }),
         ...(body.isReferenceOnly !== undefined && { isReferenceOnly: body.isReferenceOnly }),
       },
     });
@@ -64,7 +92,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       url as unknown as Record<string, unknown>,
-      ["url", "title", "description", "categories", "skillId", "isReferenceOnly"]
+      ["url", "title", "description", "categories", "isReferenceOnly"]
     );
 
     // Audit log

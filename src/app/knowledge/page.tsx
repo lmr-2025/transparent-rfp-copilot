@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3, ArrowUpDown, LayoutGrid, List, Lightbulb, Upload, Tag, Power, Download } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
@@ -65,6 +65,7 @@ type SortOption = "updated-desc" | "updated-asc" | "name-asc" | "name-desc" | "c
 
 function KnowledgeLibraryContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const tabParam = searchParams.get("tab") as TabType | null;
   const { data: session } = useSession();
 
@@ -93,6 +94,12 @@ function KnowledgeLibraryContent() {
   const [bulkSelectedCategories, setBulkSelectedCategories] = useState<Set<string>>(new Set());
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
+
+  // Handle tab change with URL sync
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    router.push(`/knowledge?tab=${tab}`, { scroll: false });
+  };
 
   // React Query data
   const { data: skills = [], isLoading: skillsLoading } = useAllSkills();
@@ -733,7 +740,7 @@ function KnowledgeLibraryContent() {
 
       {/* Tabs */}
       <div className="mb-6">
-        <LibraryTabs activeTab={activeTab} onTabChange={setActiveTab} counts={counts} />
+        <LibraryTabs activeTab={activeTab} onTabChange={handleTabChange} counts={counts} />
       </div>
 
       {/* Search and Filter */}
@@ -771,23 +778,21 @@ function KnowledgeLibraryContent() {
             ))}
           </div>
         )}
-        {/* Category filter - only show on Skills tab */}
-        {activeTab === "skills" && (
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
-              <SelectValue placeholder="All Categories" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category.id} value={category.name}>
-                  {category.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        {/* Category filter */}
+        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <SelectTrigger className="w-[180px]">
+            <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
+            <SelectValue placeholder="All Categories" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Categories</SelectItem>
+            {categories.map((category) => (
+              <SelectItem key={category.id} value={category.name}>
+                {category.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {/* Sort dropdown */}
         <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
           <SelectTrigger className="w-[180px]">
@@ -802,33 +807,35 @@ function KnowledgeLibraryContent() {
             <SelectItem value="category">By Category</SelectItem>
           </SelectContent>
         </Select>
-        {/* View toggle */}
-        <div className="flex border rounded-md overflow-hidden">
-          <button
-            onClick={() => setViewMode("grid")}
-            className={cn(
-              "p-2 transition-colors",
-              viewMode === "grid"
-                ? "bg-primary text-primary-foreground"
-                : "bg-background hover:bg-muted text-muted-foreground"
-            )}
-            title="Grid view"
-          >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode("list")}
-            className={cn(
-              "p-2 transition-colors",
-              viewMode === "list"
-                ? "bg-primary text-primary-foreground"
-                : "bg-background hover:bg-muted text-muted-foreground"
-            )}
-            title="List view"
-          >
-            <List className="h-4 w-4" />
-          </button>
-        </div>
+        {/* View toggle - only show for skills tab (sources are always list view) */}
+        {activeTab === "skills" && (
+          <div className="flex border rounded-md overflow-hidden">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={cn(
+                "p-2 transition-colors",
+                viewMode === "grid"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted text-muted-foreground"
+              )}
+              title="Grid view"
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "p-2 transition-colors",
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background hover:bg-muted text-muted-foreground"
+              )}
+              title="List view"
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -881,8 +888,8 @@ function KnowledgeLibraryContent() {
             )}
           </CardContent>
         </Card>
-      ) : viewMode === "grid" ? (
-        // Grid view
+      ) : viewMode === "grid" && activeTab === "skills" ? (
+        // Grid view (skills only - sources always use list view)
         <>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {sortedItems.map((item) => (

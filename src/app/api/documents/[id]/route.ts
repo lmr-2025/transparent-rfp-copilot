@@ -81,7 +81,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, categories, isReferenceOnly, skillId } = body;
+    const { title, description, categories, isReferenceOnly } = body;
 
     // Get existing document for audit log
     const existing = await prisma.knowledgeDocument.findUnique({ where: { id } });
@@ -96,7 +96,6 @@ export async function PATCH(
         ...(description !== undefined && { description: description?.trim() || null }),
         ...(categories !== undefined && { categories }),
         ...(isReferenceOnly !== undefined && { isReferenceOnly }),
-        ...(skillId !== undefined && { skillId }),
       },
     });
 
@@ -104,7 +103,7 @@ export async function PATCH(
     const changes = computeChanges(
       existing as unknown as Record<string, unknown>,
       document as unknown as Record<string, unknown>,
-      ["title", "description", "categories", "isReferenceOnly", "skillId"]
+      ["title", "description", "categories", "isReferenceOnly"]
     );
 
     // Audit log
@@ -127,7 +126,6 @@ export async function PATCH(
         uploadedAt: document.uploadedAt,
         description: document.description,
         isReferenceOnly: document.isReferenceOnly,
-        skillId: document.skillId,
       },
     });
   } catch (error) {

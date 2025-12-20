@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
@@ -250,10 +251,21 @@ function formatTimeAgo(dateString?: string) {
   return date.toLocaleDateString();
 }
 
+type TabType = "pending" | "flagged" | "resolved" | "approved" | "corrected" | "all";
+
 export default function ReviewsPage() {
   const { data: session } = useSession();
-  const [activeTab, setActiveTab] = useState<"pending" | "flagged" | "resolved" | "approved" | "corrected" | "all">("pending");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const tabParam = searchParams.get("tab") as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || "pending");
   const [sourceFilter, setSourceFilter] = useState<"all" | "projects" | "questions" | "collateral">("all");
+
+  // Handle tab change with URL sync
+  const handleTabChange = (tab: TabType) => {
+    setActiveTab(tab);
+    router.push(`/reviews?tab=${tab}`, { scroll: false });
+  };
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [resolutionNote, setResolutionNote] = useState("");
 
@@ -404,7 +416,7 @@ export default function ReviewsPage() {
         {(["pending", "flagged", "resolved", "approved", "corrected", "all"] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
             style={{
               ...styles.tab,
               backgroundColor: activeTab === tab ? "#0ea5e9" : "#f1f5f9",
