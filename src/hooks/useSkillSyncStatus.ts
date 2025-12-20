@@ -25,6 +25,7 @@ interface SyncLogEntry {
   error: string | null;
   gitCommitSha: string | null;
   syncedBy: string | null;
+  syncedByName: string | null;
 }
 
 /**
@@ -62,14 +63,16 @@ export function useSkillSyncLogs(skillId: string, limit = 10) {
           : `HTTP ${response.status}`;
         throw new Error(errorMessage);
       }
-      return response.json();
+      // API returns { data: { logs: [...] } }, unwrap the data property
+      const json = await response.json();
+      return json.data;
     },
     enabled: !!skillId,
   });
 }
 
 /**
- * Trigger manual sync from git to database
+ * Trigger manual sync from git to database (bulk)
  */
 export function useTriggerSync() {
   const queryClient = useQueryClient();
@@ -93,6 +96,40 @@ export function useTriggerSync() {
     onSuccess: () => {
       // Invalidate and refetch sync status and skills
       queryClient.invalidateQueries({ queryKey: ["skills", "sync"] });
+      queryClient.invalidateQueries({ queryKey: ["skills"] });
+    },
+  });
+}
+
+/**
+ * Manually sync a single skill to Git
+ */
+export function useSyncSkillToGit() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { message: string; commitSha?: string; skillId: string; slug: string },
+    Error,
+    string // skillId
+  >({
+    mutationFn: async (skillId: string) => {
+      const response = await fetch(`/api/skills/${skillId}/sync`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || "Failed to sync skill to Git");
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, skillId) => {
+      // Invalidate sync logs for this skill (partial match covers all limit variants)
+      queryClient.invalidateQueries({ queryKey: ["skills", skillId, "sync-logs"] });
+      // Invalidate overall sync status
+      queryClient.invalidateQueries({ queryKey: ["skills", "sync"] });
+      // Invalidate the skills list to update syncStatus in the UI
       queryClient.invalidateQueries({ queryKey: ["skills"] });
     },
   });

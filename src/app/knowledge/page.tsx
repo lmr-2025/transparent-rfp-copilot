@@ -3,7 +3,7 @@
 import { useState, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3, ArrowUpDown, LayoutGrid, List, Lightbulb } from "lucide-react";
+import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3, ArrowUpDown, LayoutGrid, List, Lightbulb, Upload, Tag, Power, Download } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import LibraryAnalysisModal from "./components/LibraryAnalysisModal";
 import Link from "next/link";
@@ -28,7 +28,7 @@ import {
   UnifiedLibraryItem,
   SkillOwner,
 } from "@/hooks/use-knowledge-data";
-import { useSyncHealthStatus } from "@/hooks/useSkillSyncStatus";
+import { useSyncHealthStatus, useSyncSkillToGit } from "@/hooks/useSkillSyncStatus";
 import { SyncHealthBar } from "@/components/knowledge/sync-health-bar";
 import { useSession } from "next-auth/react";
 import { canManageKnowledge, type UserSession } from "@/lib/permissions";
@@ -45,6 +45,14 @@ import { KnowledgeGridTile } from "./components/knowledge-grid-tile";
 import { CollapsibleCategorySection } from "./components/collapsible-category-section";
 import { RequestKnowledgeDialog } from "./components/request-knowledge-dialog";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // View mode
 type ViewMode = "list" | "grid";
@@ -74,10 +82,15 @@ function KnowledgeLibraryContent() {
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("updated-desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [expandedGridItemId, setExpandedGridItemId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isBulkSyncing, setIsBulkSyncing] = useState(false);
+  const [isBulkToggling, setIsBulkToggling] = useState(false);
+  const [showBulkCategoryDialog, setShowBulkCategoryDialog] = useState(false);
+  const [bulkSelectedCategories, setBulkSelectedCategories] = useState<Set<string>>(new Set());
   const [showAnalysisModal, setShowAnalysisModal] = useState(false);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
 
@@ -95,6 +108,7 @@ function KnowledgeLibraryContent() {
   const updateSkillMutation = useUpdateSkill();
   const refreshSkillMutation = useRefreshSkill();
   const applyRefreshMutation = useApplyRefreshChanges();
+  const syncSkillMutation = useSyncSkillToGit();
 
   // Confirm dialog
   const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
@@ -320,6 +334,142 @@ function KnowledgeLibraryContent() {
     }
   };
 
+  // Bulk sync handler (skills only)
+  const handleBulkSync = async () => {
+    const skillIds = Array.from(selectedIds).filter((id) => {
+      const item = sortedItems.find((i) => i.id === id);
+      return item?.type === "skill";
+    });
+
+    if (skillIds.length === 0) {
+      toast.error("No skills selected to sync");
+      return;
+    }
+
+    setIsBulkSyncing(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const id of skillIds) {
+      try {
+        await syncSkillMutation.mutateAsync(id);
+        successCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    setIsBulkSyncing(false);
+    clearSelection();
+
+    if (errorCount === 0) {
+      toast.success(`Synced ${successCount} skills to Git`);
+    } else {
+      toast.error(`Synced ${successCount} skills, ${errorCount} failed`);
+    }
+  };
+
+  // Bulk toggle active handler (skills only)
+  const handleBulkToggleActive = async (setActive: boolean) => {
+    const skillIds = Array.from(selectedIds).filter((id) => {
+      const item = sortedItems.find((i) => i.id === id);
+      return item?.type === "skill";
+    });
+
+    if (skillIds.length === 0) {
+      toast.error("No skills selected");
+      return;
+    }
+
+    setIsBulkToggling(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const id of skillIds) {
+      try {
+        await updateSkillMutation.mutateAsync({ id, updates: { isActive: setActive } });
+        successCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    setIsBulkToggling(false);
+    clearSelection();
+
+    const action = setActive ? "activated" : "deactivated";
+    if (errorCount === 0) {
+      toast.success(`${successCount} skills ${action}`);
+    } else {
+      toast.error(`${successCount} skills ${action}, ${errorCount} failed`);
+    }
+  };
+
+  // Bulk update categories handler
+  const handleBulkUpdateCategories = async (newCategories: string[]) => {
+    const skillIds = Array.from(selectedIds).filter((id) => {
+      const item = sortedItems.find((i) => i.id === id);
+      return item?.type === "skill";
+    });
+
+    if (skillIds.length === 0) {
+      toast.error("No skills selected");
+      return;
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    for (const id of skillIds) {
+      try {
+        await updateSkillMutation.mutateAsync({ id, updates: { categories: newCategories } });
+        successCount++;
+      } catch {
+        errorCount++;
+      }
+    }
+
+    clearSelection();
+    setShowBulkCategoryDialog(false);
+
+    if (errorCount === 0) {
+      toast.success(`Updated categories for ${successCount} skills`);
+    } else {
+      toast.error(`Updated ${successCount} skills, ${errorCount} failed`);
+    }
+  };
+
+  // Export selected skills
+  const handleExportSelected = () => {
+    const selectedSkills = skills.filter((s) => selectedIds.has(s.id));
+
+    if (selectedSkills.length === 0) {
+      toast.error("No skills selected to export");
+      return;
+    }
+
+    const exportData = selectedSkills.map((skill) => ({
+      title: skill.title,
+      categories: skill.categories,
+      content: skill.content,
+      sourceUrls: skill.sourceUrls,
+      isActive: skill.isActive,
+    }));
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `skills-export-${new Date().toISOString().split("T")[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    toast.success(`Exported ${selectedSkills.length} skills`);
+    clearSelection();
+  };
+
   // Handle update owners (skills only)
   const handleUpdateOwners = async (id: string, owners: SkillOwner[]) => {
     try {
@@ -508,6 +658,51 @@ function KnowledgeLibraryContent() {
               <Button variant="outline" onClick={selectAll}>
                 Select All ({sortedItems.length})
               </Button>
+              {/* Bulk actions - only show on Skills tab */}
+              {activeTab === "skills" && (
+                <>
+                  <Button
+                    variant="outline"
+                    onClick={handleBulkSync}
+                    disabled={selectedIds.size === 0 || isBulkSyncing}
+                  >
+                    {isBulkSyncing ? (
+                      <InlineLoader size="sm" className="mr-2" />
+                    ) : (
+                      <Upload className="h-4 w-4 mr-2" />
+                    )}
+                    Sync
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowBulkCategoryDialog(true)}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Tag className="h-4 w-4 mr-2" />
+                    Category
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleBulkToggleActive(true)}
+                    disabled={selectedIds.size === 0 || isBulkToggling}
+                  >
+                    {isBulkToggling ? (
+                      <InlineLoader size="sm" className="mr-2" />
+                    ) : (
+                      <Power className="h-4 w-4 mr-2" />
+                    )}
+                    Activate
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleExportSelected}
+                    disabled={selectedIds.size === 0}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export
+                  </Button>
+                </>
+              )}
               <Button
                 variant="destructive"
                 onClick={handleBulkDelete}
@@ -688,17 +883,54 @@ function KnowledgeLibraryContent() {
         </Card>
       ) : viewMode === "grid" ? (
         // Grid view
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {sortedItems.map((item) => (
-            <KnowledgeGridTile
-              key={item.id}
-              item={item}
-              selectionMode={selectionMode}
-              isSelected={selectedIds.has(item.id)}
-              onToggleSelection={() => toggleSelection(item.id)}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {sortedItems.map((item) => (
+              <KnowledgeGridTile
+                key={item.id}
+                item={item}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.has(item.id)}
+                onToggleSelection={() => toggleSelection(item.id)}
+                onClick={() => setExpandedGridItemId(item.id)}
+              />
+            ))}
+          </div>
+
+          {/* Expanded item card overlay for grid view */}
+          {expandedGridItemId && (() => {
+            const expandedItem = sortedItems.find(i => i.id === expandedGridItemId);
+            if (!expandedItem) return null;
+            return (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setExpandedGridItemId(null);
+                }}
+              >
+                <div className="w-full max-w-3xl max-h-[90vh] overflow-y-auto m-4">
+                  <KnowledgeItemCard
+                    item={expandedItem}
+                    onDelete={() => {
+                      handleDelete(expandedItem);
+                      setExpandedGridItemId(null);
+                    }}
+                    isDeleting={deletingId === expandedItem.id}
+                    onUpdateOwners={expandedItem.type === "skill" ? handleUpdateOwners : undefined}
+                    onUpdateContent={expandedItem.type === "skill" && userCanManageKnowledge ? handleUpdateContent : undefined}
+                    onUpdateCategories={expandedItem.type === "skill" ? handleUpdateCategories : undefined}
+                    onRefresh={expandedItem.type === "skill" ? handleRefreshSkill : undefined}
+                    onApplyRefresh={expandedItem.type === "skill" ? handleApplyRefresh : undefined}
+                    onUpdateTitle={expandedItem.type === "url" && expandedItem.linkedSkillId ? handleUpdateSourceUrlTitle : undefined}
+                    isRefreshing={refreshSkillMutation.isPending}
+                    linkedSkillName={expandedItem.linkedSkillId ? skillIdToTitle.get(expandedItem.linkedSkillId) : undefined}
+                    onClose={() => setExpandedGridItemId(null)}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+        </>
       ) : sortOption === "category" && groupedByCategory ? (
         // List view - grouped by category with collapsible sections
         <div>
@@ -776,6 +1008,56 @@ function KnowledgeLibraryContent() {
         open={showRequestDialog}
         onOpenChange={setShowRequestDialog}
       />
+
+      {/* Bulk Category Dialog */}
+      <Dialog
+        open={showBulkCategoryDialog}
+        onOpenChange={(open) => {
+          setShowBulkCategoryDialog(open);
+          if (!open) setBulkSelectedCategories(new Set());
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Set Categories</DialogTitle>
+            <DialogDescription>
+              Select categories to assign to {selectedIds.size} selected skill{selectedIds.size !== 1 ? "s" : ""}.
+              This will replace existing categories.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-wrap gap-2 py-4">
+            {categories.map((cat) => (
+              <Button
+                key={cat.id}
+                variant={bulkSelectedCategories.has(cat.name) ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  const newSet = new Set(bulkSelectedCategories);
+                  if (newSet.has(cat.name)) {
+                    newSet.delete(cat.name);
+                  } else {
+                    newSet.add(cat.name);
+                  }
+                  setBulkSelectedCategories(newSet);
+                }}
+              >
+                {cat.name}
+              </Button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkCategoryDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleBulkUpdateCategories(Array.from(bulkSelectedCategories))}
+              disabled={bulkSelectedCategories.size === 0}
+            >
+              Apply to {selectedIds.size} Skills
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

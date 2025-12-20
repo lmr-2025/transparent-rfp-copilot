@@ -80,6 +80,7 @@ export function KnowledgeGridTile({
             status={item.syncStatus ?? null}
             lastSyncedAt={item.lastSyncedAt}
             showLabel={false}
+            variant="icon-only"
           />
         )}
       </div>

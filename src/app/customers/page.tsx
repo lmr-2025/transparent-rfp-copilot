@@ -286,6 +286,7 @@ export default function CustomerProfileLibraryPage() {
                         status={profile.syncStatus ?? null}
                         lastSyncedAt={profile.lastSyncedAt}
                         showLabel={false}
+                        variant="icon-only"
                       />
                     </div>
                     <div className="mt-1.5 flex gap-2 items-center">

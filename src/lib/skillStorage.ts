@@ -128,6 +128,12 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
       ? [item.category]
       : [];
 
+  // Parse sync status
+  const rawSyncStatus = (item as Record<string, unknown>).syncStatus;
+  const syncStatus = typeof rawSyncStatus === "string" ? rawSyncStatus as Skill["syncStatus"] : undefined;
+  const rawLastSyncedAt = (item as Record<string, unknown>).lastSyncedAt;
+  const lastSyncedAt = typeof rawLastSyncedAt === "string" ? rawLastSyncedAt : undefined;
+
   return {
     id: item.id ?? crypto.randomUUID(),
     title: item.title ?? "",
@@ -144,6 +150,8 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
     lastSourceLink: typeof item.lastSourceLink === "string" ? item.lastSourceLink : undefined,
     owners: owners && owners.length > 0 ? owners : undefined,
     history: history && history.length > 0 ? history : undefined,
+    syncStatus,
+    lastSyncedAt,
   };
 }
 

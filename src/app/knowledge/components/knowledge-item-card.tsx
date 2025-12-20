@@ -31,6 +31,7 @@ interface KnowledgeItemCardProps {
   isSelected?: boolean;
   onToggleSelection?: () => void;
   linkedSkillName?: string; // Name of linked skill (for sources)
+  onClose?: () => void; // Close handler for modal/overlay usage
 }
 
 export function KnowledgeItemCard({
@@ -48,9 +49,11 @@ export function KnowledgeItemCard({
   isSelected,
   onToggleSelection,
   linkedSkillName,
+  onClose,
 }: KnowledgeItemCardProps) {
   const router = useRouter();
-  const [isExpanded, setIsExpanded] = useState(false);
+  // Start expanded when displayed in modal (onClose is provided)
+  const [isExpanded, setIsExpanded] = useState(!!onClose);
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
@@ -286,6 +289,7 @@ export function KnowledgeItemCard({
               status={item.syncStatus ?? null}
               lastSyncedAt={item.lastSyncedAt}
               showLabel={false}
+              variant="icon-only"
             />
           )}
 
@@ -347,6 +351,22 @@ export function KnowledgeItemCard({
               <ChevronDown className="h-4 w-4" />
             )}
           </Button>
+
+          {/* Close button for modal/overlay usage */}
+          {onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                onClose();
+              }}
+              className="h-6 w-6 p-0 flex-shrink-0"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
         </div>
 
         {/* Subtitle row (only if present) */}

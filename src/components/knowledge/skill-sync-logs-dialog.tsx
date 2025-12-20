@@ -14,6 +14,7 @@ import {
   Database,
   GitBranch,
   RefreshCw,
+  Upload,
 } from "lucide-react";
 import {
   Dialog,
@@ -23,9 +24,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { PageLoader } from "@/components/ui/loading";
-import { useSkillSyncLogs } from "@/hooks/useSkillSyncStatus";
+import { Button } from "@/components/ui/button";
+import { PageLoader, InlineLoader } from "@/components/ui/loading";
+import { useSkillSyncLogs, useSyncSkillToGit } from "@/hooks/useSkillSyncStatus";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // Simple date formatting to avoid date-fns dependency
 function formatDate(dateString: string): string {
@@ -53,16 +56,51 @@ export function SkillSyncLogsDialog({
   skillId,
   skillTitle,
 }: SkillSyncLogsDialogProps) {
-  const { data, isLoading, error } = useSkillSyncLogs(skillId, 20);
+  const { data, isLoading, error, refetch } = useSkillSyncLogs(skillId, 20);
+  const syncMutation = useSyncSkillToGit();
 
   const logs = data?.logs || [];
+
+  const handleSyncNow = async () => {
+    try {
+      const result = await syncMutation.mutateAsync(skillId);
+      toast.success("Synced to Git", {
+        description: result.commitSha
+          ? `Commit: ${result.commitSha.substring(0, 8)}`
+          : "Skill synced successfully",
+      });
+      // Refetch logs to show the new sync entry
+      await refetch();
+    } catch (error) {
+      toast.error("Sync failed", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[80vh]">
         <DialogHeader>
-          <DialogTitle>Sync History</DialogTitle>
-          <DialogDescription>{skillTitle}</DialogDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <DialogTitle>Sync History</DialogTitle>
+              <DialogDescription>{skillTitle}</DialogDescription>
+            </div>
+            <Button
+              onClick={handleSyncNow}
+              disabled={syncMutation.isPending}
+              size="sm"
+              className="ml-4"
+            >
+              {syncMutation.isPending ? (
+                <InlineLoader size="sm" className="mr-1.5" />
+              ) : (
+                <Upload className="h-4 w-4 mr-1.5" />
+              )}
+              Sync Now
+            </Button>
+          </div>
         </DialogHeader>
 
         <div className="max-h-[60vh] overflow-y-auto">
@@ -115,6 +153,7 @@ interface SyncLogEntryProps {
     error: string | null;
     gitCommitSha: string | null;
     syncedBy: string | null;
+    syncedByName: string | null;
   };
   isLatest: boolean;
 }
@@ -211,10 +250,10 @@ function SyncLogEntry({ log, isLatest }: SyncLogEntryProps) {
               </div>
             )}
 
-            {log.syncedBy && (
+            {(log.syncedByName || log.syncedBy) && (
               <div>
                 <span className="text-muted-foreground">By: </span>
-                <span className="font-medium">{log.syncedBy}</span>
+                <span className="font-medium">{log.syncedByName || log.syncedBy}</span>
               </div>
             )}
 

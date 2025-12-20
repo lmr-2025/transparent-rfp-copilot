@@ -79,11 +79,29 @@ export async function completeSyncLog(params: CompleteSyncLogParams) {
  * Get recent sync logs for a skill
  */
 export async function getSkillSyncLogs(skillId: string, limit = 10) {
-  return prisma.skillSyncLog.findMany({
+  const logs = await prisma.skillSyncLog.findMany({
     where: { skillId },
     orderBy: { startedAt: "desc" },
     take: limit,
   });
+
+  // Resolve user IDs to names
+  const userIds = [...new Set(logs.map(log => log.syncedBy).filter((id): id is string => id !== null && id !== "system"))];
+  const users = userIds.length > 0
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, name: true, email: true },
+      })
+    : [];
+
+  const userMap = new Map(users.map(u => [u.id, u.name || u.email || u.id]));
+
+  return logs.map(log => ({
+    ...log,
+    syncedByName: log.syncedBy === "system"
+      ? "System"
+      : userMap.get(log.syncedBy!) || log.syncedBy,
+  }));
 }
 
 /**

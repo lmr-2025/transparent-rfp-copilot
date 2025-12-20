@@ -18,6 +18,7 @@ interface SyncStatusBadgeProps {
   className?: string;
   showLabel?: boolean;
   size?: "sm" | "md";
+  variant?: "badge" | "icon-only"; // icon-only for compact displays like grid tiles
 }
 
 const SYNC_STATUS_CONFIG = {
@@ -27,6 +28,9 @@ const SYNC_STATUS_CONFIG = {
     color: "text-green-600",
     bgColor: "bg-green-50",
     borderColor: "border-green-200",
+    // Solid variant for icon-only mode - more visible
+    solidBg: "bg-green-200",
+    solidColor: "text-green-700",
   },
   pending: {
     icon: Clock,
@@ -34,6 +38,8 @@ const SYNC_STATUS_CONFIG = {
     color: "text-amber-600",
     bgColor: "bg-amber-50",
     borderColor: "border-amber-200",
+    solidBg: "bg-amber-200",
+    solidColor: "text-amber-700",
   },
   failed: {
     icon: AlertCircle,
@@ -41,6 +47,8 @@ const SYNC_STATUS_CONFIG = {
     color: "text-red-600",
     bgColor: "bg-red-50",
     borderColor: "border-red-200",
+    solidBg: "bg-red-200",
+    solidColor: "text-red-700",
   },
   unknown: {
     icon: HelpCircle,
@@ -48,6 +56,8 @@ const SYNC_STATUS_CONFIG = {
     color: "text-slate-500",
     bgColor: "bg-slate-50",
     borderColor: "border-slate-200",
+    solidBg: "bg-slate-200",
+    solidColor: "text-slate-600",
   },
 } as const;
 
@@ -69,6 +79,7 @@ export function SyncStatusBadge({
   className,
   showLabel = true,
   size = "sm",
+  variant = "badge",
 }: SyncStatusBadgeProps) {
   const effectiveStatus: DisplaySyncStatus = status || "unknown";
   const config = SYNC_STATUS_CONFIG[effectiveStatus];
@@ -82,6 +93,22 @@ export function SyncStatusBadge({
     effectiveStatus === "synced" && lastSyncedAt
       ? `Last synced: ${formatTimeSince(lastSyncedAt)}`
       : `Sync status: ${config.label}`;
+
+  // Icon-only variant for compact displays - solid background for visibility
+  if (variant === "icon-only") {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center justify-center rounded-full p-1",
+          config.solidBg,
+          className
+        )}
+        title={title}
+      >
+        <Icon className={cn("h-3.5 w-3.5", config.solidColor)} />
+      </span>
+    );
+  }
 
   return (
     <span
