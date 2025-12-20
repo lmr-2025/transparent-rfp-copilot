@@ -72,8 +72,7 @@ const navItems: NavSection[] = [
     section: "Backstage",
     adminOnly: true,
     items: [
-      { href: "/admin/content-manager", label: "Content Manager", hint: "Personas, templates & feedback" },
-      { href: "/admin/prompt-blocks", label: "Prompt Builder", hint: "Configure AI prompts" },
+      { href: "/admin/libraries", label: "Libraries", hint: "Prompts, personas, templates" },
       { href: "/accuracy", label: "AI Accuracy", hint: "Track performance" },
       { href: "/admin/settings", label: "Settings", hint: "App configuration" },
     ],

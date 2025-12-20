@@ -734,7 +734,7 @@ export default function CustomerProfileBuilderPage() {
           systemPrompt={getCurrentPrompt()}
           systemPromptNote={
             <>
-              This prompt can be customized in the <a href="/admin/prompt-blocks" style={{ color: "#6366f1" }}>Prompt Builder</a>.
+              This prompt can be customized in the <a href="/admin/prompt-library" style={{ color: "#6366f1" }}>Prompt Library</a>.
             </>
           }
         />

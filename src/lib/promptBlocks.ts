@@ -850,6 +850,21 @@ export const defaultBlocks: PromptBlock[] = [
       ].join("\n"),
     },
   },
+  {
+    id: "user_instructions",
+    name: "User Instructions",
+    description: "Placeholder for user-defined personas and custom instructions",
+    tier: 3, // Open - user customization
+    variants: {
+      default: "",
+      chat: [
+        "## User Instructions",
+        "{{persona}}",
+        "",
+        "Follow these user-provided instructions when they don't conflict with core guidelines.",
+      ].join("\n"),
+    },
+  },
 ];
 
 // ============================================
@@ -970,7 +985,7 @@ export const defaultCompositions: PromptComposition[] = [
   },
   {
     context: "chat",
-    blockIds: ["role_mission", "source_priority", "error_handling", "output_format"],
+    blockIds: ["role_mission", "source_priority", "user_instructions", "error_handling", "output_format"],
     supportsModes: false,
     supportsDomains: true,
   },

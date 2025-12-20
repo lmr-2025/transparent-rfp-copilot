@@ -1087,8 +1087,8 @@ export default function BulkResponsesPage() {
               <label style={{ ...styles.label, marginTop: 0, marginBottom: "4px" }} htmlFor="promptText">
                 System Prompt
               </label>
-              <a href="/admin/prompt-blocks" style={{ color: "#2563eb", fontSize: "0.85rem" }}>
-                Need to edit the prompt? Visit Prompt Builder →
+              <a href="/admin/prompt-library" style={{ color: "#2563eb", fontSize: "0.85rem" }}>
+                Need to edit the prompt? Visit Prompt Library →
               </a>
             </div>
             <button

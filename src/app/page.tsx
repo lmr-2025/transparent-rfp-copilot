@@ -144,9 +144,9 @@ export default function HomePage() {
           />
           {isAdmin && (
             <Card
-              href="/admin/prompt-blocks"
-              title="Prompt Builder"
-              description="Configure how AI responds across all features. Edit system prompts, output formats, and quality rules."
+              href="/admin/prompt-library"
+              title="Prompt Library"
+              description="Configure how AI responds across all features. Edit system prompts, output formats, and quality rules. Git-backed."
               accentColor="#8b5cf6"
               bgColor="#faf5ff"
               featured
