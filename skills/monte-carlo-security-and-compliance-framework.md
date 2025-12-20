@@ -3,7 +3,7 @@ id: 46d93d5e-3a32-44c4-a58e-b4647e19efab
 title: Monte Carlo Security & Compliance Framework
 categories: []
 created: '2025-12-19T20:35:54.678Z'
-updated: '2025-12-19T20:51:00.283Z'
+updated: '2025-12-20T01:08:57.082Z'
 owners:
   - name: lross
     email: lross@monteccarlodata.com
@@ -12,67 +12,67 @@ sources:
   - url: >-
       https://docs.getmontecarlo.com/docs/common-security-evaluation-questions.md
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/security-compliance-overview.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/ai-security.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/llm-training-observability.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/application-security.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/security.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/infrastructure-security.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/vulnerability-disclosure-policy.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/recipes/bulk-upload-field-tags.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/recipes/create-access-token.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: >-
       https://docs.getmontecarlo.com/recipes/create-domain-based-authorization-group-via-api.md
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/recipes/creating-domains-via-api.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/recipes/delete-access-token.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/recipes/mute-data-assets-using-regex.md'
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: >-
       https://docs.getmontecarlo.com/recipes/retrieve-existing-domain-names-and-uuids.md
     addedAt: '2025-12-19T20:35:54.652Z'
-    lastFetchedAt: '2025-12-19T20:35:54.652Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/mcu-sso-user-groups-and-permissions.md'
     addedAt: '2025-12-19T20:51:00.260Z'
-    lastFetchedAt: '2025-12-19T20:51:00.260Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/setting-up-single-sign-on-sso.md'
     addedAt: '2025-12-19T20:51:00.260Z'
-    lastFetchedAt: '2025-12-19T20:51:00.260Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
   - url: 'https://docs.getmontecarlo.com/docs/mapping-sso-authorization-groups.md'
     addedAt: '2025-12-19T20:51:00.260Z'
-    lastFetchedAt: '2025-12-19T20:51:00.260Z'
+    lastFetchedAt: '2025-12-19T23:06:40.071Z'
 active: true
 ---
 ## Overview
 
 Monte Carlo is the leading Data + AI Observability Platform that helps data teams ensure reliable, high-quality data powers every decision. Security, privacy, and compliance are core to how Monte Carlo builds, deploys, and operates products because customers trust them with visibility into their most critical data systems.
 
-## What Monte Carlo Does
+## What Monte Carlo Does - test
 
 Monte Carlo continuously monitors data ecosystems, from pipelines to dashboards, to detect and resolve data issues before they impact business. The platform helps companies:
 
