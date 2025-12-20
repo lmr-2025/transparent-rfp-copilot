@@ -9,8 +9,15 @@ export const paginationSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
-// Source URL schema - can be either a string URL or a SourceUrl object
-const sourceUrlItemSchema = z.union([
+// ============================================
+// SHARED SCHEMAS (reused across multiple entities)
+// ============================================
+
+/**
+ * Source URL schema - can be either a string URL or a SourceUrl object
+ * Used by: Skills (sourceUrls), CustomerProfiles (sourceUrls)
+ */
+export const sourceUrlSchema = z.union([
   z.string().url(),
   z.object({
     url: z.string().url(),
@@ -19,8 +26,11 @@ const sourceUrlItemSchema = z.union([
   }),
 ]);
 
-// Quick fact schema - can be string (legacy) or object
-const quickFactSchema = z.union([
+/**
+ * Quick fact schema - can be string (legacy) or object
+ * Used by: Skills (quickFacts)
+ */
+export const quickFactSchema = z.union([
   z.string(),
   z.object({
     question: z.string(),
@@ -51,7 +61,7 @@ export const createSkillSchema = z.object({
   categories: z.array(z.string()).default([]),
   quickFacts: z.array(quickFactSchema).default([]),
   edgeCases: z.array(z.string()).default([]),
-  sourceUrls: z.array(sourceUrlItemSchema).default([]),
+  sourceUrls: z.array(sourceUrlSchema).default([]),
   isActive: z.boolean().default(true),
   owners: z.array(skillOwnerSchema).optional(),
   history: z.array(historyEntrySchema).optional(),
@@ -66,22 +76,12 @@ export const updateSkillSchema = z.object({
   categories: z.array(z.string()).optional(),
   quickFacts: z.array(quickFactSchema).optional(),
   edgeCases: z.array(z.string()).optional(),
-  sourceUrls: z.array(sourceUrlItemSchema).optional(),
+  sourceUrls: z.array(sourceUrlSchema).optional(),
   isActive: z.boolean().optional(),
   owners: z.array(skillOwnerSchema).optional(),
   history: z.array(historyEntrySchema).optional(),
   lastRefreshedAt: z.string().optional(),
 });
-
-// Customer profile source URL schema - supports both string and object formats
-const customerSourceUrlSchema = z.union([
-  z.string().url(),
-  z.object({
-    url: z.string().url(),
-    addedAt: z.string(),
-    lastFetchedAt: z.string().optional(),
-  }),
-]);
 
 // Customer profile source document schema
 const customerSourceDocumentSchema = z.object({
@@ -102,7 +102,7 @@ export const createCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).default([]),
-  sourceUrls: z.array(customerSourceUrlSchema).default([]),
+  sourceUrls: z.array(sourceUrlSchema).default([]),
   sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
   // New content field
   content: z.string().max(100000).optional(),
@@ -133,7 +133,7 @@ export const updateCustomerSchema = z.object({
     label: z.string(),
     value: z.string(),
   })).optional(),
-  sourceUrls: z.array(customerSourceUrlSchema).optional(),
+  sourceUrls: z.array(sourceUrlSchema).optional(),
   sourceDocuments: z.array(customerSourceDocumentSchema).optional(),
   // New content field
   content: z.string().max(100000).optional(),

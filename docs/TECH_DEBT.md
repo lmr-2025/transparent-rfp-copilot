@@ -221,19 +221,13 @@ category?: SkillCategory; // Deprecated - use categories[] instead
 
 **Effort:** Medium
 
-### 41. Validation Schema Duplication
-**Files:** `src/lib/validations.ts`
-**Issue:** Similar schema definitions exist separately:
-- `sourceUrlItemSchema` vs `customerSourceUrlSchema`
-- Repeated `quickFactSchema` union definitions
-
-**Risk:** Inconsistent validation, maintenance burden
-**Fix:**
-1. Consolidate similar schema patterns
-2. Create reusable schema builders
-3. Document schema versioning for migrations
-
-**Effort:** Low-Medium
+### 41. ✅ FIXED: Validation Schema Duplication
+**Fixed:** 2025-12-20
+**Resolution:** Consolidated duplicate schemas in `src/lib/validations.ts`:
+- Merged `sourceUrlItemSchema` and `customerSourceUrlSchema` into single exported `sourceUrlSchema`
+- Exported `quickFactSchema` for potential reuse
+- Both Skills and CustomerProfiles now use the shared `sourceUrlSchema`
+- Added JSDoc documentation explaining which entities use each schema
 
 ### ~~42. Create UI Component Index~~ ✅ FIXED
 **Fixed:** 2025-12-20
