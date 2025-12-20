@@ -3,7 +3,7 @@ id: 46d93d5e-3a32-44c4-a58e-b4647e19efab
 title: Monte Carlo Security & Compliance Framework
 categories: []
 created: '2025-12-19T20:35:54.678Z'
-updated: '2025-12-20T01:25:44.144Z'
+updated: '2025-12-20T01:27:57.012Z'
 owners:
   - name: lross
     email: lross@monteccarlodata.com
