@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { toast } from "sonner";
 import {
   Lock,
   AlertTriangle,
@@ -773,7 +774,6 @@ export function BuilderTab() {
           setPrompts(newPrompts);
         }
       } catch (err) {
-        console.error("Failed to load blocks:", err);
         setLoadError(err instanceof Error ? err.message : "Failed to load");
       } finally {
         setIsLoading(false);
@@ -942,8 +942,7 @@ export function BuilderTab() {
 
       setHasChanges(false);
     } catch (err) {
-      console.error("Failed to save blocks:", err);
-      alert(err instanceof Error ? err.message : "Failed to save blocks");
+      toast.error(err instanceof Error ? err.message : "Failed to save blocks");
     } finally {
       setIsSaving(false);
     }
@@ -973,7 +972,6 @@ export function BuilderTab() {
       }
       setHasChanges(false);
     } catch (err) {
-      console.error("Failed to reset:", err);
       setBlocks(fallbackBlocks);
       setPrompts(fallbackPrompts);
       setHasChanges(false);

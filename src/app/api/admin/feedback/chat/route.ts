@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // GET /api/admin/feedback/chat - Get all chat feedback (admin only)
 export async function GET() {
@@ -42,7 +43,7 @@ export async function GET() {
 
     return apiSuccess({ feedbacks: feedbacksWithUsers });
   } catch (error) {
-    console.error("Error fetching admin chat feedback:", error);
+    logger.error("Error fetching admin chat feedback", error, { route: "/api/admin/feedback/chat" });
     return errors.internal("Failed to fetch feedback");
   }
 }

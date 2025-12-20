@@ -103,28 +103,59 @@ export async function PUT(request: Request) {
     const userName = auth.session.user?.name || userEmail;
     const userId = auth.session.user?.id;
 
-    // Upsert blocks
-    for (const block of blocks) {
-      const dbBlock = await prisma.promptBlock.upsert({
-        where: { blockId: block.id },
-        create: {
-          blockId: block.id,
-          name: block.name,
-          description: block.description,
-          tier: block.tier ?? 3,
-          variants: block.variants,
-          updatedBy: userEmail,
-        },
-        update: {
-          name: block.name,
-          description: block.description,
-          tier: block.tier ?? undefined,
-          variants: block.variants,
-          updatedBy: userEmail,
-        },
-      });
+    // Upsert all blocks and modifiers in a single transaction for atomicity
+    const { savedBlocks, savedModifiers } = await prisma.$transaction(async (tx) => {
+      const blockResults = [];
+      for (const block of blocks) {
+        const dbBlock = await tx.promptBlock.upsert({
+          where: { blockId: block.id },
+          create: {
+            blockId: block.id,
+            name: block.name,
+            description: block.description,
+            tier: block.tier ?? 3,
+            variants: block.variants,
+            updatedBy: userEmail,
+          },
+          update: {
+            name: block.name,
+            description: block.description,
+            tier: block.tier ?? undefined,
+            variants: block.variants,
+            updatedBy: userEmail,
+          },
+        });
+        blockResults.push({ input: block, db: dbBlock });
+      }
 
-      // Commit to git
+      const modifierResults = [];
+      for (const mod of modifiers) {
+        const dbModifier = await tx.promptModifier.upsert({
+          where: { modifierId: mod.id },
+          create: {
+            modifierId: mod.id,
+            name: mod.name,
+            type: mod.type,
+            tier: mod.tier ?? 3,
+            content: mod.content,
+            updatedBy: userEmail,
+          },
+          update: {
+            name: mod.name,
+            type: mod.type,
+            tier: mod.tier ?? undefined,
+            content: mod.content,
+            updatedBy: userEmail,
+          },
+        });
+        modifierResults.push({ input: mod, db: dbModifier });
+      }
+
+      return { savedBlocks: blockResults, savedModifiers: modifierResults };
+    });
+
+    // Git sync happens outside the transaction (git failures shouldn't rollback DB)
+    for (const { input: block, db: dbBlock } of savedBlocks) {
       try {
         const defaultBlock = defaultBlocks.find((b) => b.id === block.id);
         const blockFile: PromptBlockFile = {
@@ -166,28 +197,7 @@ export async function PUT(request: Request) {
       }
     }
 
-    // Upsert modifiers
-    for (const mod of modifiers) {
-      const dbModifier = await prisma.promptModifier.upsert({
-        where: { modifierId: mod.id },
-        create: {
-          modifierId: mod.id,
-          name: mod.name,
-          type: mod.type,
-          tier: mod.tier ?? 3,
-          content: mod.content,
-          updatedBy: userEmail,
-        },
-        update: {
-          name: mod.name,
-          type: mod.type,
-          tier: mod.tier ?? undefined,
-          content: mod.content,
-          updatedBy: userEmail,
-        },
-      });
-
-      // Commit to git
+    for (const { input: mod, db: dbModifier } of savedModifiers) {
       try {
         const defaultModifier = defaultModifiers.find((m) => m.id === mod.id);
         const modifierFile: PromptModifierFile = {

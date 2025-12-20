@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
@@ -65,7 +66,7 @@ What kind of assistant would you like to build? You can pick a template to get s
         }
       }
     } catch (error) {
-      console.error("Builder error:", error);
+      toast.error("Failed to send message");
     } finally {
       setIsLoading(false);
     }
@@ -96,7 +97,7 @@ What kind of assistant would you like to build? You can pick a template to get s
       });
       onPresetSaved();
     } catch (error) {
-      console.error("Save error:", error);
+      toast.error("Failed to save preset");
     } finally {
       setIsSaving(false);
     }

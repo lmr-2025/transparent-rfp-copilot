@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Upload, FileText, Trash2, ChevronDown, ChevronUp } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmModal";
 
 type CustomerDocument = {
   id: string;
@@ -120,6 +121,12 @@ export default function CustomerDocuments({ customerId, customerName }: Props) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { confirm, ConfirmDialog } = useConfirm({
+    title: "Delete Document",
+    message: "Delete this document? This cannot be undone.",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
 
   // Upload form state
   const [showUploadForm, setShowUploadForm] = useState(false);
@@ -193,7 +200,8 @@ export default function CustomerDocuments({ customerId, customerName }: Props) {
   };
 
   const handleDelete = async (docId: string) => {
-    if (!confirm("Delete this document? This cannot be undone.")) return;
+    const confirmed = await confirm();
+    if (!confirmed) return;
 
     try {
       const res = await fetch(`/api/customers/${customerId}/documents/${docId}`, {
@@ -433,6 +441,7 @@ export default function CustomerDocuments({ customerId, customerName }: Props) {
           )}
         </>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

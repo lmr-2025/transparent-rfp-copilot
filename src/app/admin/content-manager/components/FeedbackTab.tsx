@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { MessageSquare, FileText, ThumbsUp, ThumbsDown, Flag, HelpCircle, Calendar, User } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 
@@ -81,7 +82,7 @@ export default function FeedbackTab() {
           setCollateralFeedback(data.data?.outputs || []);
         }
       } catch (error) {
-        console.error("Failed to load feedback:", error);
+        toast.error("Failed to load feedback");
       } finally {
         setIsLoading(false);
       }

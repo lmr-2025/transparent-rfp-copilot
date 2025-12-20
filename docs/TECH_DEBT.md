@@ -139,30 +139,35 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 Removed deprecated `src/components/ui/modal.tsx`. Inline styles replaced with Tailwind classes throughout.
 
-### 36. Type Inconsistencies - Deprecated Fields
+### 36. Type Inconsistencies - Deprecated Fields (Partially Fixed)
 **Files:** `src/types/skill.ts`, `src/types/customerProfile.ts`
-**Issue:** Mixed use of singular `category` (string) vs plural `categories[]`. Multiple deprecated fields still defined:
-- `sources[]` (use `sourceUrls` instead)
-- `category` (use `categories[]` instead)
-- `information` (kept for backwards compatibility)
-- `lastSourceLink` (use `sourceUrls` instead)
+**Status:** JSDoc @deprecated annotations added 2025-12-20
 
-**Evidence (skill.ts):**
-```typescript
-// Line 32: Legacy type
-export type SkillCategory = string;
+**Deprecated fields with proper @deprecated JSDoc (IDEs will show warnings):**
 
-// Line 68: Deprecated field still in use
-category?: SkillCategory; // Deprecated - use categories[] instead
-```
+In `skill.ts`:
+- `SkillCategory` type alias (use `string` or `categories[]`)
+- `SkillInformation` type (use `sourceUrls` and `content`)
+- `Skill.category` field (use `categories[]`)
+- `Skill.information` field (use `sourceUrls` and `content`)
+- `Skill.lastSourceLink` field (use `sourceUrls`)
 
-**Risk:** Developer confusion, inconsistent data
-**Fix:**
-1. Remove deprecated type aliases
-2. Run migration script for database records
-3. Update all code to use `categories[]` exclusively
+In `customerProfile.ts`:
+- `CustomerProfileKeyFact` type (use `content` field)
+- `CustomerProfile.overview/products/challenges/keyFacts` (use `content`)
+- `CustomerProfileDraftLegacy` type (use `CustomerProfileDraft`)
 
-**Effort:** Medium (requires migration)
+**Why not removed yet:**
+- `normalizeSkill()` in `skillStorage.ts` uses these for migration of old data formats
+- Deprecation timeline is 2025-03-01 per existing plan
+- Fields must remain until data migration script runs
+
+**Remaining work (after 2025-03-01):**
+1. Run migration script to update all database records
+2. Remove deprecated fields from types
+3. Simplify `normalizeSkill()` to ~20 lines
+
+**Effort:** Low (annotations done) / Medium (full removal requires migration)
 
 ### ~~37. Hardcoded LLM Parameters~~ ✅ FIXED
 **Fixed:** 2025-12-20
@@ -197,29 +202,32 @@ category?: SkillCategory; // Deprecated - use categories[] instead
 
 ## P2: Medium Priority
 
-### 39. Missing Database Transactions
-**Files:** Most mutation API endpoints
-**Issue:** Only `src/app/api/customers/[id]/route.ts` uses transactions. Other critical mutations don't wrap operations in transactions.
+### 39. ✅ FIXED: Missing Database Transactions
+**Fixed:** 2025-12-20
+**Resolution:** Added `prisma.$transaction()` to multi-operation routes:
+- `src/app/api/prompt-blocks/route.ts` PUT - Wraps all block and modifier upserts in single transaction
+- `src/app/api/skill-categories/route.ts` PUT - Wraps all category updates in single transaction
+- `src/app/api/reference-urls/route.ts` PUT - Wraps bulk URL upserts in single transaction
 
-**Risk:** Data inconsistency on partial failures
-**Fix:**
-1. Audit all multi-step mutation routes
-2. Add `prisma.$transaction()` wrapping
-3. Create reusable transaction helper
+**Design decision:** Git sync operations remain outside transactions (git failures shouldn't rollback DB writes).
 
-**Effort:** Medium
+### 40. ✅ REVIEWED: N+1 Query Audit
+**Audited:** 2025-12-20
+**Result:** No significant N+1 issues found. Routes are well-designed.
 
-### 40. N+1 Query Audit Needed
-**Files:** Various API routes with `findMany`
-**Issue:** Some `findMany` queries may lack proper `include` relationships, causing N+1 queries.
+**Routes with proper includes/selects:**
+- `/api/projects` - includes rows, owner, customerProfiles
+- `/api/skills` - includes owner
+- `/api/customers` - includes owner
+- `/api/documents` - includes owner (via select)
+- `/api/reference-urls` - includes owner
+- `/api/chat-sessions` - uses select for specific fields
+- `/api/templates` - uses select for specific fields
 
-**Risk:** Performance degradation at scale
-**Fix:**
-1. Add database query logging in development
-2. Audit all `findMany` to ensure proper `include`/`select`
-3. Consider query profiling tool
-
-**Effort:** Medium
+**Routes without relations (no includes needed):**
+- `/api/skill-categories`, `/api/context-snippets`, `/api/prompt-blocks` - flat tables
+- `/api/instruction-presets` - stores createdByEmail inline, no join needed
+- `/api/audit-log` - flat table with denormalized user info
 
 ### 41. ✅ FIXED: Validation Schema Duplication
 **Fixed:** 2025-12-20
@@ -605,9 +613,16 @@ category?: SkillCategory; // Deprecated - use categories[] instead
   - `encryption.ts` - 1 call migrated
   - `usageTracking.ts` - 1 call migrated with feature/model context
   - `branding.tsx` - 1 call converted to silent failure (defaults work fine)
+- **Additional cleanup (2025-12-20):**
+  - `api/chat/feedback/route.ts` - Migrated to logger
+  - `api/admin/feedback/chat/route.ts` - Migrated to logger
+  - `admin/prompt-library/BuilderTab.tsx` - Replaced with toast
+  - `admin/personas/BuilderTab.tsx` - Replaced with toast
+  - `admin/content-manager/FeedbackTab.tsx` - Replaced with toast
 - **Remaining (intentional):** Only 3 `console.error` calls remain:
   - `logger.ts` (2 calls) - This IS the logger, wraps console.error by design
   - `error.tsx` (1 call) - Next.js error boundary, appropriate use
+- **Remaining (acceptable):** `customers/add/page.tsx` uses console.warn/error for non-critical document upload failures where the main operation still succeeds
 
 #### 32. Inconsistent Naming: BulkProject vs Project
 **File:** `prisma/schema.prisma` (lines 78-105)
@@ -626,12 +641,11 @@ category?: SkillCategory; // Deprecated - use categories[] instead
 - Rewrite with proper generics and Prisma type inference
 **Effort:** High (if rewriting)
 
-#### 34. Unused Variable eslint-disable in Skills Route
-**File:** `src/app/api/skills/route.ts` (line 87)
-**Issue:** `// eslint-disable-next-line @typescript-eslint/no-unused-vars` for destructured `owner`
-**Risk:** Minor - indicates potential cleanup opportunity
-**Fix:** Remove unused destructuring or use the variable
-**Effort:** Low
+#### ~~34. Unused Variable eslint-disable in Skills Route~~ ✅ REVIEWED
+**File:** `src/app/api/skills/route.ts` (line 93)
+**Status:** Not an issue - this is the standard pattern for excluding a property from object spread.
+The `_owner` destructuring intentionally removes the Prisma relation from the response.
+The underscore prefix follows the convention for intentionally unused variables.
 
 ---
 

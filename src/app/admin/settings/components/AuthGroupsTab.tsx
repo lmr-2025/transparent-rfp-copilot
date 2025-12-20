@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Plus, Pencil, Trash2, X, Check, AlertCircle, Shield } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmModal";
 import { Capability } from "@prisma/client";
 import { InlineLoader } from "@/components/ui/loading";
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
@@ -33,6 +34,12 @@ export default function AuthGroupsTab() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const { confirm, ConfirmDialog } = useConfirm({
+    title: "Delete Group Mapping",
+    message: "Are you sure you want to delete this group mapping?",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
 
   // Form state
   const [formProvider, setFormProvider] = useState("okta");
@@ -142,8 +149,9 @@ export default function AuthGroupsTab() {
     }
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Are you sure you want to delete this group mapping?")) return;
+  const handleDelete = async (id: string) => {
+    const confirmed = await confirm();
+    if (!confirmed) return;
     deleteMutation.mutate(id);
   };
 
@@ -370,6 +378,7 @@ export default function AuthGroupsTab() {
           </table>
         </div>
       )}
+      <ConfirmDialog />
     </div>
   );
 }

@@ -3,9 +3,15 @@ export type SkillFact = {
   answer: string;
 };
 
+/**
+ * @deprecated Since 2024-12 - Use sourceUrls and content fields on Skill instead.
+ * Will be removed after 2025-03-01. See TECH_DEBT.md for migration plan.
+ */
 export type SkillInformation = {
+  /** @deprecated Use Skill.content instead */
   responseTemplate?: string;
-  sources?: string[]; // Deprecated - use sourceUrls instead
+  /** @deprecated Use Skill.sourceUrls instead */
+  sources?: string[];
 };
 
 // Default categories - users can customize via Admin > Settings > Categories
@@ -28,7 +34,10 @@ export type SkillCategoryItem = {
   createdAt: string;
 };
 
-// Legacy type for backwards compatibility
+/**
+ * @deprecated Since 2024-12 - Use `string` directly or `categories: string[]` on Skill.
+ * Will be removed after 2025-03-01.
+ */
 export type SkillCategory = string;
 
 export type SourceUrl = {
@@ -64,21 +73,40 @@ export type SyncStatus = "synced" | "pending" | "failed" | null;
 export type Skill = {
   id: string;
   title: string;
-  categories?: string[]; // Broad capability areas this skill belongs to (can be multiple)
-  category?: SkillCategory; // Deprecated - use categories[] instead
+  /** Broad capability areas this skill belongs to (can be multiple) */
+  categories?: string[];
+  /**
+   * @deprecated Since 2024-12 - Use categories[] instead.
+   * Kept for backwards compatibility migration. Will be removed after 2025-03-01.
+   */
+  category?: SkillCategory;
   content: string;
   quickFacts: SkillFact[];
   edgeCases: string[];
-  sourceUrls: SourceUrl[]; // URLs used to build/update this skill
-  sourceDocuments?: SourceDocument[]; // Documents used to build this skill
-  information?: SkillInformation; // Deprecated - keeping for backwards compatibility
+  /** URLs used to build/update this skill */
+  sourceUrls: SourceUrl[];
+  /** Documents used to build this skill */
+  sourceDocuments?: SourceDocument[];
+  /**
+   * @deprecated Since 2024-12 - Use sourceUrls and content fields instead.
+   * Kept for backwards compatibility migration. Will be removed after 2025-03-01.
+   */
+  information?: SkillInformation;
   isActive: boolean;
   createdAt: string;
   lastRefreshedAt?: string;
-  lastSourceLink?: string; // Deprecated - use sourceUrls instead
-  owners?: SkillOwner[]; // Subject matter experts responsible for this skill
-  history?: SkillHistoryEntry[]; // Audit trail of changes
+  /**
+   * @deprecated Since 2024-12 - Use sourceUrls instead.
+   * Kept for backwards compatibility migration. Will be removed after 2025-03-01.
+   */
+  lastSourceLink?: string;
+  /** Subject matter experts responsible for this skill */
+  owners?: SkillOwner[];
+  /** Audit trail of changes */
+  history?: SkillHistoryEntry[];
   // Git sync tracking
-  syncStatus?: SyncStatus; // "synced", "pending", "failed", null = unknown
-  lastSyncedAt?: string; // Last successful sync to/from git
+  /** Sync status: "synced", "pending", "failed", or null (unknown) */
+  syncStatus?: SyncStatus;
+  /** Last successful sync to/from git */
+  lastSyncedAt?: string;
 };

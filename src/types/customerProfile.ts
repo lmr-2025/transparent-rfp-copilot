@@ -24,10 +24,15 @@ export type CustomerProfileHistoryEntry = {
   user?: string;
 };
 
-// Legacy type - deprecated, use content field instead
+/**
+ * @deprecated Since 2024-12 - Use content field (markdown prose) instead.
+ * Will be removed in a future version.
+ */
 export type CustomerProfileKeyFact = {
-  label: string; // e.g., "Founded", "Employees", "Revenue"
-  value: string; // e.g., "2015", "500+", "$50M ARR"
+  /** e.g., "Founded", "Employees", "Revenue" */
+  label: string;
+  /** e.g., "2015", "500+", "$50M ARR" */
+  value: string;
 };
 
 export type CustomerProfile = {
@@ -46,15 +51,31 @@ export type CustomerProfile = {
   billingLocation?: string; // Combined BillingCity, State, Country
   lastSalesforceSync?: string; // When static fields were last synced
 
-  // New unified content field (markdown-structured prose)
+  /** New unified content field (markdown-structured prose) - preferred over legacy fields */
   content?: string;
-  considerations: string[]; // Special notes/caveats about this customer
+  /** Special notes/caveats about this customer */
+  considerations: string[];
   sourceDocuments?: CustomerProfileSourceDocument[];
 
-  // Legacy fields (deprecated - migrate to content field)
+  /**
+   * @deprecated Since 2024-12 - Use content field instead.
+   * Kept for backwards compatibility. Will be migrated to content field.
+   */
   overview: string;
+  /**
+   * @deprecated Since 2024-12 - Use content field instead.
+   * Kept for backwards compatibility. Will be migrated to content field.
+   */
   products?: string;
+  /**
+   * @deprecated Since 2024-12 - Use content field instead.
+   * Kept for backwards compatibility. Will be migrated to content field.
+   */
   challenges?: string;
+  /**
+   * @deprecated Since 2024-12 - Use content field instead.
+   * Kept for backwards compatibility. Will be migrated to content field.
+   */
   keyFacts: CustomerProfileKeyFact[];
 
   sourceUrls: CustomerProfileSourceUrl[];
@@ -91,7 +112,10 @@ export type CustomerProfileDraft = {
   considerations?: string[];
 };
 
-// Legacy draft format for backwards compatibility
+/**
+ * @deprecated Use CustomerProfileDraft instead (with content field).
+ * Legacy draft format for backwards compatibility.
+ */
 export type CustomerProfileDraftLegacy = {
   name: string;
   industry?: string;

@@ -22,6 +22,7 @@ import {
   Trash2,
   Download,
 } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmModal";
 import { InlineLoader } from "@/components/ui/loading";
 import { InlineError } from "@/components/ui/status-display";
 import { exportQuestionLog } from "@/lib/exportUtils";
@@ -142,6 +143,13 @@ function StatusIcon({ status }: { status: QuestionLogStatus }) {
 
 export default function AccuracyPage() {
   const { data: session } = useSession();
+  const { confirm, ConfirmDialog } = useConfirm({
+    title: "Delete Question",
+    message: "Are you sure you want to delete this question? This action cannot be undone.",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
+
   // Check for org data access using capabilities (with legacy fallback)
   const userCapabilities = session?.user?.capabilities || [];
   const isAdmin = userCapabilities.includes("VIEW_ORG_DATA") ||
@@ -252,10 +260,9 @@ export default function AccuracyPage() {
 
   const hasActiveFilters = searchQuery || selectedStatus !== "answered" || selectedSource !== "all" || selectedUserId;
 
-  const handleDeleteEntry = (entry: QuestionLogEntry) => {
-    if (!confirm(`Delete this question?\n\n"${entry.question.slice(0, 100)}${entry.question.length > 100 ? "..." : ""}"\n\nThis action cannot be undone.`)) {
-      return;
-    }
+  const handleDeleteEntry = async (entry: QuestionLogEntry) => {
+    const confirmed = await confirm();
+    if (!confirmed) return;
 
     deleteMutation.mutate({ id: entry.id, source: entry.source });
   };
@@ -1324,6 +1331,7 @@ export default function AccuracyPage() {
           Back to Home
         </Link>
       </div>
+      <ConfirmDialog />
     </div>
   );
 }

@@ -93,10 +93,11 @@ export async function PUT(request: NextRequest) {
 
     const { urls } = validation.data;
 
-    // Upsert each URL (skip duplicates), set owner on new URLs
-    const results = await Promise.all(
-      urls.map((u) =>
-        prisma.referenceUrl.upsert({
+    // Upsert all URLs in a single transaction for atomicity
+    const results = await prisma.$transaction(async (tx) => {
+      const upserted = [];
+      for (const u of urls) {
+        const result = await tx.referenceUrl.upsert({
           where: { url: u.url },
           create: {
             url: u.url,
@@ -111,9 +112,11 @@ export async function PUT(request: NextRequest) {
             description: u.description || undefined,
             categories: u.categories || undefined,
           },
-        })
-      )
-    );
+        });
+        upserted.push(result);
+      }
+      return upserted;
+    });
 
     return apiSuccess({ imported: results.length, urls: results });
   } catch (error) {

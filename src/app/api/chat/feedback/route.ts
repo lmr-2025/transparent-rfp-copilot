@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { apiSuccess, errors } from "@/lib/apiResponse";
+import { logger } from "@/lib/logger";
 
 // POST /api/chat/feedback - Save feedback for a chat message
 export async function POST(request: NextRequest) {
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     return apiSuccess({ feedback });
   } catch (error) {
-    console.error("Error saving chat feedback:", error);
+    logger.error("Error saving chat feedback", error, { route: "/api/chat/feedback" });
     return errors.internal("Failed to save feedback");
   }
 }
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     return apiSuccess({ feedbacks });
   } catch (error) {
-    console.error("Error fetching chat feedback:", error);
+    logger.error("Error fetching chat feedback", error, { route: "/api/chat/feedback" });
     return errors.internal("Failed to fetch feedback");
   }
 }

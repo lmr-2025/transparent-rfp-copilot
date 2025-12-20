@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { Plus, Trash2, Edit2, FileText, Eye, Copy, Check, Upload, Loader2, Sparkles, User } from "lucide-react";
+import { useConfirm } from "@/components/ConfirmModal";
 import { InlineLoader } from "@/components/ui/loading";
 import { InlineError } from "@/components/ui/status-display";
 import { toast } from "sonner";
@@ -31,6 +32,12 @@ export default function TemplatesPage() {
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [instructionPresets, setInstructionPresets] = useState<InstructionPreset[]>([]);
+  const { confirm, ConfirmDialog } = useConfirm({
+    title: "Delete Template",
+    message: "Are you sure you want to delete this template?",
+    confirmLabel: "Delete",
+    variant: "danger",
+  });
 
   // Fetch instruction presets
   useEffect(() => {
@@ -186,8 +193,9 @@ export default function TemplatesPage() {
     updateMutation.mutate({ id: editingTemplate.id, data: formData });
   };
 
-  const handleDelete = (id: string) => {
-    if (!confirm("Are you sure you want to delete this template?")) return;
+  const handleDelete = async (id: string) => {
+    const confirmed = await confirm();
+    if (!confirmed) return;
     setDeletingId(id);
     deleteMutation.mutate(id);
   };
@@ -921,6 +929,7 @@ export default function TemplatesPage() {
           </div>
         </div>
       </div>
+      <ConfirmDialog />
     </div>
   );
 }

@@ -95,10 +95,10 @@ export async function PUT(request: NextRequest) {
       return errors.badRequest("categories array required");
     }
 
-    // Update each category
-    await Promise.all(
-      categories.map((cat, index) =>
-        prisma.skillCategory.update({
+    // Update all categories in a single transaction for atomicity
+    const updated = await prisma.$transaction(async (tx) => {
+      for (const [index, cat] of categories.entries()) {
+        await tx.skillCategory.update({
           where: { id: cat.id },
           data: {
             name: cat.name,
@@ -106,12 +106,12 @@ export async function PUT(request: NextRequest) {
             color: cat.color,
             sortOrder: cat.sortOrder ?? index,
           },
-        })
-      )
-    );
+        });
+      }
 
-    const updated = await prisma.skillCategory.findMany({
-      orderBy: { sortOrder: "asc" },
+      return tx.skillCategory.findMany({
+        orderBy: { sortOrder: "asc" },
+      });
     });
 
     return apiSuccess({ categories: updated });
