@@ -1,6 +1,6 @@
 # Tech Debt Tracker
 
-Last updated: 2025-12-15
+Last updated: 2025-12-20
 
 ## Priority Levels
 - **P0**: Security/data risk - fix immediately
@@ -126,6 +126,69 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P1: High Priority
 
+### 35. Modal/Dialog System Consolidation
+**Files:** 10+ modal components across codebase
+**Issue:** Two conflicting modal systems coexist:
+- Custom `ModalContainer` + primitives in `src/components/ui/modal.tsx`
+- Radix UI `Dialog` in `src/components/ui/dialog.tsx`
+- Individual modals with inline styles: `TransparencyModal`, `PromptBuilderModal`, `FlagReviewModal`, `ConfirmModal`, etc.
+- `ConfirmModal` re-exports modal primitives, creating implicit coupling
+
+**Affected Files:**
+- `src/components/ui/modal.tsx` (base custom modal)
+- `src/components/ui/dialog.tsx` (Radix UI wrapper)
+- `src/components/TransparencyModal.tsx`
+- `src/components/PromptBuilderModal.tsx`
+- `src/components/FlagReviewModal.tsx`
+- `src/components/ConfirmModal.tsx`
+- `src/components/chat/transparency-modal.tsx`
+- `src/components/chat/chat-feedback-modal.tsx`
+
+**Risk:** Inconsistent UX, duplicated styling, maintenance burden
+**Fix:**
+1. Standardize on Radix UI Dialog
+2. Create reusable `ModalBase` component with standard props
+3. Extract color schemes to shared constants
+4. Update all modals to use common base
+
+**Effort:** Medium-High
+
+### 36. Type Inconsistencies - Deprecated Fields
+**Files:** `src/types/skill.ts`, `src/types/customerProfile.ts`
+**Issue:** Mixed use of singular `category` (string) vs plural `categories[]`. Multiple deprecated fields still defined:
+- `sources[]` (use `sourceUrls` instead)
+- `category` (use `categories[]` instead)
+- `information` (kept for backwards compatibility)
+- `lastSourceLink` (use `sourceUrls` instead)
+
+**Evidence (skill.ts):**
+```typescript
+// Line 32: Legacy type
+export type SkillCategory = string;
+
+// Line 68: Deprecated field still in use
+category?: SkillCategory; // Deprecated - use categories[] instead
+```
+
+**Risk:** Developer confusion, inconsistent data
+**Fix:**
+1. Remove deprecated type aliases
+2. Run migration script for database records
+3. Update all code to use `categories[]` exclusively
+
+**Effort:** Medium (requires migration)
+
+### ~~37. Hardcoded LLM Parameters~~ ✅ FIXED
+**Fixed:** 2025-12-20
+- Added `LLM_PARAMS` to `src/lib/config.ts` with `maxTokens` and `temperature.precise`/`temperature.balanced`
+- Updated `src/lib/llm.ts` to use these constants in all 3 LLM calls
+
+### ~~38. API Route Factory Error Pattern Mismatch~~ ✅ FIXED
+**Fixed:** 2025-12-20
+- Updated `src/lib/apiRouteFactory.ts` to import and use `errors` from `apiResponse.ts`
+- Replaced all `errorResponse()` calls with `errors.internal()`, `errors.validation()`, `errors.notFound()`
+- Removed the custom `errorResponse()` helper function
+
 ### ~~17. Reference URLs Have No "Add" Page~~ ✅ FIXED
 **Fixed:** 2025-12-15
 - Created `/knowledge/urls/add` page for adding Reference URLs
@@ -148,6 +211,49 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 ## P2: Medium Priority
 
+### 39. Missing Database Transactions
+**Files:** Most mutation API endpoints
+**Issue:** Only `src/app/api/customers/[id]/route.ts` uses transactions. Other critical mutations don't wrap operations in transactions.
+
+**Risk:** Data inconsistency on partial failures
+**Fix:**
+1. Audit all multi-step mutation routes
+2. Add `prisma.$transaction()` wrapping
+3. Create reusable transaction helper
+
+**Effort:** Medium
+
+### 40. N+1 Query Audit Needed
+**Files:** Various API routes with `findMany`
+**Issue:** Some `findMany` queries may lack proper `include` relationships, causing N+1 queries.
+
+**Risk:** Performance degradation at scale
+**Fix:**
+1. Add database query logging in development
+2. Audit all `findMany` to ensure proper `include`/`select`
+3. Consider query profiling tool
+
+**Effort:** Medium
+
+### 41. Validation Schema Duplication
+**Files:** `src/lib/validations.ts`
+**Issue:** Similar schema definitions exist separately:
+- `sourceUrlItemSchema` vs `customerSourceUrlSchema`
+- Repeated `quickFactSchema` union definitions
+
+**Risk:** Inconsistent validation, maintenance burden
+**Fix:**
+1. Consolidate similar schema patterns
+2. Create reusable schema builders
+3. Document schema versioning for migrations
+
+**Effort:** Low-Medium
+
+### ~~42. Create UI Component Index~~ ✅ FIXED
+**Fixed:** 2025-12-20
+- Created `src/components/ui/index.ts` with exports for all 15 UI components
+- Organized by category: Core (Button, Badge, Card, Input, etc.), Dialog, Modal, Loading, Status
+
 ### 6. Large Components - Refactoring Candidates
 
 **Recently Refactored (2025-12-16):**
@@ -167,8 +273,11 @@ Created `/src/lib/apiResponse.ts` with standardized patterns:
 
 | File | Lines | Priority | Notes |
 |------|-------|----------|-------|
+| `admin/prompt-library/components/BuilderTab.tsx` | 1,368 | High | Prompt builder - largest component |
+| `accuracy/page.tsx` | 1,329 | High | Accuracy tracking dashboard |
+| `projects/[projectId]/page.tsx` | 1,255 | High | Project detail page |
+| `knowledge/page.tsx` | 1,081 | High | Knowledge library main page |
 | `knowledge/documents/page.tsx` | 668 | Medium | Document management page |
-| `accuracy/page.tsx` | 624 | Medium | Accuracy tracking dashboard |
 | `lib/chatPromptLibrary.ts` | 618 | Low | Prompt definitions - may be intentional |
 | `lib/promptBlocks.ts` | 605 | Low | Prompt blocks - may be intentional |
 | `components/ConfirmModal.tsx` | 599 | Medium | Modal component with many variants |

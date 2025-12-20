@@ -1,5 +1,18 @@
 // Centralized configuration for the application
 
+// LLM Parameters - centralized to avoid magic numbers
+export const LLM_PARAMS = {
+  // Max tokens for response generation
+  maxTokens: 16000,
+  // Temperature settings by use case
+  temperature: {
+    // Lower = more focused/deterministic (for structured output like skill drafts)
+    precise: 0.1,
+    // Default = balanced (for Q&A, chat, general responses)
+    balanced: 0.2,
+  },
+} as const;
+
 // Claude models for LLM calls
 // Sonnet: Best quality, slower (~10-30s) - use for complex analysis, RFP answering
 // Haiku: Fast and cheap (~2-5s) - use for quick Q&A, simple tasks

@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/apiAuth";
 import { validateBody, ValidationSchema } from "@/lib/validations";
 import { getUserFromSession, AuditUser } from "@/lib/auditLog";
 import { logger } from "@/lib/logger";
+import { errors } from "@/lib/apiResponse";
 
 // Generic types for factory
 type PrismaModel = keyof typeof prisma & string;
@@ -13,12 +14,7 @@ type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-// Generic error response
-function errorResponse(message: string, status: number = 500) {
-  return NextResponse.json({ error: message }, { status });
-}
-
-// Success response wrapper
+// Success response wrapper (keeping for backwards compatibility, matches apiSuccess pattern)
 function successResponse<T>(data: T, status: number = 200) {
   return NextResponse.json(data, { status });
 }
@@ -66,7 +62,7 @@ export function createListHandler<T>(config: ListConfig<T>) {
       return successResponse(result);
     } catch (error) {
       logger.error(`Failed to fetch ${config.model}`, error, { model: config.model, operation: "list" });
-      return errorResponse(`Failed to fetch ${config.model}`);
+      return errors.internal(`Failed to fetch ${config.model}`);
     }
   };
 }
@@ -100,7 +96,7 @@ export function createCreateHandler<TInput, TOutput>(config: CreateConfig<TInput
 
       const validation = validateBody(config.schema, body);
       if (!validation.success) {
-        return errorResponse(validation.error, 400);
+        return errors.validation(validation.error);
       }
 
       const data = validation.data as TInput;
@@ -125,7 +121,7 @@ export function createCreateHandler<TInput, TOutput>(config: CreateConfig<TInput
       return successResponse(item, 201);
     } catch (error) {
       logger.error(`Failed to create ${config.model}`, error, { model: config.model, operation: "create" });
-      return errorResponse(`Failed to create ${config.model}`);
+      return errors.internal(`Failed to create ${config.model}`);
     }
   };
 }
@@ -162,7 +158,7 @@ export function createGetByIdHandler<T>(config: GetByIdConfig<T>) {
       });
 
       if (!item) {
-        return errorResponse(config.notFoundMessage ?? "Not found", 404);
+        return errors.notFound(config.notFoundMessage ?? config.model);
       }
 
       const result = config.transform ? config.transform(item) : item;
@@ -173,7 +169,7 @@ export function createGetByIdHandler<T>(config: GetByIdConfig<T>) {
       return successResponse(result);
     } catch (error) {
       logger.error(`Failed to fetch ${config.model}`, error, { model: config.model, operation: "getById" });
-      return errorResponse(`Failed to fetch ${config.model}`);
+      return errors.internal(`Failed to fetch ${config.model}`);
     }
   };
 }
@@ -213,7 +209,7 @@ export function createUpdateHandler<TInput, TOutput>(config: UpdateConfig<TInput
       if (config.schema) {
         const validation = validateBody(config.schema, body);
         if (!validation.success) {
-          return errorResponse(validation.error, 400);
+          return errors.validation(validation.error);
         }
         data = validation.data as TInput;
       } else {
@@ -230,7 +226,7 @@ export function createUpdateHandler<TInput, TOutput>(config: UpdateConfig<TInput
       });
 
       if (!existing) {
-        return errorResponse(config.notFoundMessage ?? "Not found", 404);
+        return errors.notFound(config.notFoundMessage ?? config.model);
       }
 
       const updateData = config.buildData(data, existing, auth);
@@ -252,7 +248,7 @@ export function createUpdateHandler<TInput, TOutput>(config: UpdateConfig<TInput
       return successResponse(item);
     } catch (error) {
       logger.error(`Failed to update ${config.model}`, error, { model: config.model, operation: "update" });
-      return errorResponse(`Failed to update ${config.model}`);
+      return errors.internal(`Failed to update ${config.model}`);
     }
   };
 }
@@ -289,7 +285,7 @@ export function createDeleteHandler<TOutput>(config: DeleteConfig<TOutput>) {
       });
 
       if (!existing) {
-        return errorResponse(config.notFoundMessage ?? "Not found", 404);
+        return errors.notFound(config.notFoundMessage ?? config.model);
       }
 
       await modelDelegate.delete({
@@ -307,7 +303,7 @@ export function createDeleteHandler<TOutput>(config: DeleteConfig<TOutput>) {
       });
     } catch (error) {
       logger.error(`Failed to delete ${config.model}`, error, { model: config.model, operation: "delete" });
-      return errorResponse(`Failed to delete ${config.model}`);
+      return errors.internal(`Failed to delete ${config.model}`);
     }
   };
 }

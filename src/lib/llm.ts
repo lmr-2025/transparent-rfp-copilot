@@ -1,7 +1,7 @@
 import { defaultSkillPrompt } from "./skillPrompt";
 import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
-import { CLAUDE_MODEL, getModel, type ModelSpeed } from "./config";
+import { CLAUDE_MODEL, getModel, LLM_PARAMS, type ModelSpeed } from "./config";
 import { buildCacheableSystem } from "./anthropicCache";
 
 // Re-export ModelSpeed for consumers
@@ -50,8 +50,8 @@ export async function generateSkillDraftFromMessages(
   try {
     const response = await anthropic.messages.create({
       model: CLAUDE_MODEL,
-      max_tokens: 16000,
-      temperature: 0.1,
+      max_tokens: LLM_PARAMS.maxTokens,
+      temperature: LLM_PARAMS.temperature.precise,
       system: promptText,
       messages: sanitized.map((msg) => ({
         role: msg.role as "user" | "assistant",
@@ -186,8 +186,8 @@ export async function answerQuestionWithPrompt(
   try {
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 16000,
-      temperature: 0.2,
+      max_tokens: LLM_PARAMS.maxTokens,
+      temperature: LLM_PARAMS.temperature.balanced,
       system: systemContent,
       messages: [
         {
@@ -367,8 +367,8 @@ export async function answerQuestionsBatch(
   try {
     const response = await anthropic.messages.create({
       model,
-      max_tokens: 16000,
-      temperature: 0.2,
+      max_tokens: LLM_PARAMS.maxTokens,
+      temperature: LLM_PARAMS.temperature.balanced,
       system: systemContent,
       messages: [
         {
