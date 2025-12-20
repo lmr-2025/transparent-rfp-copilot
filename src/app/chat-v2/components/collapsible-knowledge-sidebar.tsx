@@ -246,7 +246,7 @@ export function CollapsibleKnowledgeSidebar({
   // Collapsed view - icon strip
   if (isCollapsed) {
     return (
-      <div className="h-full w-full border-l border-border bg-muted/30 flex flex-col items-center py-2 gap-2">
+      <div className="h-full w-12 min-w-[48px] border-l border-border bg-muted/30 flex flex-col items-center py-2 gap-2">
         <TooltipProvider delayDuration={0}>
           <Tooltip>
             <TooltipTrigger asChild>
