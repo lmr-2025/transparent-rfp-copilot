@@ -302,7 +302,8 @@ What would you like to create?`,
       ref={containerRef}
       style={{
         display: "flex",
-        height: "100vh",
+        height: "100dvh",
+        minHeight: "100vh",
         overflow: "hidden",
       }}
     >

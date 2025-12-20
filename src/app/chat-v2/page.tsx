@@ -484,7 +484,7 @@ ${keyFactsText}`;
   }, [messages, skills, userInstructions, getSelectedSkillIds, getSelectedDocumentIds, getSelectedCustomerIds]);
 
   return (
-    <div ref={containerRef} className="flex h-screen overflow-hidden bg-background">
+    <div ref={containerRef} className="flex overflow-hidden bg-background" style={{ height: "100dvh", minHeight: "100vh" }}>
       {/* Left - Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
         {/* Header Bar */}
