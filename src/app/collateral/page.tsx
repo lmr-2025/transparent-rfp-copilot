@@ -646,7 +646,7 @@ Use the provided customer information and knowledge sources to fill in template 
   );
 
   return (
-    <div ref={containerRef} style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <div ref={containerRef} style={{ display: "flex", height: "100dvh", minHeight: "100vh", overflow: "hidden" }}>
       {/* Main Area (Header + Content) */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}>
         {/* Header */}
