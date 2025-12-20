@@ -39,7 +39,7 @@ export default function PromptBuilderV5Page() {
   ];
 
   return (
-    <div className="flex flex-col h-screen font-sans">
+    <div className="flex flex-col font-sans" style={{ height: "100dvh", minHeight: "100vh" }}>
       {/* Header with Tabs */}
       <div className="h-14 border-b bg-white flex items-center px-4 flex-shrink-0">
         <div className="flex items-center gap-4">

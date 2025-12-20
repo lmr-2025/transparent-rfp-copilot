@@ -124,7 +124,7 @@ function TemplateLibraryContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col" style={{ height: "100dvh", minHeight: "100vh" }}>
       {/* Header */}
       <div className="px-6 py-4 border-b border-border bg-background flex-shrink-0">
         <div className="flex justify-between items-start">

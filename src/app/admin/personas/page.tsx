@@ -59,7 +59,7 @@ export default function PersonasPage() {
   ];
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col" style={{ height: "100dvh", minHeight: "100vh" }}>
       {/* Header */}
       <div className="flex-shrink-0 bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between">
