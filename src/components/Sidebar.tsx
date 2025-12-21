@@ -42,14 +42,7 @@ const navItems: NavSection[] = [
     items: [
       { href: "/knowledge", label: "Library", hint: "Browse all skills" },
       { href: "/knowledge/add", label: "Add Knowledge", hint: "Create new skills" },
-    ],
-  },
-  {
-    section: "The Rolodex",
-    featureFlag: "customerProfiles",
-    items: [
-      { href: "/customers", label: "Customer Profiles", hint: "View all customers" },
-      { href: "/customers/add", label: "Build Profile", hint: "Create with AI" },
+      { href: "/customers", label: "Customer Profiles", hint: "View all customers", featureFlag: "customerProfiles" },
     ],
   },
   {
@@ -61,11 +54,11 @@ const navItems: NavSection[] = [
     ],
   },
   {
-    section: "Contract Review",
+    section: "Contract Reviews",
     featureFlag: "contracts",
     items: [
-      { href: "/contracts", label: "Library", hint: "View contracts" },
-      { href: "/contracts/upload", label: "Upload", hint: "Add new contracts" },
+      { href: "/contracts", label: "All Reviews", hint: "Manage contract reviews" },
+      { href: "/contracts/upload", label: "Upload", hint: "Add new contract" },
     ],
   },
   {

@@ -112,6 +112,15 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       updateData.userEditedAnswer = body.userEditedAnswer;
     }
 
+    // Track original response for feedback (first edit only)
+    if (body.userEditedAnswer !== undefined && body.userEditedAnswer !== row.response) {
+      // Only capture original if not already captured
+      if (!row.originalResponse && row.response) {
+        updateData.originalResponse = row.response;
+        updateData.originalConfidence = row.confidence || null;
+      }
+    }
+
     // Update the row
     const updatedRow = await prisma.bulkRow.update({
       where: { id: rowId },

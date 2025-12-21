@@ -15,19 +15,44 @@ export async function GET(
 
     const review = await prisma.contractReview.findUnique({
       where: { id },
+      include: {
+        findings: {
+          orderBy: [
+            { rating: "asc" }, // risks first, then gaps, then others
+            { createdAt: "asc" },
+          ],
+        },
+      },
     });
 
     if (!review) {
       return errors.notFound("Contract review");
     }
 
+    // Transform findings to include ISO timestamps
+    const transformedFindings = review.findings.map((f) => ({
+      ...f,
+      createdAt: f.createdAt.toISOString(),
+      updatedAt: f.updatedAt.toISOString(),
+      flaggedAt: f.flaggedAt?.toISOString(),
+      flagResolvedAt: f.flagResolvedAt?.toISOString(),
+      reviewRequestedAt: f.reviewRequestedAt?.toISOString(),
+      reviewedAt: f.reviewedAt?.toISOString(),
+      assignedToSecurityAt: f.assignedToSecurityAt?.toISOString(),
+      securityReviewedAt: f.securityReviewedAt?.toISOString(),
+    }));
+
     return apiSuccess({
       contract: {
         ...review,
+        findings: transformedFindings,
         createdAt: review.createdAt.toISOString(),
         updatedAt: review.updatedAt.toISOString(),
         analyzedAt: review.analyzedAt?.toISOString(),
         reviewedAt: review.reviewedAt?.toISOString(),
+        legalReviewedAt: review.legalReviewedAt?.toISOString(),
+        securityReviewedAt: review.securityReviewedAt?.toISOString(),
+        securityReviewRequestedAt: review.securityReviewRequestedAt?.toISOString(),
       },
     });
   } catch (error) {

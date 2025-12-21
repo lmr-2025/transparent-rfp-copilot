@@ -6,6 +6,7 @@ import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 
 // GET - Get a single document (with content)
+// Categories are derived dynamically from linked skills via SkillSource
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -21,7 +22,39 @@ export async function GET(
       return errors.notFound("Document not found");
     }
 
-    return apiSuccess({ document });
+    // Get SkillSource links for this document with their skill categories
+    const skillSources = await prisma.skillSource.findMany({
+      where: {
+        sourceId: id,
+        sourceType: "document",
+      },
+      include: {
+        skill: {
+          select: { id: true, categories: true },
+        },
+      },
+    });
+
+    // Compute skillCount and derived categories
+    const skillCount = skillSources.length;
+    const derivedCategories = new Set<string>();
+    for (const ss of skillSources) {
+      for (const cat of ss.skill.categories) {
+        derivedCategories.add(cat);
+      }
+    }
+
+    // Return document with derived data
+    return apiSuccess({
+      document: {
+        ...document,
+        skillCount,
+        // Derived categories from linked skills (falls back to stored categories if none linked)
+        categories: derivedCategories.size > 0
+          ? Array.from(derivedCategories)
+          : document.categories,
+      },
+    });
   } catch (error) {
     logger.error("Failed to fetch document", error, { route: "/api/documents/[id]" });
     return errors.internal("Failed to fetch document");

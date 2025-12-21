@@ -16,6 +16,9 @@ interface SelectionState {
   customerSelections: Map<string, boolean>;
   customerDocumentSelections: Map<string, boolean>; // For customer-specific documents
 
+  // Option to include source URLs from skills (vs just skill content)
+  includeSkillSources: boolean;
+
   // GTM Data selections (per customer)
   gtmDataSelections: Map<string, GTMDataSelection>; // key: salesforceAccountId
 
@@ -31,6 +34,7 @@ interface SelectionState {
   setUrlSelected: (id: string, selected: boolean) => void;
   setCustomerSelected: (id: string, selected: boolean) => void;
   setCustomerDocumentSelected: (id: string, selected: boolean) => void;
+  setIncludeSkillSources: (include: boolean) => void;
 
   // GTM Data actions
   setGtmDataSelection: (salesforceAccountId: string, selection: GTMDataSelection) => void;
@@ -48,6 +52,10 @@ interface SelectionState {
   ) => void;
   selectAllSkills: (ids: string[]) => void;
   selectNoSkills: () => void;
+  selectSkillsByCategories: (
+    skills: Array<{ id: string; categories: string[] }>,
+    categories: string[]
+  ) => string[]; // Returns the IDs that were selected
   selectAllDocuments: (ids: string[]) => void;
   selectNoDocuments: () => void;
   selectAllUrls: (ids: string[]) => void;
@@ -72,6 +80,7 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
   urlSelections: new Map(),
   customerSelections: new Map(),
   customerDocumentSelections: new Map(),
+  includeSkillSources: true, // Default to including skill source URLs
   gtmDataSelections: new Map(),
 
   toggleSkill: (id) =>
@@ -144,6 +153,9 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
       return { customerDocumentSelections: newMap };
     }),
 
+  setIncludeSkillSources: (include) =>
+    set(() => ({ includeSkillSources: include })),
+
   initializeSelections: (skillIds, documentIds, urlIds, customerIds) =>
     set(() => ({
       // Skills default to selected
@@ -165,6 +177,27 @@ export const useSelectionStore = create<SelectionState>((set, get) => ({
         Array.from(state.skillSelections.keys()).map((id) => [id, false])
       ),
     })),
+
+  selectSkillsByCategories: (skills, categories) => {
+    // Find skills that match any of the target categories
+    const matchingIds = skills
+      .filter((skill) =>
+        skill.categories.some((cat) => categories.includes(cat))
+      )
+      .map((skill) => skill.id);
+
+    // Update the selection map
+    set((state) => {
+      const newMap = new Map(state.skillSelections);
+      // First deselect all
+      newMap.forEach((_, key) => newMap.set(key, false));
+      // Then select matching ones
+      matchingIds.forEach((id) => newMap.set(id, true));
+      return { skillSelections: newMap };
+    });
+
+    return matchingIds;
+  },
 
   selectAllDocuments: (ids) =>
     set(() => ({

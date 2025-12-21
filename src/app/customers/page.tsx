@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import {
   fetchAllProfiles,
   updateProfile,
@@ -10,6 +9,7 @@ import {
 import { CustomerProfile } from "@/types/customerProfile";
 import { InlineError } from "@/components/ui/status-display";
 import CustomerDocuments from "./components/CustomerDocuments";
+import ProfileBuilderDialog from "./components/ProfileBuilderDialog";
 import { SyncStatusBadge } from "@/components/ui/sync-status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { Plus } from "lucide-react";
 
 export default function CustomerProfileLibraryPage() {
   const [profiles, setProfiles] = useState<CustomerProfile[]>([]);
@@ -35,6 +36,7 @@ export default function CustomerProfileLibraryPage() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showAddDialog, setShowAddDialog] = useState(false);
 
   // Load profiles
   useEffect(() => {
@@ -189,16 +191,18 @@ export default function CustomerProfileLibraryPage() {
 
   return (
     <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-2">
-        The Rolodex{" "}
-        <span className="font-normal text-muted-foreground">(Library)</span>
-      </h1>
-      <p className="text-muted-foreground mb-6">
-        Manage your customer profiles.{" "}
-        <Link href="/customers" className="text-primary hover:underline">
-          Build New Profile →
-        </Link>
-      </p>
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h1 className="text-2xl font-bold mb-2">Customer Profiles</h1>
+          <p className="text-muted-foreground">
+            Manage your customer profiles for personalized AI responses.
+          </p>
+        </div>
+        <Button onClick={() => setShowAddDialog(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Profile
+        </Button>
+      </div>
 
       {error && (
         <div className="mb-4">
@@ -240,9 +244,12 @@ export default function CustomerProfileLibraryPage() {
             {profiles.length === 0 ? (
               <>
                 Get started by{" "}
-                <Link href="/customers" className="text-primary hover:underline">
+                <button
+                  onClick={() => setShowAddDialog(true)}
+                  className="text-primary hover:underline"
+                >
                   building your first customer profile
-                </Link>
+                </button>
                 .
               </>
             ) : (
@@ -563,6 +570,12 @@ export default function CustomerProfileLibraryPage() {
           })}
         </div>
       )}
+
+      <ProfileBuilderDialog
+        open={showAddDialog}
+        onOpenChange={setShowAddDialog}
+        onSuccess={loadProfiles}
+      />
     </div>
   );
 }

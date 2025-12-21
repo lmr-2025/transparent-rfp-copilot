@@ -230,7 +230,8 @@ export default function ContractUploadPage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Upload failed");
+        const errorMessage = typeof data.error === 'object' ? data.error?.message : data.error;
+        throw new Error(errorMessage || "Upload failed");
       }
 
       const json = await response.json();
@@ -256,7 +257,8 @@ export default function ContractUploadPage() {
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Analysis failed");
+        const errorMessage = typeof data.error === 'object' ? data.error?.message : data.error;
+        throw new Error(errorMessage || "Analysis failed");
       }
 
       // Navigate to the review page
@@ -278,14 +280,9 @@ export default function ContractUploadPage() {
 
   return (
     <div style={styles.container}>
-      <h1>
-        The Clause Checker{" "}
-        <span style={{ fontWeight: 400, fontSize: "0.6em", color: "#64748b" }}>
-          (Contract Security Review)
-        </span>
-      </h1>
+      <h1>Upload Contract</h1>
       <p style={{ color: "#475569", marginBottom: "24px" }}>
-        Upload customer contracts to analyze security clauses against your capabilities.
+        Upload customer contracts to analyze security clauses against your knowledge base.
         Get alignment ratings and suggested responses for negotiations.
       </p>
 

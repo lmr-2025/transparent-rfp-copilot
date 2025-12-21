@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await request.json();
-    const { name, content, description, requestShare } = data;
+    const { name, content, description, defaultCategories, requestShare } = data;
 
     if (!name || !content) {
       return errors.badRequest("Name and content are required");
@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
         name,
         content,
         description: description || null,
+        defaultCategories: defaultCategories || [],
         isShared,
         shareStatus,
         shareRequestedAt: requestShare ? new Date() : null,

@@ -10,6 +10,7 @@ export type InstructionPreset = {
   updatedAt: string;
   createdBy: string | null;
   createdByEmail: string | null;
+  defaultCategories: string[]; // Auto-select skills in these categories when persona is chosen
 };
 
 export const statusColors = {

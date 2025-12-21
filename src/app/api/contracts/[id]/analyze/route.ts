@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getModel, getEffectiveSpeed } from "@/lib/config";
-import { ContractFinding, FindingCategory, AlignmentRating } from "@/types/contractReview";
+import { FindingCategory, AlignmentRating } from "@/types/contractReview";
 import { logUsage } from "@/lib/usageTracking";
 import {
   defaultContractAnalysisSections,
@@ -122,7 +122,7 @@ ${skillsContext}`;
 ${contractText}
 ---END CONTRACT TEXT---
 
-Identify and rate security-related clauses against our documented capabilities. Return your analysis as JSON.`;
+Identify and rate both LEGAL and SECURITY clauses. For security items, compare against our documented capabilities. For legal items, identify risks and unfavorable terms. Return your analysis as JSON.`;
 
     // Determine model speed
     const speed = getEffectiveSpeed("contracts-analyze");
@@ -165,17 +165,31 @@ Identify and rate security-related clauses against our documented capabilities. 
       throw new Error("Failed to parse analysis results");
     }
 
-    // Transform findings with IDs
-    const findings: ContractFinding[] = result.findings.map((f, index) => ({
-      id: `finding-${index + 1}`,
+    // Delete any existing findings (in case of re-analysis)
+    await prisma.contractFinding.deleteMany({
+      where: { contractReviewId: id },
+    });
+
+    // Create findings as database records
+    const findingsData = result.findings.map((f) => ({
+      contractReviewId: id,
       category: f.category,
       clauseText: f.clauseText,
       rating: f.rating,
       rationale: f.rationale,
       relevantSkills: [], // Could enhance to extract skill IDs from rationale
-      suggestedResponse: f.suggestedResponse,
-      flagged: f.rating === "risk" || f.rating === "gap", // Auto-flag risks and gaps
+      suggestedResponse: f.suggestedResponse || null,
+      // Auto-flag risks and gaps for attention
+      flaggedForReview: f.rating === "risk" || f.rating === "gap",
+      flaggedAt: (f.rating === "risk" || f.rating === "gap") ? new Date() : null,
+      flaggedBy: (f.rating === "risk" || f.rating === "gap") ? "System (Auto-flagged)" : null,
+      flagNote: (f.rating === "risk" || f.rating === "gap") ? `Auto-flagged as ${f.rating}` : null,
     }));
+
+    // Batch create findings
+    await prisma.contractFinding.createMany({
+      data: findingsData,
+    });
 
     // Update the contract with analysis results
     const updated = await prisma.contractReview.update({
@@ -184,11 +198,24 @@ Identify and rate security-related clauses against our documented capabilities. 
         status: "ANALYZED",
         overallRating: result.overallRating,
         summary: result.summary,
-        findings: JSON.parse(JSON.stringify(findings)),
         skillsUsed: skills.map((s) => s.id),
         analyzedAt: new Date(),
       },
+      include: {
+        findings: true,
+      },
     });
+
+    // Transform findings for response
+    const findingsResponse = updated.findings.map((f) => ({
+      ...f,
+      createdAt: f.createdAt.toISOString(),
+      updatedAt: f.updatedAt.toISOString(),
+      flaggedAt: f.flaggedAt?.toISOString(),
+      flagResolvedAt: f.flagResolvedAt?.toISOString(),
+      reviewRequestedAt: f.reviewRequestedAt?.toISOString(),
+      reviewedAt: f.reviewedAt?.toISOString(),
+    }));
 
     return apiSuccess({
       analysis: {
@@ -196,7 +223,7 @@ Identify and rate security-related clauses against our documented capabilities. 
         status: updated.status,
         overallRating: updated.overallRating,
         summary: updated.summary,
-        findings,
+        findings: findingsResponse,
         analyzedAt: updated.analyzedAt?.toISOString(),
       },
     });

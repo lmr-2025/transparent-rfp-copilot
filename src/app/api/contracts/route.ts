@@ -37,13 +37,21 @@ export async function GET(request: NextRequest) {
         overallRating: true,
         createdAt: true,
         analyzedAt: true,
-        findings: true,
+        ownerId: true,
+        ownerName: true,
+        findings: {
+          select: {
+            id: true,
+            rating: true,
+            flaggedForReview: true,
+          },
+        },
       },
     });
 
-    // Transform to include counts
+    // Transform to include counts from findings relation
     const summaries = reviews.map((r) => {
-      const findings = (r.findings as Array<{ rating: string }>) || [];
+      const findings = r.findings || [];
       return {
         id: r.id,
         name: r.name,
@@ -54,9 +62,12 @@ export async function GET(request: NextRequest) {
         overallRating: r.overallRating,
         createdAt: r.createdAt.toISOString(),
         analyzedAt: r.analyzedAt?.toISOString(),
+        ownerId: r.ownerId,
+        ownerName: r.ownerName,
         findingsCount: findings.length,
         riskCount: findings.filter((f) => f.rating === "risk").length,
         gapCount: findings.filter((f) => f.rating === "gap").length,
+        flaggedCount: findings.filter((f) => f.flaggedForReview).length,
       };
     });
 

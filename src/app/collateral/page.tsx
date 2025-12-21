@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Check, Plus, FileText, Eye, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConversationalPanel, type Message } from "@/components/ui/conversational-panel";
@@ -207,6 +207,9 @@ export default function CollateralBuilderPage() {
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [userInstructions, setUserInstructions] = useState<string>("");
 
+  // Sidebar collapse state (default to expanded to train users on knowledge context)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   // Template builder state
   const [buildMessages, setBuildMessages] = useState<Message[]>([]);
   const [buildInput, setBuildInput] = useState("");
@@ -227,7 +230,10 @@ export default function CollateralBuilderPage() {
   const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
 
   // Selection store for knowledge context
-  const { skillSelections } = useSelectionStore();
+  const { skillSelections, initializeSelections } = useSelectionStore();
+
+  // Track if selections have been initialized to prevent infinite loops
+  const selectionsInitialized = useRef(false);
 
   // Resizable panel
   const { panelWidth, isDragging, containerRef, handleMouseDown } = useResizablePanel({
@@ -303,10 +309,32 @@ export default function CollateralBuilderPage() {
     setUserInstructions(stored || DEFAULTS.USER_INSTRUCTIONS);
   }, []);
 
+  // Initialize selections when data loads (only once)
+  // Skills default to selected, others to not selected
+  useEffect(() => {
+    if (selectionsInitialized.current) return;
+    if (skills.length || documents.length || urls.length || customers.length) {
+      selectionsInitialized.current = true;
+      initializeSelections(
+        skills.map((s) => s.id),
+        documents.map((d) => d.id),
+        urls.map((u) => u.id),
+        customers.map((c) => c.id)
+      );
+    }
+  }, [skills, documents, urls, customers, initializeSelections]);
+
   // Handle preset change
   const handlePresetChange = useCallback((preset: InstructionPreset | null) => {
     setSelectedPresetId(preset?.id || null);
   }, []);
+
+  // Get selected persona name for sidebar display
+  const selectedPersonaName = useMemo(() => {
+    if (!selectedPresetId) return undefined;
+    const preset = presets.find((p) => p.id === selectedPresetId);
+    return preset?.name;
+  }, [selectedPresetId, presets]);
 
   const selectedCustomer = customers.find((c) => c.id === selectedCustomerId) || null;
   const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) || null;
@@ -659,91 +687,85 @@ Use the provided customer information and knowledge sources to fill in template 
           {/* Step 1: Choose Template (select existing or build new) */}
           {workflowStep === "choose_template" && (
             <div style={{ flex: 1, padding: "24px", overflowY: "auto", minHeight: 0 }}>
-              <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>Choose a Template</h2>
-              <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>
-                Select an existing template or build a new one
-              </p>
+              <div style={{ maxWidth: "800px" }}>
+                <h2 style={{ fontSize: "16px", fontWeight: 600, marginBottom: "16px" }}>Choose a Template</h2>
+                <p style={{ fontSize: "14px", color: "#64748b", marginBottom: "20px" }}>
+                  Select an existing template or build a new one
+                </p>
 
-              {/* Build New Template Card */}
-              <button
-                onClick={handleBuildNew}
-                style={{
-                  width: "100%",
-                  padding: "20px",
-                  backgroundColor: "#f0f9ff",
-                  border: "2px dashed #6366f1",
-                  borderRadius: "8px",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  marginBottom: "24px",
-                  transition: "all 0.15s",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                  <div style={{ width: "40px", height: "40px", borderRadius: "8px", backgroundColor: "#6366f1", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Plus className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: "15px", color: "#1e293b" }}>Build New Template</div>
-                    <div style={{ fontSize: "13px", color: "#64748b" }}>Create a custom template with AI assistance</div>
-                  </div>
-                </div>
-              </button>
+                {/* Template Grid - Build New + Existing Templates */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                  {/* Build New Template Card */}
+                  <button
+                    onClick={handleBuildNew}
+                    style={{
+                      padding: "16px",
+                      backgroundColor: "#f0f9ff",
+                      border: "2px dashed #6366f1",
+                      borderRadius: "8px",
+                      textAlign: "left",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div style={{ width: "36px", height: "36px", borderRadius: "8px", backgroundColor: "#6366f1", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <Plus className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: "14px", color: "#1e293b" }}>Build New Template</div>
+                        <div style={{ fontSize: "12px", color: "#64748b" }}>Create with AI assistance</div>
+                      </div>
+                    </div>
+                  </button>
 
-              {/* Existing Templates */}
-              {templates.length > 0 && (
-                <>
-                  <h3 style={{ fontSize: "14px", fontWeight: 500, color: "#64748b", marginBottom: "12px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                    Existing Templates
-                  </h3>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
-                    {templates.map((template) => (
-                      <button
-                        type="button"
-                        key={template.id}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleSelectTemplate(template.id);
-                        }}
-                        style={{
-                          padding: "16px",
-                          backgroundColor: "#fff",
-                          border: "1px solid #e2e8f0",
-                          borderRadius: "8px",
-                          textAlign: "left",
-                          cursor: "pointer",
-                          transition: "all 0.15s",
-                        }}
-                      >
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
-                          <FileText className="h-4 w-4 text-slate-400" />
-                          <span style={{ fontWeight: 600, fontSize: "14px", color: "#1e293b" }}>
-                            {template.name}
+                  {/* Existing Templates */}
+                  {templates.map((template) => (
+                    <button
+                      type="button"
+                      key={template.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleSelectTemplate(template.id);
+                      }}
+                      style={{
+                        padding: "16px",
+                        backgroundColor: "#fff",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "8px",
+                        textAlign: "left",
+                        cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
+                        <FileText className="h-4 w-4 text-slate-400" />
+                        <span style={{ fontWeight: 600, fontSize: "14px", color: "#1e293b" }}>
+                          {template.name}
+                        </span>
+                      </div>
+                      {template.description && (
+                        <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
+                          {template.description}
+                        </div>
+                      )}
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                        {template.category && (
+                          <span style={{ fontSize: "11px", backgroundColor: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: "4px" }}>
+                            {template.category}
                           </span>
-                        </div>
-                        {template.description && (
-                          <div style={{ fontSize: "13px", color: "#64748b", marginBottom: "8px" }}>
-                            {template.description}
-                          </div>
                         )}
-                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                          {template.category && (
-                            <span style={{ fontSize: "11px", backgroundColor: "#dbeafe", color: "#1e40af", padding: "2px 8px", borderRadius: "4px" }}>
-                              {template.category}
-                            </span>
-                          )}
-                          {template.instructionPresetId && (
-                            <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: "4px" }}>
-                              Has linked persona
-                            </span>
-                          )}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+                        {template.instructionPresetId && (
+                          <span style={{ fontSize: "11px", backgroundColor: "#fef3c7", color: "#92400e", padding: "2px 8px", borderRadius: "4px" }}>
+                            Has linked persona
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
@@ -794,10 +816,13 @@ Use the provided customer information and knowledge sources to fill in template 
           )}
         </div>
 
-        {/* Resizable Divider */}
-        <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+        {/* Resizable Divider - hide on choose_template step */}
+        {workflowStep !== "choose_template" && (
+          <ResizableDivider isDragging={isDragging} onMouseDown={handleMouseDown} />
+        )}
 
-        {/* Right Column - Preview Panel */}
+        {/* Right Column - Preview Panel (hide on choose_template step) */}
+        {workflowStep !== "choose_template" && (
         <div style={{ width: `${panelWidth}px`, flexShrink: 0, display: "flex", flexDirection: "column", backgroundColor: "#f8fafc", borderLeft: "1px solid #e2e8f0", overflow: "hidden" }}>
           {workflowStep === "finish" ? (
           // Finish Step Panel
@@ -870,6 +895,7 @@ Use the provided customer information and knowledge sources to fill in template 
           />
         )}
         </div>
+        )}
         </div>
       </div>
 
@@ -881,6 +907,9 @@ Use the provided customer information and knowledge sources to fill in template 
         customers={customers}
         selectedCustomer={selectedCustomer}
         isLoading={isContextLoading}
+        isCollapsed={sidebarCollapsed}
+        onCollapsedChange={setSidebarCollapsed}
+        selectedPersonaName={selectedPersonaName}
       />
 
       {/* Transparency Modal */}

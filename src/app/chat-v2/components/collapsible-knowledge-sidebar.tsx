@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo } from "react";
 import {
   BookOpen,
   FileText,
-  Globe,
   ChevronDown,
   ChevronRight,
   PanelRightClose,
@@ -12,7 +11,6 @@ import {
   Phone,
   FileCheck,
   Database,
-  Link2,
   Loader2,
   StickyNote,
   Mail,
@@ -29,13 +27,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useSelectionStore } from "@/stores/selection-store";
-import { KnowledgeSourceList } from "@/components/chat/knowledge-source-list";
+import { KnowledgeLibraryPanel } from "./knowledge-library-panel";
 import type { Skill } from "@/types/skill";
 import type { ReferenceUrl } from "@/types/referenceUrl";
 import type { CustomerProfile } from "@/types/customerProfile";
-import type { CustomerGTMData, FetchGTMDataResponse } from "@/types/gtmData";
-
-const SIDEBAR_COLLAPSED_KEY = "chat-v2-sidebar-collapsed";
+import type { CustomerGTMData } from "@/types/gtmData";
 
 // Customer document from API
 type CustomerDocument = {
@@ -71,9 +67,11 @@ interface CollapsibleKnowledgeSidebarProps {
   urls: ReferenceUrl[];
   customers: CustomerProfile[];
   selectedCustomer: CustomerProfile | null;
+  selectedPersonaName?: string | null;
   isLoading?: boolean;
   isCollapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  onCustomizeKnowledge?: () => void;
 }
 
 type SectionId = "knowledge" | "customer" | "output";
@@ -84,9 +82,11 @@ export function CollapsibleKnowledgeSidebar({
   urls,
   customers,
   selectedCustomer,
+  selectedPersonaName,
   isLoading,
   isCollapsed: controlledIsCollapsed,
   onCollapsedChange,
+  onCustomizeKnowledge,
 }: CollapsibleKnowledgeSidebarProps) {
   const [internalIsCollapsed, setInternalIsCollapsed] = useState(false);
 
@@ -98,19 +98,7 @@ export function CollapsibleKnowledgeSidebar({
     output: false,
   });
 
-  // Load collapsed state from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
-    if (saved === "true") {
-      if (onCollapsedChange) {
-        onCollapsedChange(true);
-      } else {
-        setInternalIsCollapsed(true);
-      }
-    }
-  }, [onCollapsedChange]);
-
-  // Save collapsed state
+  // Toggle collapsed state (no longer persisted - always start expanded to train users)
   const toggleCollapsed = () => {
     const newState = !isCollapsed;
     if (onCollapsedChange) {
@@ -118,7 +106,6 @@ export function CollapsibleKnowledgeSidebar({
     } else {
       setInternalIsCollapsed(newState);
     }
-    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newState));
   };
 
   const toggleSection = (section: SectionId) => {
@@ -128,51 +115,14 @@ export function CollapsibleKnowledgeSidebar({
     }));
   };
 
+  // Selection store - only need customer-related selections here
+  // Knowledge selections are handled by KnowledgeLibraryPanel
   const {
-    skillSelections,
-    documentSelections,
-    urlSelections,
-    customerSelections,
     customerDocumentSelections,
-    toggleSkill,
-    toggleDocument,
-    toggleUrl,
-    toggleCustomer,
     toggleCustomerDocument,
-    selectAllSkills,
-    selectNoSkills,
-    selectAllDocuments,
-    selectNoDocuments,
-    selectAllUrls,
-    selectNoUrls,
-    selectAllCustomers,
-    selectNoCustomers,
     selectAllCustomerDocuments,
     selectNoCustomerDocuments,
   } = useSelectionStore();
-
-  // Extract library URLs from selected skills
-  const libraryUrls = useMemo(() => {
-    const selectedSkillIds = Array.from(skillSelections.entries())
-      .filter(([, selected]) => selected)
-      .map(([id]) => id);
-
-    const urlsFromSkills: Array<{ url: string; title: string; skillTitle: string }> = [];
-
-    skills
-      .filter((skill) => selectedSkillIds.includes(skill.id))
-      .forEach((skill) => {
-        skill.sourceUrls?.forEach((sourceUrl) => {
-          urlsFromSkills.push({
-            url: sourceUrl.url,
-            title: sourceUrl.title || sourceUrl.url.split("/").pop() || sourceUrl.url,
-            skillTitle: skill.title,
-          });
-        });
-      });
-
-    return urlsFromSkills;
-  }, [skills, skillSelections]);
 
   // Fetch customer documents when customer is selected
   const { data: customerDocuments = [], isLoading: docsLoading } = useApiQuery<CustomerDocument[]>({
@@ -271,7 +221,6 @@ export function CollapsibleKnowledgeSidebar({
                   } else {
                     setInternalIsCollapsed(false);
                   }
-                  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
                   setExpandedSections((prev) => ({ ...prev, knowledge: true }));
                 }}
               >
@@ -293,7 +242,6 @@ export function CollapsibleKnowledgeSidebar({
                   } else {
                     setInternalIsCollapsed(false);
                   }
-                  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, "false");
                   setExpandedSections((prev) => ({ ...prev, customer: true }));
                 }}
               >
@@ -313,111 +261,30 @@ export function CollapsibleKnowledgeSidebar({
       {/* Header with collapse button */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
         <span className="text-sm font-medium">Context</span>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleCollapsed}>
-          <PanelRightClose className="h-4 w-4" />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground gap-1"
+          onClick={toggleCollapsed}
+        >
+          <PanelRightClose className="h-3.5 w-3.5" />
+          Hide
         </Button>
       </div>
 
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {/* Section 1: Knowledge Library */}
-        <Card>
-          <CardHeader className="py-2 px-3">
-            <button
-              onClick={() => toggleSection("knowledge")}
-              className="w-full flex items-center justify-between"
-            >
-              <CardTitle className="text-sm flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                Knowledge Library
-              </CardTitle>
-              {expandedSections.knowledge ? (
-                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-              )}
-            </button>
-          </CardHeader>
-          {expandedSections.knowledge && (
-            <CardContent className="py-2 px-3 space-y-3">
-              {/* Skills */}
-              <KnowledgeSourceList
-                title="Skills"
-                icon={<BookOpen className="h-4 w-4" />}
-                items={skills.map((s) => ({ id: s.id, label: s.title }))}
-                selections={skillSelections}
-                onToggle={toggleSkill}
-                onSelectAll={selectAllSkills}
-                onSelectNone={selectNoSkills}
-                emptyMessage="No skills available"
-                compact
-              />
-
-              {/* Library URLs */}
-              {libraryUrls.length > 0 && (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <Link2 className="h-3 w-3" />
-                    Library URLs ({libraryUrls.length})
-                  </div>
-                  <div className="max-h-24 overflow-y-auto space-y-0.5">
-                    {libraryUrls.slice(0, 5).map((item, idx) => (
-                      <TooltipProvider key={`${item.url}-${idx}`} delayDuration={300}>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div className="flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted transition-colors">
-                              <Globe className="h-3 w-3 flex-shrink-0" />
-                              <span className="truncate">{item.title}</span>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent side="left" className="max-w-xs">
-                            <p className="font-medium">{item.title}</p>
-                            <p className="text-xs text-muted-foreground mt-1 break-all">{item.url}</p>
-                            <p className="text-xs text-primary mt-1">From: {item.skillTitle}</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    ))}
-                    {libraryUrls.length > 5 && (
-                      <span className="text-xs text-muted-foreground pl-2">
-                        +{libraryUrls.length - 5} more
-                      </span>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Documents */}
-              <KnowledgeSourceList
-                title="Documents"
-                icon={<FileText className="h-4 w-4" />}
-                items={documents.map((d) => ({ id: d.id, label: d.title || d.filename }))}
-                selections={documentSelections}
-                onToggle={toggleDocument}
-                onSelectAll={selectAllDocuments}
-                onSelectNone={selectNoDocuments}
-                emptyMessage="No documents available"
-                compact
-              />
-
-              {/* URLs */}
-              <KnowledgeSourceList
-                title="URLs"
-                icon={<Globe className="h-4 w-4" />}
-                items={urls.map((u) => ({
-                  id: u.id,
-                  label: getTitleFromUrl(u.url),
-                  tooltip: u.url,
-                }))}
-                selections={urlSelections}
-                onToggle={toggleUrl}
-                onSelectAll={selectAllUrls}
-                onSelectNone={selectNoUrls}
-                emptyMessage="No URLs available"
-                compact
-              />
-            </CardContent>
-          )}
-        </Card>
+        {/* Section 1: Knowledge Library (Claude Projects style) */}
+        <KnowledgeLibraryPanel
+          skills={skills}
+          documents={documents}
+          urls={urls}
+          selectedPersonaName={selectedPersonaName || undefined}
+          isExpanded={expandedSections.knowledge}
+          onExpandedChange={(expanded) =>
+            setExpandedSections((prev) => ({ ...prev, knowledge: expanded }))
+          }
+          onCustomizeClick={onCustomizeKnowledge}
+        />
 
         {/* Section 2: Customer Information & Documents */}
         <Card>

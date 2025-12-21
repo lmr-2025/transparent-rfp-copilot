@@ -192,6 +192,10 @@ model BulkRow {
   showRecommendation   Boolean  @default(false)
   clarifyConversation  Json?    // Stored as JSON: { role: 'user' | 'assistant'; content: string }[]
 
+  // Feedback tracking (for prompt improvement)
+  originalResponse     String?  @db.Text // AI's original response before user edits
+  originalConfidence   String?            // AI's original confidence before changes
+
   // Review flagging for individual questions
   flaggedForReview     Boolean  @default(false)
   flaggedAt            DateTime?
@@ -695,6 +699,7 @@ model InstructionPreset {
   updatedAt        DateTime                @updatedAt
   createdBy        String?                 // User ID who created it
   createdByEmail   String?                 // For display
+  defaultCategories String[]               @default([]) // Auto-select skills in these categories when persona is chosen
 
   @@index([isShared])
   @@index([shareStatus])
@@ -739,7 +744,7 @@ model ChatPromptCategory {
   @@index([sortOrder])
 }
 
-// Contract Reviews (The Clause Checker)
+// Contract Reviews
 model ContractReview {
   id              String   @id @default(uuid())
   name            String   // Contract/document name
@@ -751,7 +756,7 @@ model ContractReview {
   status          ContractReviewStatus @default(PENDING)
   overallRating   String?  // "compliant", "mostly_compliant", "needs_review", "high_risk"
   summary         String?  @db.Text // AI-generated executive summary
-  findings        Json?    // Array of ContractFinding objects
+  findingsJson    Json?    @map("findings") // Legacy JSON (for migration compatibility)
   skillsUsed      Json?    // Array of skill IDs used for analysis
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -760,9 +765,87 @@ model ContractReview {
   reviewedBy      String?
   notes           String?  @db.Text
 
+  // Owner tracking (like BulkProject)
+  ownerId         String?
+  ownerName       String?
+
+  // Reviewer assignments
+  legalReviewerId     String?   // Primary reviewer (typically legal)
+  legalReviewerName   String?
+  legalReviewedAt     DateTime?
+  legalReviewNotes    String?   @db.Text
+
+  securityReviewerId  String?   // Optional secondary reviewer (security)
+  securityReviewerName String?
+  securityReviewedAt  DateTime?
+  securityReviewNotes String?   @db.Text
+  securityReviewRequested Boolean @default(false)
+  securityReviewRequestedAt DateTime?
+  securityReviewRequestedBy String?
+
+  // Relations
+  findings        ContractFinding[]
+
   @@index([status])
   @@index([createdAt])
   @@index([customerName])
+  @@index([ownerId])
+}
+
+// Individual finding from contract analysis (like BulkRow for RFP questions)
+model ContractFinding {
+  id                  String   @id @default(uuid())
+  contractReviewId    String
+  contractReview      ContractReview @relation(fields: [contractReviewId], references: [id], onDelete: Cascade)
+
+  // Finding content
+  category            String   // data_protection, security_controls, certifications, etc.
+  clauseText          String   @db.Text // The relevant contract excerpt
+  rating              String   // can_comply, partial, gap, risk, info_only
+  rationale           String   @db.Text // Why this rating was given
+  relevantSkills      Json?    // Array of skill references that informed this
+  suggestedResponse   String?  @db.Text // Negotiation guidance
+
+  // Feedback tracking (for prompt improvement)
+  isManuallyAdded         Boolean  @default(false) // True if human added this (AI missed it)
+  originalSuggestedResponse String? @db.Text       // AI's original response before user edits
+  originalRating          String?                  // AI's original rating before user changes
+  originalRationale       String?  @db.Text        // AI's original rationale before user changes
+
+  // Flagging workflow (like BulkRow)
+  flaggedForReview    Boolean  @default(false)
+  flaggedAt           DateTime?
+  flaggedBy           String?
+  flagNote            String?
+  flagResolved        Boolean  @default(false)
+  flagResolvedAt      DateTime?
+  flagResolvedBy      String?
+  flagResolutionNote  String?
+
+  // Review workflow (like BulkRow)
+  reviewStatus        RowReviewStatus @default(NONE)
+  reviewRequestedAt   DateTime?
+  reviewRequestedBy   String?
+  reviewNote          String?
+  reviewedAt          DateTime?
+  reviewedBy          String?
+  userEditedResponse  String?  @db.Text // User's corrected response
+
+  // Security review delegation (for individual findings)
+  assignedToSecurity    Boolean   @default(false)
+  assignedToSecurityAt  DateTime?
+  assignedToSecurityBy  String?
+  securityReviewNote    String?
+  securityReviewedAt    DateTime?
+  securityReviewedBy    String?
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([contractReviewId])
+  @@index([flaggedForReview])
+  @@index([reviewStatus])
+  @@index([rating])
 }
 
 enum ContractReviewStatus {

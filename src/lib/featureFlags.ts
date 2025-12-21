@@ -27,8 +27,8 @@ export const features = {
   // Chat interface - POC, works but needs streaming/WebSocket for production
   chat: envBool("NEXT_PUBLIC_FEATURE_CHAT_ENABLED", true),
 
-  // Contracts module - paused, will resume post-v1
-  contracts: envBool("NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED", false),
+  // Contracts module - AI-powered contract review against knowledge base
+  contracts: envBool("NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED", true),
 
   // Usage dashboard - production ready
   usage: envBool("NEXT_PUBLIC_FEATURE_USAGE_ENABLED", true),

@@ -9,9 +9,10 @@ import type { NextRequest } from "next/server";
  */
 
 // Feature flags - read directly from env (can't import from lib in middleware edge runtime)
+// Default to true (enabled) unless explicitly set to "false"
 const features = {
   chat: process.env.NEXT_PUBLIC_FEATURE_CHAT_ENABLED !== "false",
-  contracts: process.env.NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED === "true",
+  contracts: process.env.NEXT_PUBLIC_FEATURE_CONTRACTS_ENABLED !== "false",
   usage: process.env.NEXT_PUBLIC_FEATURE_USAGE_ENABLED !== "false",
   auditLog: process.env.NEXT_PUBLIC_FEATURE_AUDIT_LOG_ENABLED !== "false",
 };

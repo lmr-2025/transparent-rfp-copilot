@@ -175,24 +175,22 @@ export default function HomePage() {
             accentColor="#0ea5e9"
             bgColor="#f0f9ff"
           />
-          {features.customerProfiles && (
-            <Card
-              href="/customers"
-              title="The Rolodex"
-              description="Build and manage customer intelligence from websites, documents, and Salesforce. AI-powered profile generation."
-              accentColor="#f97316"
-              bgColor="#fff7ed"
-            />
-          )}
           {features.chat && (
             <Card
-              href="/chat"
-              title="Chat"
-              description="Conversational interface to explore your knowledge base. Select specific skills and customer profiles."
+              href="/chat-v2"
+              title="Knowledge Chat"
+              description="Chat with your knowledge base. Choose a persona, select a customer, and see exactly what context goes to AI."
               accentColor="#22c55e"
               bgColor="#f0fdf4"
             />
           )}
+          <Card
+            href="/collateral"
+            title="Collateral Builder"
+            description="Generate slide decks, one-pagers, and battlecards. AI fills templates with customer-specific content."
+            accentColor="#6366f1"
+            bgColor="#eef2ff"
+          />
           {features.contracts && (
             <Card
               href="/contracts"

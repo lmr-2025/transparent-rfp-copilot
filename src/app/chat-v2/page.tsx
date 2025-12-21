@@ -3,7 +3,7 @@
 import { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { History, Plus, MessageSquareOff, Eye, Scissors } from "lucide-react";
+import { History, Plus, MessageSquareOff, Eye, Scissors, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
@@ -53,6 +53,7 @@ export default function ChatV2Page() {
 
   // V2 specific state
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null);
   const [focusedCustomerId, setFocusedCustomerId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -147,6 +148,7 @@ export default function ChatV2Page() {
   // Handle persona change
   const handlePresetChange = useCallback((preset: InstructionPreset | null) => {
     setSelectedPresetId(preset?.id || null);
+    setSelectedPresetName(preset?.name || null);
   }, []);
 
   // Build transparency data for preview or post-response
@@ -434,6 +436,13 @@ ${keyFactsText}`;
     setShowTransparency(true);
   };
 
+  // Handle customize knowledge click - expand sidebar if collapsed
+  const handleCustomizeKnowledge = useCallback(() => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
+  }, [sidebarCollapsed]);
+
   const isDataLoading = skillsLoading || documentsLoading || urlsLoading || customersLoading;
   const totalSelected = getSelectedSkillIds().length + getSelectedDocumentIds().length +
                         getSelectedUrlIds().length + getSelectedCustomerIds().length;
@@ -532,6 +541,12 @@ ${keyFactsText}`;
           selectedCustomerId={focusedCustomerId}
           onCustomerSelect={handleCustomerFocusChange}
           customersLoading={customersLoading}
+          skills={skills.map(s => ({ id: s.id, categories: s.categories || [] }))}
+          onSkillsAutoSelected={(count, categories) => {
+            if (count > 0) {
+              toast.success(`Auto-selected ${count} skills from categories: ${categories.join(", ")}`);
+            }
+          }}
         />
 
         {/* Messages */}
@@ -574,6 +589,13 @@ ${keyFactsText}`;
               <span>
                 Context: {getSelectedSkillIds().length} skills, {getSelectedDocumentIds().length} docs, {getSelectedUrlIds().length} URLs
               </span>
+              <button
+                onClick={handleCustomizeKnowledge}
+                className="text-primary hover:underline flex items-center gap-1"
+              >
+                <Settings2 className="h-3 w-3" />
+                Customize
+              </button>
               {focusedCustomer && (
                 <span className="text-primary">
                   Customer: {focusedCustomer.name}
@@ -628,9 +650,11 @@ ${keyFactsText}`;
           urls={urls}
           customers={customers}
           selectedCustomer={focusedCustomer}
+          selectedPersonaName={selectedPresetName}
           isLoading={isDataLoading}
           isCollapsed={sidebarCollapsed}
           onCollapsedChange={setSidebarCollapsed}
+          onCustomizeKnowledge={handleCustomizeKnowledge}
         />
       </div>
 

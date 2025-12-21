@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { parseApiData } from "@/lib/apiClient";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 import type { CustomerProfile } from "@/types/customerProfile";
+import { useSelectionStore } from "@/stores/selection-store";
 
 export type InstructionPreset = {
   id: string;
@@ -24,6 +25,7 @@ export type InstructionPreset = {
   isShared: boolean;
   isDefault: boolean;
   shareStatus: "PRIVATE" | "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  defaultCategories: string[]; // Auto-select skills in these categories
 };
 
 type SegmentFilter = {
@@ -46,6 +48,9 @@ interface ContextControlsBarProps {
   selectedCustomerId: string | null;
   onCustomerSelect: (customerId: string | null) => void;
   customersLoading?: boolean;
+  // Skills props for auto-selection based on persona categories
+  skills?: Array<{ id: string; categories: string[] }>;
+  onSkillsAutoSelected?: (selectedCount: number, categories: string[]) => void;
   // Optional left content (e.g., title)
   leftContent?: React.ReactNode;
   // Optional right content (e.g., action buttons)
@@ -63,12 +68,17 @@ export function ContextControlsBar({
   selectedCustomerId,
   onCustomerSelect,
   customersLoading,
+  skills,
+  onSkillsAutoSelected,
   leftContent,
   rightContent,
 }: ContextControlsBarProps) {
   // Persona state
   const [presets, setPresets] = useState<InstructionPreset[]>([]);
   const [presetsLoading, setPresetsLoading] = useState(true);
+
+  // Selection store for skill auto-selection
+  const selectSkillsByCategories = useSelectionStore((state) => state.selectSkillsByCategories);
 
   // Customer filter state
   const [segmentFilters, setSegmentFilters] = useState<SegmentFilter>({});
@@ -105,6 +115,12 @@ export function ContextControlsBar({
     if (preset) {
       onUserInstructionsChange(preset.content);
       localStorage.setItem(STORAGE_KEYS.USER_INSTRUCTIONS, preset.content);
+
+      // Auto-select skills by category if persona has defaultCategories
+      if (preset.defaultCategories?.length > 0 && skills?.length) {
+        const selectedIds = selectSkillsByCategories(skills, preset.defaultCategories);
+        onSkillsAutoSelected?.(selectedIds.length, preset.defaultCategories);
+      }
     } else {
       onUserInstructionsChange(DEFAULTS.USER_INSTRUCTIONS);
       localStorage.setItem(STORAGE_KEYS.USER_INSTRUCTIONS, DEFAULTS.USER_INSTRUCTIONS);
@@ -328,11 +344,10 @@ export function ContextControlsBar({
       <div className="flex items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-2">
+            <Button variant="ghost" size="icon" className="h-9 w-9 relative">
               <Filter className="h-4 w-4" />
-              Filters
               {activeFilterCount > 0 && (
-                <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs">
+                <Badge variant="secondary" className="absolute -top-1 -right-1 h-4 w-4 p-0 flex items-center justify-center text-[10px]">
                   {activeFilterCount}
                 </Badge>
               )}

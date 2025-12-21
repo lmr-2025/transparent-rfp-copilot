@@ -57,6 +57,35 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    // Get contract findings (from Contract Reviews)
+    const contractFindings = await prisma.contractFinding.findMany({
+      where: {
+        contractReview: {
+          createdAt: { gte: startDate },
+        },
+      },
+      select: {
+        id: true,
+        category: true,
+        rating: true,
+        rationale: true,
+        reviewStatus: true,
+        isManuallyAdded: true,
+        originalSuggestedResponse: true,
+        originalRating: true,
+        originalRationale: true,
+        flaggedForReview: true,
+        relevantSkills: true,
+        contractReview: {
+          select: {
+            id: true,
+            name: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
     // Calculate confidence distribution
     const confidenceCounts = {
       High: 0,
@@ -82,6 +111,15 @@ export async function GET(request: NextRequest) {
 
     // Track flagged answers
     let flaggedCount = 0;
+
+    // Track contract review feedback
+    const contractFeedback = {
+      totalFindings: 0,
+      manuallyAdded: 0,      // AI missed these - human added
+      responsesEdited: 0,     // AI response was corrected
+      ratingsChanged: 0,      // AI rating was changed
+      rationalesChanged: 0,   // AI rationale was changed
+    };
 
     // Track skills involved in corrections
     const skillCorrections: Record<string, { skillId: string; title: string; corrections: number; total: number }> = {};

@@ -18,15 +18,22 @@ import {
   Save,
   X,
   Pencil,
+  Tags,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 import { useConfirm } from "@/components/ConfirmModal";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { type InstructionPreset, statusColors } from "./types";
+
+type SkillCategory = {
+  id: string;
+  name: string;
+};
 
 export function PersonasTab() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -38,11 +45,13 @@ export function PersonasTab() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editContent, setEditContent] = useState("");
+  const [editCategories, setEditCategories] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newContent, setNewContent] = useState("");
+  const [newCategories, setNewCategories] = useState<string[]>([]);
 
   const { confirm: confirmDelete, ConfirmDialog } = useConfirm({
     title: "Delete Persona",
@@ -72,6 +81,14 @@ export function PersonasTab() {
 
   const presets = presetsData?.presets || [];
 
+  // Fetch skill categories for the category picker
+  const { data: categoriesData } = useApiQuery<{ categories: SkillCategory[] }>({
+    url: "/api/skill-categories",
+    queryKey: ["skill-categories"],
+  });
+
+  const skillCategories = categoriesData?.categories || [];
+
   // Mutations
   const updateMutation = useApiMutation<void, { id: string; data: Record<string, unknown> }>({
     url: "/api/instruction-presets",
@@ -88,7 +105,7 @@ export function PersonasTab() {
     },
   });
 
-  const createMutation = useApiMutation<void, { name: string; description: string; content: string; requestShare: boolean }>({
+  const createMutation = useApiMutation<void, { name: string; description: string; content: string; defaultCategories: string[]; requestShare: boolean }>({
     url: "/api/instruction-presets",
     method: "POST",
     onSuccess: () => {
@@ -97,6 +114,7 @@ export function PersonasTab() {
       setNewName("");
       setNewDescription("");
       setNewContent("");
+      setNewCategories([]);
     },
   });
 
@@ -133,6 +151,7 @@ export function PersonasTab() {
       setEditName(selectedPreset.name);
       setEditDescription(selectedPreset.description || "");
       setEditContent(selectedPreset.content);
+      setEditCategories(selectedPreset.defaultCategories || []);
       setIsEditing(true);
     }
   };
@@ -141,9 +160,17 @@ export function PersonasTab() {
     if (!selectedPreset) return;
     await updateMutation.mutateAsync({
       id: selectedPreset.id,
-      data: { name: editName, description: editDescription, content: editContent },
+      data: { name: editName, description: editDescription, content: editContent, defaultCategories: editCategories },
     });
     setIsEditing(false);
+  };
+
+  const toggleCategory = (categoryName: string, categories: string[], setCategories: (cats: string[]) => void) => {
+    if (categories.includes(categoryName)) {
+      setCategories(categories.filter(c => c !== categoryName));
+    } else {
+      setCategories([...categories, categoryName]);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -318,6 +345,48 @@ export function PersonasTab() {
               )
             )}
 
+            {/* Default Categories */}
+            <div className="mb-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-slate-600 mb-2">
+                <Tags className="h-4 w-4" />
+                Default Knowledge Categories
+              </div>
+              <p className="text-xs text-slate-500 mb-2">
+                Skills from these categories will be auto-selected when this persona is chosen
+              </p>
+              {isEditing ? (
+                <div className="flex flex-wrap gap-2">
+                  {skillCategories.map((cat) => (
+                    <Badge
+                      key={cat.id}
+                      variant={editCategories.includes(cat.name) ? "default" : "outline"}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        editCategories.includes(cat.name)
+                          ? "bg-blue-500 hover:bg-blue-600"
+                          : "hover:bg-slate-100"
+                      )}
+                      onClick={() => toggleCategory(cat.name, editCategories, setEditCategories)}
+                    >
+                      {cat.name}
+                    </Badge>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {selectedPreset.defaultCategories?.length > 0 ? (
+                    selectedPreset.defaultCategories.map((cat) => (
+                      <Badge key={cat} variant="secondary">
+                        {cat}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-400">No categories selected - all skills available</span>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Content */}
             <div className="mb-4">
               <div className="text-sm font-medium text-slate-600 mb-2">Instructions</div>
@@ -383,13 +452,39 @@ export function PersonasTab() {
                   className="w-full h-40 p-3 border rounded-lg text-sm resize-none"
                 />
               </div>
+              <div>
+                <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-2">
+                  <Tags className="h-4 w-4" />
+                  Default Knowledge Categories
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Skills from these categories will be auto-selected when this persona is chosen
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {skillCategories.map((cat) => (
+                    <Badge
+                      key={cat.id}
+                      variant={newCategories.includes(cat.name) ? "default" : "outline"}
+                      className={cn(
+                        "cursor-pointer transition-colors",
+                        newCategories.includes(cat.name)
+                          ? "bg-blue-500 hover:bg-blue-600"
+                          : "hover:bg-slate-100"
+                      )}
+                      onClick={() => toggleCategory(cat.name, newCategories, setNewCategories)}
+                    >
+                      {cat.name}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex justify-end gap-2 mt-6">
               <Button variant="outline" onClick={() => setShowCreate(false)}>
                 Cancel
               </Button>
               <Button
-                onClick={() => createMutation.mutate({ name: newName, description: newDescription, content: newContent, requestShare: false })}
+                onClick={() => createMutation.mutate({ name: newName, description: newDescription, content: newContent, defaultCategories: newCategories, requestShare: false })}
                 disabled={!newName || !newContent || createMutation.isPending}
               >
                 {createMutation.isPending ? "Creating..." : "Create"}

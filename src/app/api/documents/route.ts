@@ -10,7 +10,8 @@ import { logger } from "@/lib/logger";
 
 export const maxDuration = 60;
 
-// GET - List all documents
+// GET - List all documents with skill usage counts
+// Categories are derived dynamically from linked skills via SkillSource
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
   if (!auth.authorized) {
@@ -21,6 +22,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
+    const category = searchParams.get("category");
 
     const documents = await prisma.knowledgeDocument.findMany({
       orderBy: { uploadedAt: "desc" },
@@ -45,7 +47,54 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return apiSuccess({ documents });
+    // Get all SkillSource links for these documents with their skill categories
+    const docIds = documents.map((d) => d.id);
+    const skillSources = await prisma.skillSource.findMany({
+      where: {
+        sourceId: { in: docIds },
+        sourceType: "document",
+      },
+      include: {
+        skill: {
+          select: { id: true, categories: true },
+        },
+      },
+    });
+
+    // Build a map of document ID -> derived categories (union of all linked skills' categories)
+    const categoryMap = new Map<string, Set<string>>();
+    const countMap = new Map<string, number>();
+
+    for (const ss of skillSources) {
+      // Count skills per document
+      countMap.set(ss.sourceId, (countMap.get(ss.sourceId) || 0) + 1);
+
+      // Aggregate categories from linked skills
+      if (!categoryMap.has(ss.sourceId)) {
+        categoryMap.set(ss.sourceId, new Set());
+      }
+      const catSet = categoryMap.get(ss.sourceId)!;
+      for (const cat of ss.skill.categories) {
+        catSet.add(cat);
+      }
+    }
+
+    // Add skillCount and derived categories to each document
+    let documentsWithData = documents.map((doc) => ({
+      ...doc,
+      skillCount: countMap.get(doc.id) || 0,
+      // Derived categories from linked skills (falls back to stored categories if none linked)
+      categories: categoryMap.has(doc.id)
+        ? Array.from(categoryMap.get(doc.id)!)
+        : doc.categories,
+    }));
+
+    // Filter by category if provided (now filtering on derived categories)
+    if (category) {
+      documentsWithData = documentsWithData.filter((doc) => doc.categories.includes(category));
+    }
+
+    return apiSuccess({ documents: documentsWithData });
   } catch (error) {
     logger.error("Failed to fetch documents", error, { route: "/api/documents" });
     return errors.internal("Failed to fetch documents");

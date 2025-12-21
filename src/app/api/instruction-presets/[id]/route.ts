@@ -74,6 +74,7 @@ export async function PUT(
       name,
       content,
       description,
+      defaultCategories,
       requestShare,
       isDefault,
       // Admin-only actions
@@ -130,6 +131,7 @@ export async function PUT(
     if (name !== undefined) updates.name = name;
     if (content !== undefined) updates.content = content;
     if (description !== undefined) updates.description = description;
+    if (defaultCategories !== undefined) updates.defaultCategories = defaultCategories;
 
     // Handle share request from owner
     if (requestShare !== undefined && isOwner) {
