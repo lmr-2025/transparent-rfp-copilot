@@ -2,6 +2,21 @@
 
 import { useState } from "react";
 
+// Standard feedback categories - aligned with Prisma FeedbackCategory enum
+export const FEEDBACK_CATEGORIES = [
+  { id: "WRONG_SKILL_MATCHED", label: "Wrong skill", description: "AI used wrong skill(s) for this question" },
+  { id: "OUTDATED_KNOWLEDGE", label: "Outdated", description: "Skill content is stale/incorrect" },
+  { id: "MISSING_KNOWLEDGE", label: "Missing knowledge", description: "No skill exists for this topic" },
+  { id: "HALLUCINATION", label: "Hallucination", description: "AI made up information not in sources" },
+  { id: "INCOMPLETE_ANSWER", label: "Incomplete", description: "Answer was partial/missing key details" },
+  { id: "WRONG_TONE", label: "Wrong tone", description: "Tone/style didn't match expectations" },
+  { id: "TECHNICAL_ERROR", label: "Technical error", description: "Factual/technical mistake" },
+  { id: "FORMATTING_ISSUE", label: "Formatting", description: "Structure/formatting problems" },
+  { id: "OTHER", label: "Other", description: "Catch-all for uncategorized issues" },
+] as const;
+
+export type FeedbackCategory = typeof FEEDBACK_CATEGORIES[number]["id"];
+
 type FeedbackButtonsProps = {
   feature: "questions" | "chat" | "projects";
   question: string;
@@ -13,6 +28,7 @@ type FeedbackButtonsProps = {
   chatSessionId?: string;
   model?: string;
   usedFallback?: boolean;
+  traceId?: string;
   // Styling options
   size?: "small" | "medium";
   showLabels?: boolean;
@@ -31,18 +47,28 @@ export default function FeedbackButtons({
   chatSessionId,
   model,
   usedFallback,
+  traceId,
   size = "medium",
   showLabels = false,
 }: FeedbackButtonsProps) {
   const [feedbackState, setFeedbackState] = useState<FeedbackState>("none");
   const [showCommentBox, setShowCommentBox] = useState(false);
   const [comment, setComment] = useState("");
+  const [selectedCategories, setSelectedCategories] = useState<FeedbackCategory[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleCategory = (categoryId: FeedbackCategory) => {
+    setSelectedCategories((prev) =>
+      prev.includes(categoryId)
+        ? prev.filter((c) => c !== categoryId)
+        : [...prev, categoryId]
+    );
+  };
 
   const iconSize = size === "small" ? "16px" : "20px";
   const padding = size === "small" ? "4px 8px" : "6px 12px";
 
-  const submitFeedback = async (rating: "thumbs_up" | "thumbs_down", userComment?: string) => {
+  const submitFeedback = async (rating: "thumbs_up" | "thumbs_down", userComment?: string, categories?: FeedbackCategory[]) => {
     setFeedbackState("submitting");
     setError(null);
 
@@ -54,6 +80,7 @@ export default function FeedbackButtons({
           feature,
           rating,
           comment: userComment || undefined,
+          categories: categories || undefined,
           question,
           answer,
           confidence,
@@ -63,6 +90,7 @@ export default function FeedbackButtons({
           chatSessionId,
           model,
           usedFallback,
+          traceId,
         }),
       });
 
@@ -73,6 +101,7 @@ export default function FeedbackButtons({
       setFeedbackState(rating);
       setShowCommentBox(false);
       setComment("");
+      setSelectedCategories([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error submitting feedback");
       setFeedbackState("none");
@@ -92,12 +121,13 @@ export default function FeedbackButtons({
   };
 
   const handleSubmitNegative = () => {
-    submitFeedback("thumbs_down", comment);
+    submitFeedback("thumbs_down", comment, selectedCategories.length > 0 ? selectedCategories : undefined);
   };
 
   const handleCancelComment = () => {
     setShowCommentBox(false);
     setComment("");
+    setSelectedCategories([]);
   };
 
   // Already submitted
@@ -121,21 +151,45 @@ export default function FeedbackButtons({
   // Comment box for negative feedback
   if (showCommentBox) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-        <div style={{ fontSize: "0.875rem", color: "#64748b" }}>
-          What could be improved?
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ fontSize: "0.875rem", color: "#64748b", fontWeight: 500 }}>
+          What went wrong?
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+          {FEEDBACK_CATEGORIES.map((cat) => {
+            const isSelected = selectedCategories.includes(cat.id);
+            return (
+              <button
+                key={cat.id}
+                onClick={() => toggleCategory(cat.id)}
+                title={cat.description}
+                style={{
+                  padding: "4px 10px",
+                  borderRadius: "16px",
+                  border: isSelected ? "1px solid #dc2626" : "1px solid #e2e8f0",
+                  background: isSelected ? "#fef2f2" : "white",
+                  color: isSelected ? "#dc2626" : "#64748b",
+                  fontSize: "0.75rem",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                }}
+              >
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
         <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
-          placeholder="Optional: Tell us what was wrong or missing..."
+          placeholder="Additional details (optional)..."
           style={{
             padding: "8px",
             borderRadius: "6px",
             border: "1px solid #e2e8f0",
             fontSize: "0.875rem",
             resize: "vertical",
-            minHeight: "60px",
+            minHeight: "50px",
           }}
         />
         {error && (

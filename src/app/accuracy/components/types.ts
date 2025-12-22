@@ -62,6 +62,10 @@ export type AccuracyData = {
     project: { id: string; name: string } | null;
     source?: "project" | "questions";
   }[];
+  feedbackCategoryStats: {
+    category: string;
+    count: number;
+  }[];
   period: { days: number; startDate: string };
 };
 

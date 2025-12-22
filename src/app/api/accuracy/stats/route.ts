@@ -369,6 +369,30 @@ export async function GET(request: NextRequest) {
                           correctionsByConfidence.Unknown.corrected;
     const overallAccuracy = totalAnswers > 0 ? ((totalAnswers - totalCorrected) / totalAnswers) * 100 : null;
 
+    // Get feedback category breakdown from LLMTrace
+    const categoryBreakdown = await prisma.lLMTrace.groupBy({
+      by: ["feedbackCategories"],
+      where: {
+        createdAt: { gte: startDate },
+        feedbackCategories: { isEmpty: false },
+      },
+      _count: true,
+    });
+
+    // Flatten and count categories
+    const categoryCounts: Record<string, number> = {};
+    for (const entry of categoryBreakdown) {
+      const categories = entry.feedbackCategories as string[];
+      for (const cat of categories) {
+        categoryCounts[cat] = (categoryCounts[cat] || 0) + entry._count;
+      }
+    }
+
+    // Sort by count descending
+    const feedbackCategoryStats = Object.entries(categoryCounts)
+      .map(([category, count]) => ({ category, count }))
+      .sort((a, b) => b.count - a.count);
+
     return apiSuccess({
       summary: {
         totalAnswers,
@@ -384,6 +408,7 @@ export async function GET(request: NextRequest) {
       skillsNeedingAttention,
       daily,
       recentCorrections,
+      feedbackCategoryStats,
       period: { days, startDate: startDate.toISOString() },
     });
   } catch (error) {

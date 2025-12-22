@@ -295,6 +295,53 @@ export default function DashboardTab({ days, onDaysChange }: DashboardTabProps) 
                 </div>
               )}
             </div>
+
+            {/* Feedback Category Breakdown */}
+            {data.feedbackCategoryStats && data.feedbackCategoryStats.length > 0 && (
+              <div
+                style={{
+                  padding: "24px",
+                  background: "white",
+                  borderRadius: "12px",
+                  border: "1px solid #e2e8f0",
+                }}
+              >
+                <h3 style={{ fontWeight: 600, marginBottom: "16px" }}>Issue Categories</h3>
+                <p style={{ fontSize: "0.8rem", color: "#64748b", marginBottom: "16px" }}>
+                  Most common feedback categories from corrections
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  {data.feedbackCategoryStats.slice(0, 6).map((cat) => {
+                    const total = data.feedbackCategoryStats.reduce((sum, c) => sum + c.count, 0);
+                    const pct = total > 0 ? (cat.count / total) * 100 : 0;
+                    const label = cat.category
+                      .replace(/_/g, " ")
+                      .toLowerCase()
+                      .replace(/\b\w/g, (c) => c.toUpperCase());
+                    return (
+                      <div key={cat.category}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                          <span style={{ fontSize: "0.875rem", fontWeight: 500 }}>{label}</span>
+                          <span style={{ fontSize: "0.875rem", color: "#64748b" }}>
+                            {cat.count} ({pct.toFixed(0)}%)
+                          </span>
+                        </div>
+                        <div style={{ height: "8px", background: "#f1f5f9", borderRadius: "4px", overflow: "hidden" }}>
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${pct}%`,
+                              background: "#f59e0b",
+                              borderRadius: "4px",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Daily Trend */}

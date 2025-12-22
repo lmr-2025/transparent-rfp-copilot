@@ -3,6 +3,7 @@ import { defaultQuestionPrompt } from "./questionPrompt";
 import Anthropic from "@anthropic-ai/sdk";
 import { CLAUDE_MODEL, getModel, LLM_PARAMS, type ModelSpeed } from "./config";
 import { buildCacheableSystem } from "./anthropicCache";
+import { startTrace, recordTrace, type EntityLink } from "./tracing";
 
 // Re-export ModelSpeed for consumers
 export type { ModelSpeed } from "./config";
@@ -47,6 +48,10 @@ export async function generateSkillDraftFromMessages(
     apiKey: apiKey,
   });
 
+  const traceContext = startTrace("generate_skill_draft", "skills");
+  const userMessage = sanitized.map((m) => `${m.role}: ${m.content}`).join("\n");
+  const startTime = Date.now();
+
   try {
     const response = await anthropic.messages.create({
       model: CLAUDE_MODEL,
@@ -59,15 +64,30 @@ export async function generateSkillDraftFromMessages(
       })),
     });
 
+    const latencyMs = Date.now() - startTime;
+
     const content = response.content[0];
     if (content.type !== "text" || !content.text?.trim()) {
       throw new Error("Claude returned an empty response.");
     }
 
-    const parsed = parseJsonContent(content.text.trim());
+    const responseText = content.text.trim();
+    const parsed = parseJsonContent(responseText);
     // If LLM returned an array of skills, take the first one
     const skillData = Array.isArray(parsed) ? parsed[0] : parsed;
     const draft = normalizeSkillDraft(skillData);
+
+    await recordTrace(
+      traceContext,
+      { model: CLAUDE_MODEL, systemPrompt: promptText, userMessage },
+      {
+        response: responseText,
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+      },
+      latencyMs
+    );
+
     draft.usage = {
       inputTokens: response.usage?.input_tokens || 0,
       outputTokens: response.usage?.output_tokens || 0,
@@ -87,6 +107,7 @@ export type AnswerResult = {
   conversationHistory: { role: string; content: string }[];
   usedFallback: boolean;
   usage?: UsageInfo;
+  traceId?: string; // For feedback correlation
 };
 
 export type FallbackContent = {
@@ -95,12 +116,20 @@ export type FallbackContent = {
   content: string;
 };
 
+export type TracingOptions = {
+  userId?: string;
+  userEmail?: string;
+  entityLink?: EntityLink;
+  parentTraceId?: string;
+};
+
 export async function answerQuestionWithPrompt(
   question: string,
   promptText = defaultQuestionPrompt,
-  skills?: { title: string; content: string }[],
+  skills?: { title: string; content: string; id?: string }[],
   fallbackContent?: FallbackContent[],
   modelSpeed: ModelSpeed = "quality",
+  tracingOptions?: TracingOptions,
 ): Promise<AnswerResult> {
   const trimmedQuestion = question?.trim();
   if (!trimmedQuestion) {
@@ -183,6 +212,15 @@ export async function answerQuestionWithPrompt(
     model,
   });
 
+  // Set up tracing context
+  const traceContext = startTrace("answer_question", "questions", {
+    parentTraceId: tracingOptions?.parentTraceId,
+    userId: tracingOptions?.userId,
+    userEmail: tracingOptions?.userEmail,
+  });
+
+  const startTime = Date.now();
+
   try {
     const response = await anthropic.messages.create({
       model,
@@ -197,12 +235,34 @@ export async function answerQuestionWithPrompt(
       ],
     });
 
+    const latencyMs = Date.now() - startTime;
+
     const content = response.content[0];
     if (content.type !== "text" || !content.text?.trim()) {
       throw new Error("The assistant returned an empty response.");
     }
 
     const answerText = content.text.trim();
+
+    // Record trace
+    const traceId = await recordTrace(
+      traceContext,
+      {
+        model,
+        systemPrompt: promptText,
+        userMessage,
+        skills: skills?.map((s) => ({ id: s.id || "", title: s.title })),
+      },
+      {
+        response: answerText,
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
+        cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
+      },
+      latencyMs,
+      tracingOptions?.entityLink
+    );
 
     // Build conversation history for transparency
     const conversationHistory: { role: string; content: string }[] = [
@@ -222,6 +282,7 @@ export async function answerQuestionWithPrompt(
         cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
         cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
       },
+      traceId,
     };
   } catch (error) {
     if (error instanceof Error) {
@@ -364,6 +425,9 @@ export async function answerQuestionsBatch(
     model,
   });
 
+  const traceContext = startTrace("answer_questions_batch", "questions");
+  const startTime = Date.now();
+
   try {
     const response = await anthropic.messages.create({
       model,
@@ -377,6 +441,8 @@ export async function answerQuestionsBatch(
         },
       ],
     });
+
+    const latencyMs = Date.now() - startTime;
 
     const content = response.content[0];
     if (content.type !== "text" || !content.text?.trim()) {
@@ -407,6 +473,19 @@ export async function answerQuestionsBatch(
         remarks: String(obj.remarks || "None"),
       };
     });
+
+    await recordTrace(
+      traceContext,
+      { model, systemPrompt: promptText, userMessage },
+      {
+        response: responseText,
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        cacheCreationTokens: response.usage?.cache_creation_input_tokens ?? undefined,
+        cacheReadTokens: response.usage?.cache_read_input_tokens ?? undefined,
+      },
+      latencyMs
+    );
 
     return {
       answers,
