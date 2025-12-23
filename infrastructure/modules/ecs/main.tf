@@ -145,6 +145,10 @@ resource "aws_ecs_task_definition" "app" {
             value = tostring(var.container_port)
           },
           {
+            name  = "HOSTNAME"
+            value = "0.0.0.0"
+          },
+          {
             name  = "NEXTAUTH_URL"
             value = var.nextauth_url
           }
@@ -203,9 +207,9 @@ resource "aws_ecs_task_definition" "app" {
         }
       }
 
-      # Health check
+      # Health check - using Node.js HTTP module (no curl required in Alpine)
       healthCheck = {
-        command     = ["CMD-SHELL", "curl -f http://localhost:${var.container_port}${var.health_check_path} || exit 1"]
+        command     = ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:${var.container_port}${var.health_check_path}', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)}).on('error', () => process.exit(1))\""]
         interval    = var.health_check_interval
         timeout     = var.health_check_timeout
         retries     = var.health_check_retries
