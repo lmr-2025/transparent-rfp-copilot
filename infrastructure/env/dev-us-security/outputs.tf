@@ -123,19 +123,26 @@ output "secrets_policy_arn" {
 # RDS Outputs
 # =========================================
 
-output "db_instance_endpoint" {
-  description = "Endpoint of the RDS instance"
-  value       = module.rds.db_instance_endpoint
-}
+# RDS outputs disabled - using external database
+# output "db_instance_endpoint" {
+#   description = "Endpoint of the RDS instance"
+#   value       = module.rds.db_instance_endpoint
+# }
+#
+# output "db_instance_id" {
+#   description = "ID of the RDS instance"
+#   value       = module.rds.db_instance_id
+# }
+#
+# output "db_credentials_secret_arn" {
+#   description = "ARN of the database credentials secret"
+#   value       = module.rds.db_credentials_secret_arn
+#   sensitive   = true
+# }
 
-output "db_instance_id" {
-  description = "ID of the RDS instance"
-  value       = module.rds.db_instance_id
-}
-
-output "db_credentials_secret_arn" {
-  description = "ARN of the database credentials secret"
-  value       = module.rds.db_credentials_secret_arn
+output "external_database_secret_arn" {
+  description = "ARN of the external database URL secret"
+  value       = aws_secretsmanager_secret.external_database_url.arn
   sensitive   = true
 }
 

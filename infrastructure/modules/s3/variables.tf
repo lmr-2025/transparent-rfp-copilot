@@ -77,7 +77,7 @@ variable "noncurrent_version_expiration_days" {
 variable "alb_logs_retention_days" {
   description = "Number of days to retain ALB access logs"
   type        = number
-  default     = 90
+  default     = 180  # Must be greater than last transition (90 days to GLACIER)
 }
 
 variable "cloudtrail_logs_retention_days" {
@@ -89,7 +89,7 @@ variable "cloudtrail_logs_retention_days" {
 variable "general_logs_retention_days" {
   description = "Number of days to retain general logs"
   type        = number
-  default     = 90
+  default     = 180  # Must be greater than last transition (90 days to GLACIER)
 }
 
 # -----------------------------------------------------------------------------

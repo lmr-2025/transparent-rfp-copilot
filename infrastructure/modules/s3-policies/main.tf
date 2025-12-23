@@ -24,41 +24,43 @@ resource "aws_iam_policy" "app_s3_access" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      # Application uploads bucket - full access
-      {
-        Sid    = "AppUploadsBucketFullAccess"
-        Effect = "Allow"
-        Action = [
-          "s3:PutObject",
-          "s3:GetObject",
-          "s3:DeleteObject",
-          "s3:ListBucket",
-          "s3:GetObjectVersion",
-          "s3:DeleteObjectVersion"
-        ]
-        Resource = [
-          var.app_uploads_bucket_arn,
-          "${var.app_uploads_bucket_arn}/*"
-        ]
-      },
-      # Generate presigned URLs
-      {
-        Sid    = "GeneratePresignedUrls"
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject"
-        ]
-        Resource = "${var.app_uploads_bucket_arn}/*"
-        Condition = {
-          StringEquals = {
-            "s3:x-amz-server-side-encryption" = var.use_kms_encryption ? "aws:kms" : "AES256"
+    Statement = concat(
+      [
+        # Application uploads bucket - full access
+        {
+          Sid    = "AppUploadsBucketFullAccess"
+          Effect = "Allow"
+          Action = [
+            "s3:PutObject",
+            "s3:GetObject",
+            "s3:DeleteObject",
+            "s3:ListBucket",
+            "s3:GetObjectVersion",
+            "s3:DeleteObjectVersion"
+          ]
+          Resource = [
+            var.app_uploads_bucket_arn,
+            "${var.app_uploads_bucket_arn}/*"
+          ]
+        },
+        # Generate presigned URLs
+        {
+          Sid    = "GeneratePresignedUrls"
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject"
+          ]
+          Resource = "${var.app_uploads_bucket_arn}/*"
+          Condition = {
+            StringEquals = {
+              "s3:x-amz-server-side-encryption" = var.use_kms_encryption ? "aws:kms" : "AES256"
+            }
           }
         }
-      },
+      ],
       # KMS access if using KMS encryption
-      var.use_kms_encryption ? {
+      var.use_kms_encryption ? [{
         Sid    = "KMSAccess"
         Effect = "Allow"
         Action = [
@@ -67,8 +69,8 @@ resource "aws_iam_policy" "app_s3_access" {
           "kms:DescribeKey"
         ]
         Resource = var.kms_key_arn
-      } : null
-    ]
+      }] : []
+    )
   })
 
   tags = merge(
@@ -101,23 +103,25 @@ resource "aws_iam_policy" "s3_readonly_access" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "S3ReadOnlyAccess"
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:GetObjectVersion",
-          "s3:ListBucket",
-          "s3:GetBucketLocation",
-          "s3:GetBucketVersioning"
-        ]
-        Resource = [
-          var.app_uploads_bucket_arn,
-          "${var.app_uploads_bucket_arn}/*"
-        ]
-      },
-      var.use_kms_encryption ? {
+    Statement = concat(
+      [
+        {
+          Sid    = "S3ReadOnlyAccess"
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:GetObjectVersion",
+            "s3:ListBucket",
+            "s3:GetBucketLocation",
+            "s3:GetBucketVersioning"
+          ]
+          Resource = [
+            var.app_uploads_bucket_arn,
+            "${var.app_uploads_bucket_arn}/*"
+          ]
+        }
+      ],
+      var.use_kms_encryption ? [{
         Sid    = "KMSDecryptOnly"
         Effect = "Allow"
         Action = [
@@ -125,8 +129,8 @@ resource "aws_iam_policy" "s3_readonly_access" {
           "kms:DescribeKey"
         ]
         Resource = var.kms_key_arn
-      } : null
-    ]
+      }] : []
+    )
   })
 
   tags = merge(
@@ -151,21 +155,23 @@ resource "aws_iam_policy" "lambda_s3_access" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "LambdaS3Access"
-        Effect = "Allow"
-        Action = [
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:ListBucket"
-        ]
-        Resource = [
-          var.app_uploads_bucket_arn,
-          "${var.app_uploads_bucket_arn}/*"
-        ]
-      },
-      var.use_kms_encryption ? {
+    Statement = concat(
+      [
+        {
+          Sid    = "LambdaS3Access"
+          Effect = "Allow"
+          Action = [
+            "s3:GetObject",
+            "s3:PutObject",
+            "s3:ListBucket"
+          ]
+          Resource = [
+            var.app_uploads_bucket_arn,
+            "${var.app_uploads_bucket_arn}/*"
+          ]
+        }
+      ],
+      var.use_kms_encryption ? [{
         Sid    = "KMSAccessForLambda"
         Effect = "Allow"
         Action = [
@@ -173,8 +179,8 @@ resource "aws_iam_policy" "lambda_s3_access" {
           "kms:GenerateDataKey"
         ]
         Resource = var.kms_key_arn
-      } : null
-    ]
+      }] : []
+    )
   })
 
   tags = merge(
@@ -199,32 +205,34 @@ resource "aws_iam_policy" "s3_replication_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid    = "ReplicationSourceRead"
-        Effect = "Allow"
-        Action = [
-          "s3:GetReplicationConfiguration",
-          "s3:ListBucket",
-          "s3:GetObjectVersionForReplication",
-          "s3:GetObjectVersionAcl"
-        ]
-        Resource = [
-          var.app_uploads_bucket_arn,
-          "${var.app_uploads_bucket_arn}/*"
-        ]
-      },
-      {
-        Sid    = "ReplicationDestinationWrite"
-        Effect = "Allow"
-        Action = [
-          "s3:ReplicateObject",
-          "s3:ReplicateDelete",
-          "s3:ReplicateTags"
-        ]
-        Resource = "${var.replication_destination_bucket_arn}/*"
-      },
-      var.use_kms_encryption ? {
+    Statement = concat(
+      [
+        {
+          Sid    = "ReplicationSourceRead"
+          Effect = "Allow"
+          Action = [
+            "s3:GetReplicationConfiguration",
+            "s3:ListBucket",
+            "s3:GetObjectVersionForReplication",
+            "s3:GetObjectVersionAcl"
+          ]
+          Resource = [
+            var.app_uploads_bucket_arn,
+            "${var.app_uploads_bucket_arn}/*"
+          ]
+        },
+        {
+          Sid    = "ReplicationDestinationWrite"
+          Effect = "Allow"
+          Action = [
+            "s3:ReplicateObject",
+            "s3:ReplicateDelete",
+            "s3:ReplicateTags"
+          ]
+          Resource = "${var.replication_destination_bucket_arn}/*"
+        }
+      ],
+      var.use_kms_encryption ? [{
         Sid    = "KMSReplicationAccess"
         Effect = "Allow"
         Action = [
@@ -232,8 +240,8 @@ resource "aws_iam_policy" "s3_replication_policy" {
           "kms:DescribeKey"
         ]
         Resource = var.kms_key_arn
-      } : null,
-      var.use_kms_encryption && var.replication_destination_kms_key_arn != "" ? {
+      }] : [],
+      var.use_kms_encryption && var.replication_destination_kms_key_arn != "" ? [{
         Sid    = "KMSDestinationEncrypt"
         Effect = "Allow"
         Action = [
@@ -241,8 +249,8 @@ resource "aws_iam_policy" "s3_replication_policy" {
           "kms:GenerateDataKey"
         ]
         Resource = var.replication_destination_kms_key_arn
-      } : null
-    ]
+      }] : []
+    )
   })
 
   tags = merge(
@@ -300,38 +308,40 @@ resource "aws_s3_bucket_policy" "app_uploads_policy" {
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      # Enforce SSL/TLS
-      {
-        Sid    = "EnforceSSLOnly"
-        Effect = "Deny"
-        Principal = "*"
-        Action = "s3:*"
-        Resource = [
-          var.app_uploads_bucket_arn,
-          "${var.app_uploads_bucket_arn}/*"
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
+    Statement = concat(
+      [
+        # Enforce SSL/TLS
+        {
+          Sid    = "EnforceSSLOnly"
+          Effect = "Deny"
+          Principal = "*"
+          Action = "s3:*"
+          Resource = [
+            var.app_uploads_bucket_arn,
+            "${var.app_uploads_bucket_arn}/*"
+          ]
+          Condition = {
+            Bool = {
+              "aws:SecureTransport" = "false"
+            }
+          }
+        },
+        # Enforce encryption
+        {
+          Sid    = "DenyUnencryptedObjectUploads"
+          Effect = "Deny"
+          Principal = "*"
+          Action = "s3:PutObject"
+          Resource = "${var.app_uploads_bucket_arn}/*"
+          Condition = {
+            StringNotEquals = {
+              "s3:x-amz-server-side-encryption" = var.use_kms_encryption ? "aws:kms" : "AES256"
+            }
           }
         }
-      },
-      # Enforce encryption
-      {
-        Sid    = "DenyUnencryptedObjectUploads"
-        Effect = "Deny"
-        Principal = "*"
-        Action = "s3:PutObject"
-        Resource = "${var.app_uploads_bucket_arn}/*"
-        Condition = {
-          StringNotEquals = {
-            "s3:x-amz-server-side-encryption" = var.use_kms_encryption ? "aws:kms" : "AES256"
-          }
-        }
-      },
+      ],
       # Application role access
-      var.app_role_arn != "" ? {
+      var.app_role_arn != "" ? [{
         Sid    = "ApplicationRoleAccess"
         Effect = "Allow"
         Principal = {
@@ -347,8 +357,8 @@ resource "aws_s3_bucket_policy" "app_uploads_policy" {
           var.app_uploads_bucket_arn,
           "${var.app_uploads_bucket_arn}/*"
         ]
-      } : null
-    ]
+      }] : []
+    )
   })
 }
 

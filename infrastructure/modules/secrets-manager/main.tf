@@ -40,7 +40,7 @@ resource "random_password" "nextauth_secret" {
 resource "aws_secretsmanager_secret" "nextauth_secret" {
   count = var.create_nextauth_secret ? 1 : 0
 
-  name        = "${var.project_name}-nextauth-secret-${var.environment}"
+  name        = "dev-us-security/tailscale/${var.project_name}-nextauth-secret"
   description = "NextAuth.js secret for ${var.project_name} (${var.environment})"
 
   recovery_window_in_days = var.recovery_window_in_days
@@ -69,7 +69,7 @@ resource "aws_secretsmanager_secret_version" "nextauth_secret" {
 resource "aws_secretsmanager_secret" "anthropic_api_key" {
   count = var.create_anthropic_secret ? 1 : 0
 
-  name        = "${var.project_name}-anthropic-api-key-${var.environment}"
+  name        = "dev-us-security/tailscale/${var.project_name}-anthropic-api-key"
   description = "Anthropic API key for Claude (${var.environment})"
 
   recovery_window_in_days = var.recovery_window_in_days
@@ -98,7 +98,7 @@ resource "aws_secretsmanager_secret_version" "anthropic_api_key" {
 resource "aws_secretsmanager_secret" "google_oauth" {
   count = var.create_google_oauth_secret ? 1 : 0
 
-  name        = "${var.project_name}-google-oauth-${var.environment}"
+  name        = "dev-us-security/tailscale/${var.project_name}-google-oauth"
   description = "Google OAuth credentials for ${var.project_name} (${var.environment})"
 
   recovery_window_in_days = var.recovery_window_in_days
@@ -130,7 +130,7 @@ resource "aws_secretsmanager_secret_version" "google_oauth" {
 resource "aws_secretsmanager_secret" "upstash_redis" {
   count = var.create_upstash_redis_secret ? 1 : 0
 
-  name        = "${var.project_name}-upstash-redis-${var.environment}"
+  name        = "dev-us-security/tailscale/${var.project_name}-upstash-redis"
   description = "Upstash Redis credentials for ${var.project_name} (${var.environment})"
 
   recovery_window_in_days = var.recovery_window_in_days
@@ -168,7 +168,7 @@ resource "random_password" "encryption_key" {
 resource "aws_secretsmanager_secret" "encryption_key" {
   count = var.create_encryption_key ? 1 : 0
 
-  name        = "${var.project_name}-encryption-key-${var.environment}"
+  name        = "dev-us-security/tailscale/${var.project_name}-encryption-key"
   description = "Application settings encryption key for ${var.project_name} (${var.environment})"
 
   recovery_window_in_days = var.recovery_window_in_days

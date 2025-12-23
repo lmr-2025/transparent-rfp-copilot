@@ -153,35 +153,58 @@ module "secrets_manager" {
 }
 
 # =========================================
-# RDS Module
+# RDS Module - DISABLED (No RDS permissions in IAM role)
 # =========================================
+# Use external managed PostgreSQL database instead (Neon, Supabase, etc.)
+# Set DATABASE_URL in Secrets Manager: dev-us-security/tailscale/transparent-trust-database-url
 
-module "rds" {
-  source = "../../modules/rds"
+# module "rds" {
+#   source = "../../modules/rds"
+#
+#   project_name = var.project_name
+#   environment  = var.environment
+#
+#   vpc_id                 = module.vpc.vpc_id
+#   private_subnet_ids     = module.vpc.private_subnet_ids
+#   rds_security_group_id  = module.security_groups.rds_security_group_id
+#
+#   instance_class    = var.rds_instance_class
+#   allocated_storage = var.rds_allocated_storage
+#   postgres_version  = var.rds_engine_version
+#
+#   database_name   = var.rds_database_name
+#   master_username = var.rds_master_username
+#
+#   multi_az                     = var.rds_multi_az
+#   backup_retention_period      = var.rds_backup_retention_period
+#   monitoring_interval          = var.rds_enable_enhanced_monitoring ? 60 : 0
+#   performance_insights_enabled = var.rds_enable_performance_insights
+#
+#   enable_cloudwatch_alarms = false  # Alarms created in monitoring module to avoid circular dependency
+#   alarm_sns_topic_arns     = []
+#
+#   depends_on = [module.vpc, module.security_groups]
+# }
 
-  project_name = var.project_name
-  environment  = var.environment
+# Create a secret for external database URL
+resource "aws_secretsmanager_secret" "external_database_url" {
+  name        = "dev-us-security/tailscale/transparent-trust-database-url"
+  description = "External database URL for transparent-trust (development)"
 
-  vpc_id                 = module.vpc.vpc_id
-  private_subnet_ids     = module.vpc.private_subnet_ids
-  rds_security_group_id  = module.security_groups.rds_security_group_id
+  recovery_window_in_days = 0  # Allow immediate deletion for development
 
-  instance_class    = var.rds_instance_class
-  allocated_storage = var.rds_allocated_storage
-  postgres_version  = var.rds_engine_version
+  tags = {
+    Name        = "transparent-trust-database-url"
+    Environment = var.environment
+    Purpose     = "External PostgreSQL connection"
+  }
+}
 
-  database_name   = var.rds_database_name
-  master_username = var.rds_master_username
-
-  multi_az                     = var.rds_multi_az
-  backup_retention_period      = var.rds_backup_retention_period
-  monitoring_interval          = var.rds_enable_enhanced_monitoring ? 60 : 0
-  performance_insights_enabled = var.rds_enable_performance_insights
-
-  enable_cloudwatch_alarms = false  # Alarms created in monitoring module to avoid circular dependency
-  alarm_sns_topic_arns     = []
-
-  depends_on = [module.vpc, module.security_groups]
+resource "aws_secretsmanager_secret_version" "external_database_url" {
+  secret_id     = aws_secretsmanager_secret.external_database_url.id
+  secret_string = jsonencode({
+    url = "postgresql://user:password@host:5432/database"  # REPLACE WITH ACTUAL DATABASE URL
+  })
 }
 
 # =========================================
@@ -293,7 +316,7 @@ module "ecs" {
   autoscaling_min_capacity = var.ecs_autoscaling_min_capacity
   autoscaling_max_capacity = var.ecs_autoscaling_max_capacity
 
-  database_secret_arn       = module.rds.db_credentials_secret_arn
+  database_secret_arn       = aws_secretsmanager_secret.external_database_url.arn
   nextauth_secret_arn       = module.secrets_manager.nextauth_secret_arn
   anthropic_secret_arn      = module.secrets_manager.anthropic_api_key_secret_arn
   google_oauth_secret_arn   = module.secrets_manager.google_oauth_secret_arn
@@ -308,7 +331,26 @@ module "ecs" {
   enable_alarms       = false  # Alarms created in monitoring module to avoid circular dependency
   alarm_sns_topic_arn = ""
 
-  depends_on = [module.alb, module.rds, module.secrets_manager, module.iam]
+  depends_on = [module.alb, module.secrets_manager, module.iam]
+}
+
+# =========================================
+# Security Group Rule: ALB to ECS Tasks
+# =========================================
+# The ECS module creates its own security group for tasks.
+# We need to allow the ALB to send traffic to the ECS tasks security group.
+
+resource "aws_vpc_security_group_egress_rule" "alb_to_ecs_tasks" {
+  count = var.deployment_type == "ecs" ? 1 : 0
+
+  security_group_id            = module.security_groups.alb_security_group_id
+  description                  = "Allow traffic from ALB to ECS tasks"
+  referenced_security_group_id = module.ecs[0].ecs_tasks_security_group_id
+  from_port                    = 3000
+  to_port                      = 3000
+  ip_protocol                  = "tcp"
+
+  depends_on = [module.ecs]
 }
 
 # =========================================
@@ -332,7 +374,7 @@ module "amplify" {
 
   environment_variables = merge(
     {
-      DATABASE_URL = "postgresql://${var.rds_master_username}@${module.rds.db_instance_endpoint}/${var.rds_database_name}"
+      DATABASE_URL = "from-secrets-manager"  # RDS module disabled, use external database
       NEXTAUTH_URL = var.nextauth_url
     },
     var.amplify_environment_variables
@@ -345,7 +387,7 @@ module "amplify" {
   enable_alarms       = false  # Alarms created in monitoring module to avoid circular dependency
   alarm_sns_topic_arn = ""
 
-  depends_on = [module.rds, module.secrets_manager, module.iam]
+  depends_on = [module.secrets_manager, module.iam]
 }
 
 # =========================================
@@ -369,7 +411,7 @@ module "monitoring" {
   # Pass resource identifiers for monitoring
   ecs_cluster_name = var.deployment_type == "ecs" ? module.ecs[0].cluster_name : ""
   alb_arn_suffix   = module.alb.alb_arn_suffix
-  rds_instance_id  = module.rds.db_instance_id
+  rds_instance_id  = ""  # RDS module disabled
 
-  depends_on = [module.ecs, module.alb, module.rds]
+  depends_on = [module.ecs, module.alb]
 }
