@@ -5,14 +5,17 @@ import type { NextRequest } from "next/server";
 const mockFindMany = vi.fn();
 const mockCreate = vi.fn();
 
+const mockPrisma = {
+  bulkProject: {
+    findMany: mockFindMany,
+    create: mockCreate,
+  },
+};
+
 vi.mock("@/lib/prisma", () => ({
   __esModule: true,
-  default: {
-    bulkProject: {
-      findMany: mockFindMany,
-      create: mockCreate,
-    },
-  },
+  prisma: mockPrisma,
+  default: mockPrisma,
 }));
 
 vi.mock("@/lib/apiAuth", () => ({
@@ -51,9 +54,9 @@ describe("/api/projects route", () => {
       },
     ]);
     const res = await routes.GET(makeRequest());
-    const data = await res.json();
+    const payload = await res.json();
     expect(res.status).toBe(200);
-    expect(data.projects[0].customerProfiles[0].name).toBe("Acme");
+    expect(payload.data.projects[0].customerProfiles[0].name).toBe("Acme");
   });
 
   it("codex: POST enforces required fields", async () => {

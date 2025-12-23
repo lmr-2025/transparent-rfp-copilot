@@ -5,6 +5,8 @@ import type { NextRequest } from "next/server";
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
 const mockFindManySkills = vi.fn();
+const mockDeleteManyFindings = vi.fn();
+const mockCreateManyFindings = vi.fn();
 const mockAnthropicCreate = vi.fn();
 const mockLogUsage = vi.fn();
 
@@ -26,6 +28,10 @@ vi.mock("@/lib/prisma", () => ({
       findUnique: mockFindUnique,
       update: mockUpdate,
     },
+    contractFinding: {
+      deleteMany: mockDeleteManyFindings,
+      createMany: mockCreateManyFindings,
+    },
     skill: {
       findMany: mockFindManySkills,
     },
@@ -34,6 +40,10 @@ vi.mock("@/lib/prisma", () => ({
     contractReview: {
       findUnique: mockFindUnique,
       update: mockUpdate,
+    },
+    contractFinding: {
+      deleteMany: mockDeleteManyFindings,
+      createMany: mockCreateManyFindings,
     },
     skill: {
       findMany: mockFindManySkills,
@@ -54,6 +64,8 @@ beforeEach(() => {
   mockFindUnique.mockReset();
   mockUpdate.mockReset();
   mockFindManySkills.mockReset();
+  mockDeleteManyFindings.mockReset();
+  mockCreateManyFindings.mockReset();
   mockAnthropicCreate.mockReset();
   mockLogUsage.mockReset();
   process.env.ANTHROPIC_API_KEY = "test-key";
@@ -87,12 +99,13 @@ beforeEach(() => {
         overallRating: "compliant",
         summary: "ok",
         analyzedAt: new Date(),
+        findings: [],
       });
 
     const res = await routes.POST(makeRequest(), makeContext("c1"));
     expect(res.status).toBe(200);
     expect(mockLogUsage).toHaveBeenCalled();
     const payload = await res.json();
-    expect(payload.overallRating).toBe("compliant");
+    expect(payload.data.analysis.overallRating).toBe("compliant");
   });
 });

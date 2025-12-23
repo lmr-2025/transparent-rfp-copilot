@@ -9,21 +9,22 @@ const mockDeleteMany = vi.fn();
 const mockFindFirst = vi.fn();
 const mockDelete = vi.fn();
 
-vi.mock("@/lib/prisma", () => {
-  return {
-    __esModule: true,
-    default: {
-      questionHistory: {
-        create: mockCreate,
-        findMany: mockFindMany,
-        count: mockCount,
-        deleteMany: mockDeleteMany,
-        findFirst: mockFindFirst,
-        delete: mockDelete,
-      },
-    },
-  };
-});
+const mockPrisma = {
+  questionHistory: {
+    create: mockCreate,
+    findMany: mockFindMany,
+    count: mockCount,
+    deleteMany: mockDeleteMany,
+    findFirst: mockFindFirst,
+    delete: mockDelete,
+  },
+};
+
+vi.mock("@/lib/prisma", () => ({
+  __esModule: true,
+  prisma: mockPrisma,
+  default: mockPrisma,
+}));
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn().mockResolvedValue({
     user: { id: "user-1", email: "user@example.com" },
@@ -51,10 +52,10 @@ describe("/api/question-history", () => {
     mockFindMany.mockResolvedValue([]);
     mockCount.mockResolvedValue(0);
     const res = await GET(makeRequest());
-    const data = await res.json();
+    const payload = await res.json();
     expect(res.status).toBe(200);
-    expect(data.history).toEqual([]);
-    expect(data.total).toBe(0);
+    expect(payload.data.history).toEqual([]);
+    expect(payload.data.total).toBe(0);
   });
 
   it("codex: POST validates required fields", async () => {

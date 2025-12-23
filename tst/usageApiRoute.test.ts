@@ -6,23 +6,27 @@ const mockAggregate = vi.fn();
 const mockGroupBy = vi.fn();
 const mockFindMany = vi.fn();
 
+const mockPrisma = {
+  apiUsage: {
+    aggregate: mockAggregate,
+    groupBy: mockGroupBy,
+    findMany: mockFindMany,
+  },
+};
+
 vi.mock("@/lib/prisma", () => ({
   __esModule: true,
-  default: {
-    apiUsage: {
-      aggregate: mockAggregate,
-      groupBy: mockGroupBy,
-      findMany: mockFindMany,
-    },
-  },
+  prisma: mockPrisma,
+  default: mockPrisma,
 }));
 vi.mock("@/lib/usageTracking", () => ({
   getDailyUsage: vi.fn().mockResolvedValue([]),
   getUserUsageSummary: vi.fn(),
   getUsageByFeature: vi.fn(),
 }));
+const mockGetServerSession = vi.fn();
 vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({ user: { id: "user-1" } }),
+  getServerSession: mockGetServerSession,
 }));
 
 const { GET } = await import("@/app/api/usage/route");
@@ -37,6 +41,7 @@ describe("GET /api/usage", () => {
     mockAggregate.mockReset();
     mockGroupBy.mockReset();
     mockFindMany.mockReset();
+    mockGetServerSession.mockReset();
     mockAggregate.mockResolvedValue({
       _sum: { inputTokens: 0, outputTokens: 0, totalTokens: 0, estimatedCost: 0 },
       _count: 0,
@@ -46,15 +51,17 @@ describe("GET /api/usage", () => {
   });
 
   it("codex: returns zeros for anonymous user", async () => {
+    mockGetServerSession.mockResolvedValue(null);
     const res = await GET(makeRequest());
     expect(res.status).toBe(200);
-    const data = await res.json();
-    expect(data.summary.totalTokens).toBe(0);
-    expect(data.byFeature).toEqual([]);
-    expect(data.daily).toEqual([]);
+    const payload = await res.json();
+    expect(payload.data.summary.totalTokens).toBe(0);
+    expect(payload.data.byFeature).toEqual([]);
+    expect(payload.data.daily).toEqual([]);
   });
 
   it("codex: respects feature filter query param", async () => {
+    mockGetServerSession.mockResolvedValue({ user: { id: "user-1" } });
     await GET(makeRequest("https://example.com/api/usage?feature=chat"));
     expect(mockAggregate).toHaveBeenCalled();
     expect(mockGroupBy).toHaveBeenCalled();

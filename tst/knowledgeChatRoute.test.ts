@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server";
 
 const mockAnthropicCreate = vi.fn();
 const mockLogUsage = vi.fn();
+const mockFindManyDocuments = vi.fn();
+const mockFindManyCustomerDocs = vi.fn();
 
 vi.mock("@anthropic-ai/sdk", () => {
   return {
@@ -21,6 +23,19 @@ vi.mock("next-auth", () => ({
 vi.mock("@/lib/usageTracking", () => ({
   logUsage: mockLogUsage,
 }));
+const mockPrisma = {
+  knowledgeDocument: {
+    findMany: mockFindManyDocuments,
+  },
+  customerDocument: {
+    findMany: mockFindManyCustomerDocs,
+  },
+};
+vi.mock("@/lib/prisma", () => ({
+  __esModule: true,
+  prisma: mockPrisma,
+  default: mockPrisma,
+}));
 
 const { POST } = await import("@/app/api/knowledge-chat/route");
 
@@ -35,6 +50,10 @@ describe("POST /api/knowledge-chat", () => {
     mockAnthropicCreate.mockResolvedValue({
       content: [{ type: "text", text: "response" }],
     });
+    mockFindManyDocuments.mockReset();
+    mockFindManyCustomerDocs.mockReset();
+    mockFindManyDocuments.mockResolvedValue([]);
+    mockFindManyCustomerDocs.mockResolvedValue([]);
   });
 
   it("codex: validates required message", async () => {
@@ -52,6 +71,6 @@ describe("POST /api/knowledge-chat", () => {
     expect(res.status).toBe(200);
     expect(mockAnthropicCreate).toHaveBeenCalled();
     const payload = await res.json();
-    expect(payload.response).toBe("response");
+    expect(payload.data.response).toBe("response");
   });
 });

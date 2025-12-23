@@ -5,13 +5,26 @@ import type { NextRequest } from "next/server";
 const mockCreate = vi.fn();
 const mockExtractRawText = vi.fn();
 
+const mockPrisma = {
+  knowledgeDocument: {
+    create: mockCreate,
+  },
+};
+
 vi.mock("@/lib/prisma", () => ({
   __esModule: true,
-  default: {
-    knowledgeDocument: {
-      create: mockCreate,
-    },
-  },
+  prisma: mockPrisma,
+  default: mockPrisma,
+}));
+vi.mock("@/lib/apiAuth", () => ({
+  requireAuth: vi.fn(() => Promise.resolve({
+    authorized: true,
+    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
+  })),
+}));
+vi.mock("@/lib/auditLog", () => ({
+  logDocumentChange: vi.fn(),
+  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
 }));
 vi.mock("mammoth", () => ({
   extractRawText: mockExtractRawText,
@@ -66,7 +79,7 @@ describe("POST /api/documents", () => {
         categories: JSON.stringify([]),
       }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(mockCreate).toHaveBeenCalled();
   });
 });

@@ -6,15 +6,29 @@ const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 
+const mockPrisma = {
+  contractReview: {
+    findUnique: mockFindUnique,
+    update: mockUpdate,
+    delete: mockDelete,
+  },
+};
+
 vi.mock("@/lib/prisma", () => ({
   __esModule: true,
-  prisma: {
-    contractReview: {
-      findUnique: mockFindUnique,
-      update: mockUpdate,
-      delete: mockDelete,
-    },
-  },
+  prisma: mockPrisma,
+  default: mockPrisma,
+}));
+vi.mock("@/lib/apiAuth", () => ({
+  requireAuth: vi.fn(() => Promise.resolve({
+    authorized: true,
+    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
+  })),
+}));
+vi.mock("@/lib/auditLog", () => ({
+  logContractChange: vi.fn(),
+  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
+  computeChanges: vi.fn(() => ({})),
 }));
 
 const routes = await import("@/app/api/contracts/[id]/route");
@@ -40,6 +54,11 @@ describe("/api/contracts/[id]", () => {
   });
 
   it("codex: PUT sets reviewed metadata when status is REVIEWED", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "c1",
+      name: "Contract",
+      customerName: "Acme",
+    });
     mockUpdate.mockResolvedValue({
       id: "c1",
       createdAt: new Date(),
@@ -54,6 +73,11 @@ describe("/api/contracts/[id]", () => {
   });
 
   it("codex: DELETE removes contract review", async () => {
+    mockFindUnique.mockResolvedValue({
+      id: "c1",
+      name: "Contract",
+      customerName: "Acme",
+    });
     const res = await routes.DELETE(makeRequest(), makeContext("c1"));
     expect(res.status).toBe(200);
     expect(mockDelete).toHaveBeenCalledWith({ where: { id: "c1" } });

@@ -10,19 +10,22 @@ const mockFindFirst = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 
+const mockPrisma = {
+  chatSession: {
+    findMany: mockFindMany,
+    count: mockCount,
+    create: mockCreate,
+    deleteMany: mockDeleteMany,
+    findFirst: mockFindFirst,
+    update: mockUpdate,
+    delete: mockDelete,
+  },
+};
+
 vi.mock("@/lib/prisma", () => ({
   __esModule: true,
-  default: {
-    chatSession: {
-      findMany: mockFindMany,
-      count: mockCount,
-      create: mockCreate,
-      deleteMany: mockDeleteMany,
-      findFirst: mockFindFirst,
-      update: mockUpdate,
-      delete: mockDelete,
-    },
-  },
+  prisma: mockPrisma,
+  default: mockPrisma,
 }));
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn().mockResolvedValue({ user: { id: "user-1", email: "user@example.com" } }),
@@ -49,10 +52,10 @@ describe("/api/chat-sessions", () => {
     mockFindMany.mockResolvedValue([{ id: "s1" }]);
     mockCount.mockResolvedValue(1);
     const res = await routes.GET(makeRequest());
-    const data = await res.json();
+    const payload = await res.json();
     expect(res.status).toBe(200);
-    expect(data.sessions).toHaveLength(1);
-    expect(data.total).toBe(1);
+    expect(payload.data.sessions).toHaveLength(1);
+    expect(payload.data.total).toBe(1);
   });
 
   it("codex: POST validates messages array", async () => {
@@ -61,7 +64,7 @@ describe("/api/chat-sessions", () => {
 
     mockCreate.mockResolvedValue({ id: "s1" });
     const res = await routes.POST(makeRequest({ messages: [{ role: "user", content: "hi" }] }));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(201);
     expect(mockCreate).toHaveBeenCalled();
   });
 });

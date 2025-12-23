@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 const mockAnswer = vi.fn();
+const mockLoadSystemPrompt = vi.fn();
 
 vi.mock("@/lib/llm", async () => {
   const actual = await vi.importActual<typeof import("@/lib/llm")>("@/lib/llm");
@@ -13,6 +14,9 @@ vi.mock("@/lib/llm", async () => {
 });
 vi.mock("next-auth", () => ({
   getServerSession: vi.fn().mockResolvedValue({ user: { id: "test-user" } }),
+}));
+vi.mock("@/lib/loadSystemPrompt", () => ({
+  loadSystemPrompt: mockLoadSystemPrompt,
 }));
 
 const { POST } = await import("@/app/api/questions/answer/route");
@@ -25,13 +29,15 @@ const makeRequest = (body: unknown) =>
 describe("POST /api/questions/answer", () => {
   beforeEach(() => {
     mockAnswer.mockReset();
+    mockLoadSystemPrompt.mockReset();
+    mockLoadSystemPrompt.mockResolvedValue("system prompt");
   });
 
   it("codex: returns 400 when question missing", async () => {
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
     const payload = await res.json();
-    expect(payload.error).toMatch(/question is required/i);
+    expect(payload.error.message).toMatch(/question/i);
   });
 
   it("codex: proxies to answerQuestionWithPrompt", async () => {
@@ -54,10 +60,11 @@ describe("POST /api/questions/answer", () => {
       expect.any(String),
       expect.any(Array),
       undefined,
+      "quality",
     );
 
     expect(res.status).toBe(200);
     const payload = await res.json();
-    expect(payload.answer).toBe("final");
+    expect(payload.data.answer).toBe("final");
   });
 });
