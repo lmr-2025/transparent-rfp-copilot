@@ -12,8 +12,8 @@ vi.mock("@/lib/llm", async () => {
     answerQuestionWithPrompt: mockAnswer,
   };
 });
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({ user: { id: "test-user" } }),
+vi.mock("@/lib/loadSystemPrompt", () => ({
+  loadSystemPrompt: mockLoadSystemPrompt,
 }));
 vi.mock("@/lib/loadSystemPrompt", () => ({
   loadSystemPrompt: mockLoadSystemPrompt,

@@ -1,34 +1,12 @@
 // codex: tests for /api/projects routes
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockFindMany = vi.fn();
 const mockCreate = vi.fn();
 
-const mockPrisma = {
-  bulkProject: {
-    findMany: mockFindMany,
-    create: mockCreate,
-  },
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-
-vi.mock("@/lib/apiAuth", () => ({
-  requireAuth: vi.fn(() => Promise.resolve({
-    authorized: true,
-    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
-  })),
-}));
-
-vi.mock("@/lib/auditLog", () => ({
-  logProjectChange: vi.fn(),
-  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
-}));
+const { prismaMock } = getTestMocks();
 
 const routes = await import("@/app/api/projects/route");
 
@@ -42,6 +20,10 @@ describe("/api/projects route", () => {
   beforeEach(() => {
     mockFindMany.mockReset();
     mockCreate.mockReset();
+    prismaMock.bulkProject = {
+      findMany: mockFindMany,
+      create: mockCreate,
+    };
   });
 
   it("codex: GET returns flattened customer profiles", async () => {

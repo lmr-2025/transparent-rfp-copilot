@@ -1,6 +1,7 @@
 // codex: tests for /api/projects/[id] route
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
@@ -11,42 +12,7 @@ const mockFindManyProfiles = vi.fn();
 const mockBulkRowDeleteMany = vi.fn();
 const mockBulkRowUpsert = vi.fn();
 const mockTransaction = vi.fn();
-
-const mockPrisma = {
-  bulkProject: {
-    findUnique: mockFindUnique,
-    update: mockUpdate,
-    delete: mockDelete,
-  },
-  projectCustomerProfile: {
-    findMany: mockFindManyProfiles,
-    deleteMany: mockDeleteMany,
-    createMany: mockCreateMany,
-  },
-  bulkRow: {
-    deleteMany: mockBulkRowDeleteMany,
-    upsert: mockBulkRowUpsert,
-  },
-  $transaction: mockTransaction,
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-
-vi.mock("@/lib/apiAuth", () => ({
-  requireAuth: vi.fn(() => Promise.resolve({
-    authorized: true,
-    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
-  })),
-}));
-vi.mock("@/lib/auditLog", () => ({
-  logProjectChange: vi.fn(),
-  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
-  computeChanges: vi.fn(() => ({})),
-}));
+const { prismaMock } = getTestMocks();
 
 const routes = await import("@/app/api/projects/[id]/route");
 
@@ -69,9 +35,25 @@ describe("/api/projects/[id]", () => {
     mockBulkRowUpsert.mockReset();
     mockTransaction.mockReset();
 
-    mockTransaction.mockImplementation(async (callback: (tx: typeof mockPrisma) => Promise<unknown>) => {
-      return callback(mockPrisma);
+    mockTransaction.mockImplementation(async (callback: (tx: typeof prismaMock) => Promise<unknown>) => {
+      return callback(prismaMock);
     });
+
+    prismaMock.bulkProject = {
+      findUnique: mockFindUnique,
+      update: mockUpdate,
+      delete: mockDelete,
+    };
+    prismaMock.projectCustomerProfile = {
+      findMany: mockFindManyProfiles,
+      deleteMany: mockDeleteMany,
+      createMany: mockCreateMany,
+    };
+    prismaMock.bulkRow = {
+      deleteMany: mockBulkRowDeleteMany,
+      upsert: mockBulkRowUpsert,
+    };
+    prismaMock.$transaction = mockTransaction;
   });
 
   it("codex: GET returns 404 when missing", async () => {

@@ -1,6 +1,7 @@
 // codex: tests for /api/knowledge-chat route
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockAnthropicCreate = vi.fn();
 const mockLogUsage = vi.fn();
@@ -17,25 +18,10 @@ vi.mock("@anthropic-ai/sdk", () => {
     },
   };
 });
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({ user: { id: "user-1" } }),
-}));
 vi.mock("@/lib/usageTracking", () => ({
   logUsage: mockLogUsage,
 }));
-const mockPrisma = {
-  knowledgeDocument: {
-    findMany: mockFindManyDocuments,
-  },
-  customerDocument: {
-    findMany: mockFindManyCustomerDocs,
-  },
-};
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
+const { prismaMock } = getTestMocks();
 
 const { POST } = await import("@/app/api/knowledge-chat/route");
 
@@ -54,6 +40,12 @@ describe("POST /api/knowledge-chat", () => {
     mockFindManyCustomerDocs.mockReset();
     mockFindManyDocuments.mockResolvedValue([]);
     mockFindManyCustomerDocs.mockResolvedValue([]);
+    prismaMock.knowledgeDocument = {
+      findMany: mockFindManyDocuments,
+    };
+    prismaMock.customerDocument = {
+      findMany: mockFindManyCustomerDocs,
+    };
   });
 
   it("codex: validates required message", async () => {

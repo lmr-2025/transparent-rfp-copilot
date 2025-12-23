@@ -1,6 +1,7 @@
 // codex: tests for /api/question-history routes
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockCreate = vi.fn();
 const mockFindMany = vi.fn();
@@ -9,27 +10,7 @@ const mockDeleteMany = vi.fn();
 const mockFindFirst = vi.fn();
 const mockDelete = vi.fn();
 
-const mockPrisma = {
-  questionHistory: {
-    create: mockCreate,
-    findMany: mockFindMany,
-    count: mockCount,
-    deleteMany: mockDeleteMany,
-    findFirst: mockFindFirst,
-    delete: mockDelete,
-  },
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({
-    user: { id: "user-1", email: "user@example.com" },
-  }),
-}));
+const { prismaMock } = getTestMocks();
 
 const { GET, POST, DELETE } = await import("@/app/api/question-history/route");
 const { DELETE: DELETE_BY_ID } = await import("@/app/api/question-history/[id]/route");
@@ -46,6 +27,14 @@ describe("/api/question-history", () => {
     mockFindMany.mockReset();
     mockCount.mockReset();
     mockDeleteMany.mockReset();
+    prismaMock.questionHistory = {
+      create: mockCreate,
+      findMany: mockFindMany,
+      count: mockCount,
+      deleteMany: mockDeleteMany,
+      findFirst: mockFindFirst,
+      delete: mockDelete,
+    };
   });
 
   it("codex: GET returns empty data when DB returns none", async () => {
@@ -82,6 +71,14 @@ describe("/api/question-history/[id]", () => {
   beforeEach(() => {
     mockFindFirst.mockReset();
     mockDelete.mockReset();
+    prismaMock.questionHistory = {
+      create: mockCreate,
+      findMany: mockFindMany,
+      count: mockCount,
+      deleteMany: mockDeleteMany,
+      findFirst: mockFindFirst,
+      delete: mockDelete,
+    };
   });
 
   it("codex: DELETE enforces ownership", async () => {

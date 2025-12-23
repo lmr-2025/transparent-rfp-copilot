@@ -1,6 +1,7 @@
 // codex: tests for /api/contracts/[id]/analyze route
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
@@ -10,9 +11,6 @@ const mockCreateManyFindings = vi.fn();
 const mockAnthropicCreate = vi.fn();
 const mockLogUsage = vi.fn();
 
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({ user: { id: "user-1", email: "user@example.com" } }),
-}));
 vi.mock("@anthropic-ai/sdk", () => ({
   __esModule: true,
   default: class MockAnthropic {
@@ -21,35 +19,7 @@ vi.mock("@anthropic-ai/sdk", () => ({
     };
   },
 }));
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: {
-    contractReview: {
-      findUnique: mockFindUnique,
-      update: mockUpdate,
-    },
-    contractFinding: {
-      deleteMany: mockDeleteManyFindings,
-      createMany: mockCreateManyFindings,
-    },
-    skill: {
-      findMany: mockFindManySkills,
-    },
-  },
-  default: {
-    contractReview: {
-      findUnique: mockFindUnique,
-      update: mockUpdate,
-    },
-    contractFinding: {
-      deleteMany: mockDeleteManyFindings,
-      createMany: mockCreateManyFindings,
-    },
-    skill: {
-      findMany: mockFindManySkills,
-    },
-  },
-}));
+const { prismaMock } = getTestMocks();
 vi.mock("@/lib/usageTracking", () => ({
   logUsage: mockLogUsage,
 }));
@@ -69,6 +39,17 @@ beforeEach(() => {
   mockAnthropicCreate.mockReset();
   mockLogUsage.mockReset();
   process.env.ANTHROPIC_API_KEY = "test-key";
+  prismaMock.contractReview = {
+    findUnique: mockFindUnique,
+    update: mockUpdate,
+  };
+  prismaMock.contractFinding = {
+    deleteMany: mockDeleteManyFindings,
+    createMany: mockCreateManyFindings,
+  };
+  prismaMock.skill = {
+    findMany: mockFindManySkills,
+  };
 });
 
   it("codex: returns 404 if contract missing", async () => {

@@ -1,31 +1,12 @@
 // codex: tests for /api/documents upload route
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockCreate = vi.fn();
 const mockExtractRawText = vi.fn();
 
-const mockPrisma = {
-  knowledgeDocument: {
-    create: mockCreate,
-  },
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-vi.mock("@/lib/apiAuth", () => ({
-  requireAuth: vi.fn(() => Promise.resolve({
-    authorized: true,
-    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
-  })),
-}));
-vi.mock("@/lib/auditLog", () => ({
-  logDocumentChange: vi.fn(),
-  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
-}));
+const { prismaMock } = getTestMocks();
 vi.mock("mammoth", () => ({
   extractRawText: mockExtractRawText,
 }));
@@ -53,6 +34,9 @@ describe("POST /api/documents", () => {
     mockCreate.mockReset();
     mockExtractRawText.mockReset();
     mockExtractRawText.mockResolvedValue({ value: "doc content" });
+    prismaMock.knowledgeDocument = {
+      create: mockCreate,
+    };
   });
 
   it("codex: validates required fields", async () => {

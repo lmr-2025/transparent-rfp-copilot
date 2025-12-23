@@ -1,6 +1,7 @@
 // codex: tests for /api/chat-sessions routes
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockFindMany = vi.fn();
 const mockCount = vi.fn();
@@ -10,26 +11,7 @@ const mockFindFirst = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 
-const mockPrisma = {
-  chatSession: {
-    findMany: mockFindMany,
-    count: mockCount,
-    create: mockCreate,
-    deleteMany: mockDeleteMany,
-    findFirst: mockFindFirst,
-    update: mockUpdate,
-    delete: mockDelete,
-  },
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-vi.mock("next-auth", () => ({
-  getServerSession: vi.fn().mockResolvedValue({ user: { id: "user-1", email: "user@example.com" } }),
-}));
+const { prismaMock } = getTestMocks();
 
 const routes = await import("@/app/api/chat-sessions/route");
 const sessionRoutes = await import("@/app/api/chat-sessions/[id]/route");
@@ -46,6 +28,15 @@ describe("/api/chat-sessions", () => {
     mockCount.mockReset();
     mockCreate.mockReset();
     mockDeleteMany.mockReset();
+    prismaMock.chatSession = {
+      findMany: mockFindMany,
+      count: mockCount,
+      create: mockCreate,
+      deleteMany: mockDeleteMany,
+      findFirst: mockFindFirst,
+      update: mockUpdate,
+      delete: mockDelete,
+    };
   });
 
   it("codex: GET returns paginated sessions", async () => {
@@ -74,6 +65,15 @@ describe("/api/chat-sessions/[id]", () => {
     mockFindFirst.mockReset();
     mockUpdate.mockReset();
     mockDelete.mockReset();
+    prismaMock.chatSession = {
+      findMany: mockFindMany,
+      count: mockCount,
+      create: mockCreate,
+      deleteMany: mockDeleteMany,
+      findFirst: mockFindFirst,
+      update: mockUpdate,
+      delete: mockDelete,
+    };
   });
 
   it("codex: GET returns session when accessible", async () => {

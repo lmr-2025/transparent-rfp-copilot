@@ -1,35 +1,13 @@
 // codex: tests for /api/contracts/[id] route
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
+import { getTestMocks } from "./testUtils";
 
 const mockFindUnique = vi.fn();
 const mockUpdate = vi.fn();
 const mockDelete = vi.fn();
 
-const mockPrisma = {
-  contractReview: {
-    findUnique: mockFindUnique,
-    update: mockUpdate,
-    delete: mockDelete,
-  },
-};
-
-vi.mock("@/lib/prisma", () => ({
-  __esModule: true,
-  prisma: mockPrisma,
-  default: mockPrisma,
-}));
-vi.mock("@/lib/apiAuth", () => ({
-  requireAuth: vi.fn(() => Promise.resolve({
-    authorized: true,
-    session: { user: { id: "user1", name: "Test", email: "test@example.com" } },
-  })),
-}));
-vi.mock("@/lib/auditLog", () => ({
-  logContractChange: vi.fn(),
-  getUserFromSession: vi.fn(() => ({ id: "user1", email: "test@example.com" })),
-  computeChanges: vi.fn(() => ({})),
-}));
+const { prismaMock } = getTestMocks();
 
 const routes = await import("@/app/api/contracts/[id]/route");
 
@@ -45,6 +23,11 @@ describe("/api/contracts/[id]", () => {
     mockFindUnique.mockReset();
     mockUpdate.mockReset();
     mockDelete.mockReset();
+    prismaMock.contractReview = {
+      findUnique: mockFindUnique,
+      update: mockUpdate,
+      delete: mockDelete,
+    };
   });
 
   it("codex: GET returns 404 when missing", async () => {
