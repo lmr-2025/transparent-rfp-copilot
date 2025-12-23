@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Settings2, Plus, Trash2, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import type {
   PlaceholderMapping,
@@ -12,9 +12,6 @@ import {
   GTM_FIELDS,
   DATE_FIELDS,
 } from "@/types/template";
-
-// Simple regex to find {{placeholder}} patterns (any format)
-const PLACEHOLDER_REGEX = /\{\{([^}]+)\}\}/g;
 
 type Props = {
   content: string;
@@ -33,17 +30,15 @@ const SOURCE_OPTIONS: { value: PlaceholderSource; label: string; color: string }
 
 export function PlaceholderMappingEditor({ content, mappings, onChange }: Props) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [detectedPlaceholders, setDetectedPlaceholders] = useState<string[]>([]);
 
-  // Detect placeholders from content
-  useEffect(() => {
+  const detectedPlaceholders = useMemo(() => {
+    const regex = /\{\{([^}]+)\}\}/g;
     const found = new Set<string>();
     let match;
-    while ((match = PLACEHOLDER_REGEX.exec(content)) !== null) {
+    while ((match = regex.exec(content)) !== null) {
       found.add(match[1].trim());
     }
-    PLACEHOLDER_REGEX.lastIndex = 0;
-    setDetectedPlaceholders(Array.from(found));
+    return Array.from(found);
   }, [content]);
 
   // Get unmapped placeholders

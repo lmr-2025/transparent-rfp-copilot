@@ -18,12 +18,18 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = Math.min(parseInt(searchParams.get("limit") || "50", 10), 200);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
+    const includeRows = searchParams.get("includeRows") === "true";
+    const includeFeedbackStats = searchParams.get("includeFeedbackStats") === "true";
 
     const projects = await prisma.bulkProject.findMany({
       take: limit,
       skip: offset,
       include: {
-        rows: true, // Include all rows with the project
+        ...(includeRows && {
+          rows: {
+            orderBy: { rowNumber: "asc" },
+          },
+        }),
         owner: {
           select: { id: true, name: true, email: true },
         },
@@ -44,11 +50,70 @@ export async function GET(request: NextRequest) {
       },
     });
 
+    const feedbackStats = new Map<
+      string,
+      { totalRows: number; completedRows: number; editedResponses: number; reviewedRows: number; flaggedRows: number }
+    >();
+
+    if (includeFeedbackStats && projects.length > 0) {
+      const rowSummaries = await prisma.bulkRow.findMany({
+        where: { projectId: { in: projects.map((project) => project.id) } },
+        select: {
+          projectId: true,
+          status: true,
+          originalResponse: true,
+          userEditedAnswer: true,
+          reviewStatus: true,
+          flaggedForReview: true,
+        },
+      });
+
+      for (const row of rowSummaries) {
+        const stats =
+          feedbackStats.get(row.projectId) || {
+            totalRows: 0,
+            completedRows: 0,
+            editedResponses: 0,
+            reviewedRows: 0,
+            flaggedRows: 0,
+          };
+        stats.totalRows += 1;
+        if (row.status === "COMPLETED") {
+          stats.completedRows += 1;
+        }
+        if (row.originalResponse && row.userEditedAnswer && row.userEditedAnswer !== row.originalResponse) {
+          stats.editedResponses += 1;
+        }
+        if (row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED") {
+          stats.reviewedRows += 1;
+        }
+        if (row.flaggedForReview) {
+          stats.flaggedRows += 1;
+        }
+        feedbackStats.set(row.projectId, stats);
+      }
+    }
+
     // Transform customerProfiles to a simpler format
-    const transformedProjects = projects.map((project) => ({
-      ...project,
-      customerProfiles: project.customerProfiles.map((cp) => cp.profile),
-    }));
+    const transformedProjects = projects.map((project) => {
+      const transformed = {
+        ...project,
+        customerProfiles: project.customerProfiles.map((cp) => cp.profile),
+      };
+
+      if (includeFeedbackStats) {
+        transformed.feedbackStats =
+          feedbackStats.get(project.id) || {
+            totalRows: 0,
+            completedRows: 0,
+            editedResponses: 0,
+            reviewedRows: 0,
+            flaggedRows: 0,
+          };
+      }
+
+      return transformed;
+    });
 
     return apiSuccess({ projects: transformedProjects });
   } catch (error) {

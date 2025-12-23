@@ -13,6 +13,17 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+type UploadedDocumentSummary = {
+  id: string;
+  title: string;
+  filename: string;
+  fileType: string;
+  fileSize: number;
+  uploadedAt: Date;
+  content: string | null;
+  processedForContent: boolean;
+};
+
 /**
  * POST /api/customers/[id]/documents/batch
  * Upload multiple documents in a single request with options to process for profile content
@@ -148,7 +159,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     );
 
     // Separate successful and failed uploads
-    const successful: any[] = [];
+    const successful: UploadedDocumentSummary[] = [];
     const failed: { filename: string; error: string }[] = [];
 
     results.forEach((result, index) => {

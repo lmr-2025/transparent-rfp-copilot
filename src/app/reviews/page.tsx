@@ -553,7 +553,7 @@ export default function ReviewsPage() {
 
               {(review.reviewNote || review.flagNote) && (
                 <div style={styles.note}>
-                  <strong>Note from {review.reviewRequestedBy || review.flaggedBy}:</strong> "{review.reviewNote || review.flagNote}"
+                  <strong>Note from {review.reviewRequestedBy || review.flaggedBy}:</strong> &quot;{review.reviewNote || review.flagNote}&quot;
                 </div>
               )}
 

@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger";
 import { getModel } from "@/lib/config";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
+export const maxDuration = 60; // 1 minute for instruction building
+
 // GET - Fetch the system prompts without sending a message (for transparency on page load)
 export async function GET() {
   const auth = await requireAuth();

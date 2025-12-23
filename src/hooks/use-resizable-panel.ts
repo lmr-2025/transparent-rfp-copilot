@@ -15,20 +15,21 @@ export function useResizablePanel({
   minWidth,
   maxWidth,
 }: UseResizablePanelOptions) {
-  const [panelWidth, setPanelWidth] = useState(defaultWidth);
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  // Load saved width from localStorage
-  useEffect(() => {
-    const saved = localStorage.getItem(storageKey);
+  const [panelWidth, setPanelWidth] = useState(() => {
+    if (typeof window === "undefined") {
+      return defaultWidth;
+    }
+    const saved = window.localStorage.getItem(storageKey);
     if (saved) {
       const width = parseInt(saved, 10);
       if (width >= minWidth && width <= maxWidth) {
-        setPanelWidth(width);
+        return width;
       }
     }
-  }, [storageKey, minWidth, maxWidth]);
+    return defaultWidth;
+  });
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Handle drag start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {

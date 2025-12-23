@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { toast } from "sonner";
 import {
   Lock,
@@ -971,7 +971,7 @@ export function BuilderTab() {
         setPrompts(newPrompts);
       }
       setHasChanges(false);
-    } catch (err) {
+    } catch {
       setBlocks(fallbackBlocks);
       setPrompts(fallbackPrompts);
       setHasChanges(false);

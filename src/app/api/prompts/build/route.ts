@@ -6,6 +6,8 @@ import { logger } from "@/lib/logger";
 import { getModel } from "@/lib/config";
 import { logUsage } from "@/lib/usageTracking";
 
+export const maxDuration = 60; // 1 minute for prompt building
+
 const PROMPT_BUILDER_SYSTEM = `You are a prompt engineering expert helping users refine and improve prompts for AI systems.
 
 Your role is to:

@@ -7,7 +7,6 @@ import {
   ChevronRight,
   RefreshCw,
   FileText,
-  AlertTriangle,
   Edit3,
   Plus,
   Star,

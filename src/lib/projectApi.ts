@@ -1,5 +1,5 @@
 import { BulkProject, BulkRow } from "@/types/bulkProject";
-import { parseApiData } from "./apiClient";
+import { createApiClient } from "./apiClient";
 
 /**
  * API client for project CRUD operations
@@ -48,66 +48,38 @@ interface DbProject {
   rows: DbRow[];
 }
 
+type ProjectPayload = ReturnType<typeof transformProjectToDb>;
+
+const projectClient = createApiClient<DbProject, ProjectPayload, ProjectPayload>({
+  baseUrl: "/api/projects",
+  singularKey: "project",
+  pluralKey: "projects",
+});
+
 export async function fetchAllProjects(): Promise<BulkProject[]> {
-  const response = await fetch("/api/projects");
-  if (!response.ok) {
-    throw new Error("Failed to fetch projects");
-  }
-  const json = await response.json();
-  const projects = parseApiData<DbProject[]>(json, "projects");
-  return (Array.isArray(projects) ? projects : []).map(transformProjectFromDb);
+  const projects = await projectClient.fetchAll({ includeRows: "true" });
+  return projects.map(transformProjectFromDb);
 }
 
 export async function fetchProject(id: string): Promise<BulkProject | null> {
-  const response = await fetch(`/api/projects/${id}`);
-  if (response.status === 404) {
-    return null;
-  }
-  if (!response.ok) {
-    throw new Error("Failed to fetch project");
-  }
-  const json = await response.json();
-  const project = parseApiData<DbProject>(json, "project");
-  return transformProjectFromDb(project);
+  const project = await projectClient.fetch(id);
+  return project ? transformProjectFromDb(project) : null;
 }
 
 export async function createProject(project: BulkProject): Promise<BulkProject> {
   const payload = transformProjectToDb(project);
-  const response = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to create project");
-  }
-  const json = await response.json();
-  const created = parseApiData<DbProject>(json, "project");
+  const created = await projectClient.create(payload);
   return transformProjectFromDb(created);
 }
 
 export async function updateProject(project: BulkProject): Promise<BulkProject> {
   const payload = transformProjectToDb(project);
-  const response = await fetch(`/api/projects/${project.id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    throw new Error("Failed to update project");
-  }
-  const json = await response.json();
-  const updated = parseApiData<DbProject>(json, "project");
+  const updated = await projectClient.update(project.id, payload);
   return transformProjectFromDb(updated);
 }
 
 export async function deleteProject(id: string): Promise<void> {
-  const response = await fetch(`/api/projects/${id}`, {
-    method: "DELETE",
-  });
-  if (!response.ok) {
-    throw new Error("Failed to delete project");
-  }
+  await projectClient.delete(id);
 }
 
 /**

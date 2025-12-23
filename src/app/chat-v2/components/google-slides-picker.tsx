@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import {
   Presentation,
   ExternalLink,
@@ -41,12 +41,101 @@ interface GoogleSlidesPickerProps {
   disabled?: boolean;
 }
 
+// Get value from context for a placeholder - smart matching
+function getContextValue(placeholder: string, ctx: TemplateFillContext): string {
+  const lower = placeholder.toLowerCase().replace(/[_\s-]/g, "");
+
+  // Customer fields - flexible matching
+  if (ctx.customer) {
+    // Name variations
+    if (lower.includes("customer") && lower.includes("name") || lower === "customername" || lower === "companyname" || lower === "company" || lower === "customer") {
+      return ctx.customer.name || "";
+    }
+    // Industry
+    if (lower.includes("industry") || lower === "vertical" || lower === "sector") {
+      return ctx.customer.industry || "";
+    }
+    // Region
+    if (lower.includes("region") || lower === "geo" || lower === "geography" || lower === "territory" || lower === "location") {
+      return ctx.customer.region || "";
+    }
+    // Tier
+    if (lower.includes("tier") || lower === "segment" || lower === "size" || lower === "accounttier") {
+      return ctx.customer.tier || "";
+    }
+    // Full content/overview
+    if (lower.includes("overview") || lower.includes("profile") || lower.includes("summary") || lower.includes("background") || lower.includes("content")) {
+      return ctx.customer.content || "";
+    }
+    // Considerations/notes
+    if (lower.includes("consideration") || lower.includes("caveat") || lower.includes("note") || lower.includes("warning")) {
+      return ctx.customer.considerations?.join("\n• ") || "";
+    }
+    // Website
+    if (lower.includes("website") || lower.includes("url") || lower.includes("site")) {
+      return (ctx.customer as Record<string, unknown>).website as string || "";
+    }
+  }
+
+  // Date fields
+  if (lower.includes("date") || lower === "today" || lower === "currentdate") {
+    return new Date().toLocaleDateString();
+  }
+  if (lower === "year" || lower === "currentyear") {
+    return new Date().getFullYear().toString();
+  }
+  if (lower.includes("quarter") || lower === "q") {
+    return `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
+  }
+
+  // Skill matching - look for skill title in placeholder or placeholder in skill title
+  if (ctx.skills && ctx.skills.length > 0) {
+    // Direct skill title match
+    const matchingSkill = ctx.skills.find((s) => {
+      const skillLower = s.title.toLowerCase().replace(/[_\s-]/g, "");
+      return skillLower.includes(lower) || lower.includes(skillLower);
+    });
+    if (matchingSkill) {
+      return matchingSkill.content || "";
+    }
+
+    // If placeholder asks for "all skills" or similar
+    if (lower.includes("allskill") || lower.includes("skillcontent") || lower === "skills") {
+      return ctx.skills.map((s) => `## ${s.title}\n${s.content}`).join("\n\n");
+    }
+  }
+
+  // Custom data from collateral planning (BVA, slide data, etc.)
+  // This is the primary source for AI-generated slide content
+  if (ctx.custom) {
+    // Exact key match first
+    if (ctx.custom[placeholder]) {
+      return ctx.custom[placeholder];
+    }
+    // Case-insensitive key match
+    const customKey = Object.keys(ctx.custom).find(
+      (k) => k.toLowerCase().replace(/[_\s-]/g, "") === lower
+    );
+    if (customKey) {
+      return ctx.custom[customKey];
+    }
+    // Partial match - placeholder contains key or key contains placeholder
+    const partialMatch = Object.keys(ctx.custom).find((k) => {
+      const keyLower = k.toLowerCase().replace(/[_\s-]/g, "");
+      return lower.includes(keyLower) || keyLower.includes(lower);
+    });
+    if (partialMatch) {
+      return ctx.custom[partialMatch];
+    }
+  }
+
+  return "";
+}
+
 export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedPresentation, setSelectedPresentation] = useState<DrivePresentation | null>(null);
-  const [placeholders, setPlaceholders] = useState<string[]>([]);
-  const [replacements, setReplacements] = useState<Record<string, string>>({});
-  const [showPlaceholderEditor, setShowPlaceholderEditor] = useState(false);
+  const [manualReplacements, setManualReplacements] = useState<Record<string, string>>({});
 
   // Fetch presentations
   const {
@@ -76,24 +165,33 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
     enabled: !!selectedPresentation,
   });
 
-  // Handle placeholders data when it changes
-  useEffect(() => {
-    if (placeholdersData) {
-      setPlaceholders(placeholdersData);
-      // Pre-fill replacements from context
-      const prefilled: Record<string, string> = {};
-      for (const placeholder of placeholdersData) {
-        const value = getContextValue(placeholder, context);
-        if (value) {
-          prefilled[placeholder] = value;
-        }
-      }
-      setReplacements(prefilled);
-      if (placeholdersData.length > 0) {
-        setShowPlaceholderEditor(true);
+  const placeholderList = useMemo(() => placeholdersData || [], [placeholdersData]);
+
+  const prefilledReplacements = useMemo(() => {
+    if (!placeholderList.length) {
+      return {};
+    }
+
+    const filled: Record<string, string> = {};
+    for (const placeholder of placeholderList) {
+      const value = getContextValue(placeholder, context);
+      if (value) {
+        filled[placeholder] = value;
       }
     }
-  }, [placeholdersData, context]);
+    return filled;
+  }, [placeholderList, context]);
+
+  const getReplacementValue = (placeholder: string): string => {
+    if (manualReplacements[placeholder] !== undefined) {
+      return manualReplacements[placeholder];
+    }
+    return prefilledReplacements[placeholder] || "";
+  };
+
+  const hasReplacementValues = placeholderList.some(
+    (placeholder) => getReplacementValue(placeholder).trim().length > 0
+  );
 
   // Fill mutation
   const fillMutation = useApiMutation<
@@ -111,9 +209,7 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
       }
       // Reset state
       setSelectedPresentation(null);
-      setPlaceholders([]);
-      setReplacements({});
-      setShowPlaceholderEditor(false);
+      setManualReplacements({});
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -126,9 +222,12 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
       return;
     }
 
-    const replacementArray: PlaceholderReplacement[] = Object.entries(replacements)
-      .filter(([, value]) => value.trim())
-      .map(([placeholder, value]) => ({ placeholder, value }));
+    const replacementArray: PlaceholderReplacement[] = placeholderList
+      .map((placeholder) => ({
+        placeholder,
+        value: getReplacementValue(placeholder),
+      }))
+      .filter(({ value }) => value.trim());
 
     if (replacementArray.length === 0) {
       toast.error("No replacements to fill");
@@ -142,97 +241,6 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
       copyTitle: `${selectedPresentation.name} - Filled ${new Date().toLocaleDateString()}`,
     });
   };
-
-  // Get value from context for a placeholder - smart matching
-  function getContextValue(placeholder: string, ctx: TemplateFillContext): string {
-    const lower = placeholder.toLowerCase().replace(/[_\s-]/g, "");
-
-    // Customer fields - flexible matching
-    if (ctx.customer) {
-      // Name variations
-      if (lower.includes("customer") && lower.includes("name") || lower === "customername" || lower === "companyname" || lower === "company" || lower === "customer") {
-        return ctx.customer.name || "";
-      }
-      // Industry
-      if (lower.includes("industry") || lower === "vertical" || lower === "sector") {
-        return ctx.customer.industry || "";
-      }
-      // Region
-      if (lower.includes("region") || lower === "geo" || lower === "geography" || lower === "territory" || lower === "location") {
-        return ctx.customer.region || "";
-      }
-      // Tier
-      if (lower.includes("tier") || lower === "segment" || lower === "size" || lower === "accounttier") {
-        return ctx.customer.tier || "";
-      }
-      // Full content/overview
-      if (lower.includes("overview") || lower.includes("profile") || lower.includes("summary") || lower.includes("background") || lower.includes("content")) {
-        return ctx.customer.content || "";
-      }
-      // Considerations/notes
-      if (lower.includes("consideration") || lower.includes("caveat") || lower.includes("note") || lower.includes("warning")) {
-        return ctx.customer.considerations?.join("\n• ") || "";
-      }
-      // Website
-      if (lower.includes("website") || lower.includes("url") || lower.includes("site")) {
-        return (ctx.customer as Record<string, unknown>).website as string || "";
-      }
-    }
-
-    // Date fields
-    if (lower.includes("date") || lower === "today" || lower === "currentdate") {
-      return new Date().toLocaleDateString();
-    }
-    if (lower === "year" || lower === "currentyear") {
-      return new Date().getFullYear().toString();
-    }
-    if (lower.includes("quarter") || lower === "q") {
-      return `Q${Math.ceil((new Date().getMonth() + 1) / 3)}`;
-    }
-
-    // Skill matching - look for skill title in placeholder or placeholder in skill title
-    if (ctx.skills && ctx.skills.length > 0) {
-      // Direct skill title match
-      const matchingSkill = ctx.skills.find((s) => {
-        const skillLower = s.title.toLowerCase().replace(/[_\s-]/g, "");
-        return skillLower.includes(lower) || lower.includes(skillLower);
-      });
-      if (matchingSkill) {
-        return matchingSkill.content || "";
-      }
-
-      // If placeholder asks for "all skills" or similar
-      if (lower.includes("allskill") || lower.includes("skillcontent") || lower === "skills") {
-        return ctx.skills.map((s) => `## ${s.title}\n${s.content}`).join("\n\n");
-      }
-    }
-
-    // Custom data from collateral planning (BVA, slide data, etc.)
-    // This is the primary source for AI-generated slide content
-    if (ctx.custom) {
-      // Exact key match first
-      if (ctx.custom[placeholder]) {
-        return ctx.custom[placeholder];
-      }
-      // Case-insensitive key match
-      const customKey = Object.keys(ctx.custom).find(
-        (k) => k.toLowerCase().replace(/[_\s-]/g, "") === lower
-      );
-      if (customKey) {
-        return ctx.custom[customKey];
-      }
-      // Partial match - placeholder contains key or key contains placeholder
-      const partialMatch = Object.keys(ctx.custom).find((k) => {
-        const keyLower = k.toLowerCase().replace(/[_\s-]/g, "");
-        return lower.includes(keyLower) || keyLower.includes(lower);
-      });
-      if (partialMatch) {
-        return ctx.custom[partialMatch];
-      }
-    }
-
-    return "";
-  }
 
   // Extract error message safely
   const errorMessage = presentationsError
@@ -314,9 +322,7 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
                   key={presentation.id}
                   onClick={() => {
                     setSelectedPresentation(presentation);
-                    setShowPlaceholderEditor(false);
-                    setPlaceholders([]);
-                    setReplacements({});
+                    setManualReplacements({});
                   }}
                   disabled={disabled}
                   className={`w-full text-left p-2 rounded-md text-xs transition-colors ${
@@ -351,11 +357,11 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
       )}
 
       {/* Placeholder editor */}
-      {selectedPresentation && showPlaceholderEditor && (
+      {selectedPresentation && (
         <div className="border rounded-md p-3 space-y-3 bg-muted/30">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium">
-              Placeholders ({placeholders.length})
+              Placeholders ({placeholderList.length})
             </span>
             {selectedPresentation.webViewLink && (
               <a
@@ -374,17 +380,17 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
               <Loader2 className="h-3 w-3 animate-spin mr-2" />
               Scanning for placeholders...
             </div>
-          ) : placeholders.length > 0 ? (
+          ) : placeholderList.length > 0 ? (
             <div className="space-y-2 max-h-48 overflow-y-auto">
-              {placeholders.map((placeholder) => (
+              {placeholderList.map((placeholder) => (
                 <div key={placeholder} className="space-y-1">
                   <label className="text-[10px] font-mono text-muted-foreground">
                     {`{{${placeholder}}}`}
                   </label>
                   <Input
-                    value={replacements[placeholder] || ""}
+                    value={getReplacementValue(placeholder)}
                     onChange={(e) =>
-                      setReplacements((prev) => ({
+                      setManualReplacements((prev) => ({
                         ...prev,
                         [placeholder]: e.target.value,
                       }))
@@ -412,8 +418,8 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
           disabled={
             disabled ||
             fillMutation.isPending ||
-            placeholders.length === 0 ||
-            Object.values(replacements).filter((v) => v.trim()).length === 0
+            placeholderList.length === 0 ||
+            !hasReplacementValues
           }
           onClick={handleFill}
         >

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useApiQuery } from "@/hooks/use-api";
 
 interface User {
   id: string;
@@ -41,46 +42,38 @@ interface FlagReviewModalProps {
   queuedCount?: number;
 }
 
-export default function FlagReviewModal({
-  isOpen,
+export default function FlagReviewModal(props: FlagReviewModalProps) {
+  if (!props.isOpen) {
+    return null;
+  }
+  return <FlagReviewModalContent {...props} />;
+}
+
+function FlagReviewModalContent({
   initialAction = "need-help",
   onSubmit,
   onCancel,
   allowQueueing = true,
   queuedCount = 0,
-}: FlagReviewModalProps) {
-  const [users, setUsers] = useState<User[]>([]);
+}: Omit<FlagReviewModalProps, "isOpen">) {
   const [action, setAction] = useState<FlagReviewAction>(initialAction);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [note, setNote] = useState("");
-  const [loadingUsers, setLoadingUsers] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Reset state when modal opens
+  const { data: usersData, isLoading: loadingUsers } = useApiQuery<{ users: User[] }>({
+    queryKey: ["review-users"],
+    url: "/api/users",
+  });
+
+  const users = usersData?.users ?? [];
+
   useEffect(() => {
-    if (isOpen) {
-      setAction(initialAction);
-      setSelectedUserId("");
-      setNote("");
-
-      // Fetch users for "need-help" action
-      setLoadingUsers(true);
-      fetch("/api/users")
-        .then((res) => res.json())
-        .then((data) => {
-          setUsers(data.users || []);
-        })
-        .catch(() => {
-          // Silent failure - users list is optional
-        })
-        .finally(() => {
-          setLoadingUsers(false);
-        });
-
-      // Focus textarea after a small delay
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    }
-  }, [isOpen, initialAction]);
+    const timeout = setTimeout(() => textareaRef.current?.focus(), 50);
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, []);
 
   const handleSubmit = (sendTiming: SendTiming) => {
     const selectedUser = users.find((u) => u.id === selectedUserId);
@@ -96,7 +89,7 @@ export default function FlagReviewModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-w-[520px]">
         <DialogHeader>
           <DialogTitle>Flag or Request Review</DialogTitle>

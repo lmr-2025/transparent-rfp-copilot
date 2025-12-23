@@ -1050,6 +1050,20 @@ enum FeedbackRating {
   THUMBS_DOWN
 }
 
+// Feedback categories for axial coding - identifies WHY an answer was corrected
+// Used to identify patterns and improve prompts/knowledge
+enum FeedbackCategory {
+  WRONG_SKILL_MATCHED    // AI used wrong skill(s) for this question
+  OUTDATED_KNOWLEDGE     // Skill content is stale/incorrect
+  MISSING_KNOWLEDGE      // No skill exists for this topic
+  HALLUCINATION          // AI made up information not in sources
+  INCOMPLETE_ANSWER      // Answer was partial/missing key details
+  WRONG_TONE             // Tone/style didn't match expectations
+  TECHNICAL_ERROR        // Factual/technical mistake
+  FORMATTING_ISSUE       // Structure/formatting problems
+  OTHER                  // Catch-all for uncategorized issues
+}
+
 // Document Templates - reusable templates for deliverables
 // Used by Chat V2 to generate filled documents (battlecards, proposals, etc.)
 model Template {
@@ -1225,5 +1239,64 @@ model ChatFeedback {
   @@index([flaggedForReview])
   @@index([reviewRequested])
   @@index([createdAt])
+}
+
+// LLM Trace - Captures every LLM API call for observability and feedback correlation
+// Designed for OTEL export to Monte Carlo or other observability platforms
+model LLMTrace {
+  id              String   @id @default(uuid())
+  traceId         String   @unique @default(uuid()) // OTEL-compatible trace ID
+  parentTraceId   String?  // For multi-step chains (e.g., clarify -> answer)
+  spanName        String   // e.g., "answer_question", "generate_skill", "analyze_contract"
+
+  // Request details
+  feature         String   // questions, chat, contracts, skills, projects
+  model           String   // claude-sonnet-4-20250514, etc.
+  promptHash      String?  // Hash of system prompt for deduplication
+  promptSnapshot  String?  @db.Text // Full prompt (optional, for debugging)
+  userMessage     String   @db.Text // The user's input
+  skillsProvided  Json?    // Array of skill IDs/titles provided as context
+
+  // Response details
+  response        String   @db.Text // LLM's response
+  confidence      String?  // High/Medium/Low if applicable
+
+  // Metrics (OTEL span attributes)
+  inputTokens     Int
+  outputTokens    Int
+  latencyMs       Int      // Time from request to response
+  cacheHit        Boolean  @default(false) // Anthropic prompt cache hit
+  cacheCreationTokens Int? // Tokens written to cache
+  cacheReadTokens     Int? // Tokens read from cache
+
+  // User context
+  userId          String?
+  userEmail       String?
+
+  // Link to result entity (one of these will be set)
+  questionHistoryId String? // Quick questions
+  bulkRowId         String? // RFP project rows
+  chatSessionId     String? // Chat messages
+  contractFindingId String? // Contract analysis
+  skillId           String? // Skill generation/refresh
+
+  // Feedback linkage (populated when human reviews)
+  feedbackCategories FeedbackCategory[] @default([])
+  feedbackNote       String?  @db.Text
+  wasEdited          Boolean  @default(false) // Human changed the response
+  editDelta          String?  @db.Text // What changed (for training data)
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+
+  @@index([traceId])
+  @@index([parentTraceId])
+  @@index([feature, createdAt])
+  @@index([userId, createdAt])
+  @@index([model, createdAt])
+  @@index([wasEdited, createdAt])
+  @@index([createdAt])
+  // Composite for feedback analysis
+  @@index([feature, wasEdited])
 }
 

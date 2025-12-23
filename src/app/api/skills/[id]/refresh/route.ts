@@ -14,6 +14,8 @@ import { getSkillSlug } from "@/lib/skillFiles";
 import { updateSkillAndCommit } from "@/lib/skillGitSync";
 import type { SkillFile } from "@/lib/skillFiles";
 
+export const maxDuration = 120; // 2 minutes for URL fetching + LLM generation
+
 type RouteContext = {
   params: Promise<{ id: string }>;
 };

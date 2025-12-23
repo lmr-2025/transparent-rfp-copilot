@@ -159,8 +159,14 @@ interface PromptModalProps {
   onCancel: () => void;
 }
 
-export function PromptModal({
-  isOpen,
+export function PromptModal(props: PromptModalProps) {
+  if (!props.isOpen) {
+    return null;
+  }
+  return <PromptModalInner {...props} />;
+}
+
+function PromptModalInner({
   title,
   message,
   placeholder = "",
@@ -169,18 +175,14 @@ export function PromptModal({
   cancelLabel = "Cancel",
   onSubmit,
   onCancel,
-}: PromptModalProps) {
+}: Omit<PromptModalProps, "isOpen">) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValueState] = useState(defaultValue);
 
-  // Reset value and focus when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setValueState(defaultValue);
-      // Small delay to ensure the modal is rendered
-      setTimeout(() => inputRef.current?.focus(), 50);
-    }
-  }, [isOpen, defaultValue]);
+    const timeout = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const handleSubmit = () => {
     if (value.trim()) {
@@ -189,7 +191,7 @@ export function PromptModal({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -303,8 +305,14 @@ interface TextareaPromptModalProps {
   onCancel: () => void;
 }
 
-export function TextareaPromptModal({
-  isOpen,
+export function TextareaPromptModal(props: TextareaPromptModalProps) {
+  if (!props.isOpen) {
+    return null;
+  }
+  return <TextareaPromptModalInner {...props} />;
+}
+
+function TextareaPromptModalInner({
   title,
   message,
   placeholder = "",
@@ -313,24 +321,21 @@ export function TextareaPromptModal({
   cancelLabel = "Cancel",
   onSubmit,
   onCancel,
-}: TextareaPromptModalProps) {
+}: Omit<TextareaPromptModalProps, "isOpen">) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [value, setValueState] = useState(defaultValue);
 
-  // Reset value and focus when modal opens
   useEffect(() => {
-    if (isOpen) {
-      setValueState(defaultValue);
-      setTimeout(() => textareaRef.current?.focus(), 50);
-    }
-  }, [isOpen, defaultValue]);
+    const timeout = setTimeout(() => textareaRef.current?.focus(), 50);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const handleSubmit = () => {
     onSubmit(value);
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onCancel()}>
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>

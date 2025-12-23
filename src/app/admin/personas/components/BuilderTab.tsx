@@ -65,7 +65,7 @@ What kind of assistant would you like to build? You can pick a template to get s
           setDraft(data.data.draft);
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to send message");
     } finally {
       setIsLoading(false);
@@ -96,7 +96,7 @@ What kind of assistant would you like to build? You can pick a template to get s
         }),
       });
       onPresetSaved();
-    } catch (error) {
+    } catch {
       toast.error("Failed to save preset");
     } finally {
       setIsSaving(false);

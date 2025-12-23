@@ -90,6 +90,12 @@ const customerSourceDocumentSchema = z.object({
   uploadedAt: z.string(),
 });
 
+const customerOwnerSchema = z.object({
+  name: z.string().min(1, "Owner name is required"),
+  email: z.string().email().optional(),
+  userId: z.string().optional(),
+});
+
 // Customer profile schemas
 export const createCustomerSchema = z.object({
   name: z.string().min(1, "Name is required").max(200),
@@ -108,7 +114,7 @@ export const createCustomerSchema = z.object({
   content: z.string().max(100000).optional(),
   considerations: z.array(z.string()).optional(),
   isActive: z.boolean().default(true),
-  owners: z.string().nullable().optional(),
+  owners: z.array(customerOwnerSchema).nullable().optional(),
   // Salesforce static fields
   salesforceId: z.string().optional(),
   region: z.string().optional(),
@@ -139,7 +145,7 @@ export const updateCustomerSchema = z.object({
   content: z.string().max(100000).optional(),
   considerations: z.array(z.string()).optional(),
   isActive: z.boolean().optional(),
-  owners: z.string().nullable().optional(),
+  owners: z.array(customerOwnerSchema).nullable().optional(),
   // Salesforce static fields
   salesforceId: z.string().optional(),
   region: z.string().optional(),
@@ -162,6 +168,11 @@ const usedSkillSchema = z.union([
   z.object({ id: z.string(), title: z.string() }),
 ]);
 
+const clarifyMessageSchema = z.object({
+  role: z.enum(["user", "assistant"]),
+  content: z.string(),
+});
+
 const projectRowSchema = z.object({
   rowNumber: z.number().int().min(1),
   question: z.string().min(1, "Question is required"),
@@ -176,6 +187,7 @@ const projectRowSchema = z.object({
   remarks: z.string().optional(),
   usedSkills: z.array(usedSkillSchema).optional(),
   showRecommendation: z.boolean().optional(),
+  clarifyConversation: z.array(clarifyMessageSchema).optional(),
 });
 
 // Project schemas
@@ -191,7 +203,30 @@ export const createProjectSchema = z.object({
   status: z.string().optional(),
 });
 
-export const updateProjectSchema = createProjectSchema.partial();
+export const updateProjectSchema = createProjectSchema.partial().extend({
+  customerId: z.string().optional(),
+  customerProfileIds: z.array(z.string()).optional(),
+  reviewRequestedAt: z.string().datetime().optional(),
+  reviewRequestedBy: z.string().optional(),
+  reviewedAt: z.string().datetime().optional(),
+  reviewedBy: z.string().optional(),
+});
+
+export const projectRowPatchSchema = z.object({
+  flaggedForReview: z.boolean().optional(),
+  flagNote: z.string().max(5000).optional(),
+  flagResolved: z.boolean().optional(),
+  flagResolutionNote: z.string().max(5000).optional(),
+  queuedForReview: z.boolean().optional(),
+  queuedNote: z.string().max(5000).optional(),
+  queuedReviewerId: z.string().nullable().optional(),
+  queuedReviewerName: z.string().nullable().optional(),
+  reviewStatus: z.enum(["NONE", "REQUESTED", "APPROVED", "CORRECTED"]).optional(),
+  reviewNote: z.string().max(5000).optional(),
+  reviewedAt: z.string().datetime().nullable().optional(),
+  reviewedBy: z.string().optional(),
+  userEditedAnswer: z.string().optional(),
+});
 
 // Document schemas
 export const createDocumentSchema = z.object({

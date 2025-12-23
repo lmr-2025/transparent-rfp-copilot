@@ -135,17 +135,18 @@ export default function SnippetPicker({ onInsert, buttonStyle }: SnippetPickerPr
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Load snippets when dropdown opens
-  useEffect(() => {
-    if (isOpen && snippets.length === 0) {
-      setIsLoading(true);
-      fetch("/api/context-snippets")
-        .then((res) => res.json())
-        .then((data) => setSnippets(data))
-        .catch(() => toast.error("Failed to load snippets"))
-        .finally(() => setIsLoading(false));
+  const fetchSnippets = () => {
+    if (isLoading || snippets.length > 0) {
+      return;
     }
-  }, [isOpen, snippets.length]);
+
+    setIsLoading(true);
+    fetch("/api/context-snippets")
+      .then((res) => res.json())
+      .then((data) => setSnippets(data))
+      .catch(() => toast.error("Failed to load snippets"))
+      .finally(() => setIsLoading(false));
+  };
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -201,7 +202,13 @@ export default function SnippetPicker({ onInsert, buttonStyle }: SnippetPickerPr
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          const nextOpen = !isOpen;
+          if (nextOpen && snippets.length === 0) {
+            fetchSnippets();
+          }
+          setIsOpen(nextOpen);
+        }}
         style={{ ...styles.button, ...buttonStyle }}
         title="Insert a context snippet variable"
       >

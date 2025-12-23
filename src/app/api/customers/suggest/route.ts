@@ -10,6 +10,8 @@ import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 
+export const maxDuration = 120; // 2 minutes for URL fetching + LLM generation
+
 type SuggestRequestBody = {
   sourceUrls: string[];
   prompt?: string; // Optional custom prompt (uses default sections if not provided)

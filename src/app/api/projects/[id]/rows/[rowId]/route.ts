@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/apiAuth";
 import { logAnswerChange, computeChanges, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { projectRowPatchSchema, validateBody } from "@/lib/validations";
 
 interface RouteContext {
   params: Promise<{ id: string; rowId: string }>;
@@ -21,6 +22,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const params = await context.params;
     const { id: projectId, rowId } = params;
     const body = await request.json();
+    const validation = validateBody(projectRowPatchSchema, body);
+    if (!validation.success) {
+      return errors.validation(validation.error);
+    }
+    const data = validation.data;
 
     // Verify row exists and belongs to project
     const row = await prisma.bulkRow.findFirst({
@@ -36,9 +42,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const updateData: Record<string, unknown> = {};
 
     // Flagging fields (for self-notes, attention markers)
-    if (body.flaggedForReview !== undefined) {
-      updateData.flaggedForReview = body.flaggedForReview;
-      if (body.flaggedForReview) {
+    if (data.flaggedForReview !== undefined) {
+      updateData.flaggedForReview = data.flaggedForReview;
+      if (data.flaggedForReview) {
         updateData.flaggedAt = new Date();
         updateData.flaggedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
         // Clear any previous resolution when re-flagging
@@ -48,14 +54,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         updateData.flagResolutionNote = null;
       }
     }
-    if (body.flagNote !== undefined) {
-      updateData.flagNote = body.flagNote;
+    if (data.flagNote !== undefined) {
+      updateData.flagNote = data.flagNote;
     }
 
     // Flag resolution fields (close flag while preserving audit trail)
-    if (body.flagResolved !== undefined) {
-      updateData.flagResolved = body.flagResolved;
-      if (body.flagResolved) {
+    if (data.flagResolved !== undefined) {
+      updateData.flagResolved = data.flagResolved;
+      if (data.flagResolved) {
         updateData.flagResolvedAt = new Date();
         updateData.flagResolvedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
         // Keep flaggedForReview true to preserve the audit trail - flag is resolved, not removed
@@ -66,14 +72,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         updateData.flagResolutionNote = null;
       }
     }
-    if (body.flagResolutionNote !== undefined) {
-      updateData.flagResolutionNote = body.flagResolutionNote;
+    if (data.flagResolutionNote !== undefined) {
+      updateData.flagResolutionNote = data.flagResolutionNote;
     }
 
     // Queue fields (for batch review workflow - persisted across sessions)
-    if (body.queuedForReview !== undefined) {
-      updateData.queuedForReview = body.queuedForReview;
-      if (body.queuedForReview) {
+    if (data.queuedForReview !== undefined) {
+      updateData.queuedForReview = data.queuedForReview;
+      if (data.queuedForReview) {
         updateData.queuedAt = new Date();
         updateData.queuedBy = auth.session?.user?.name || auth.session?.user?.email || "Unknown";
       } else {
@@ -85,35 +91,35 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         updateData.queuedReviewerName = null;
       }
     }
-    if (body.queuedNote !== undefined) {
-      updateData.queuedNote = body.queuedNote;
+    if (data.queuedNote !== undefined) {
+      updateData.queuedNote = data.queuedNote;
     }
-    if (body.queuedReviewerId !== undefined) {
-      updateData.queuedReviewerId = body.queuedReviewerId;
+    if (data.queuedReviewerId !== undefined) {
+      updateData.queuedReviewerId = data.queuedReviewerId ?? null;
     }
-    if (body.queuedReviewerName !== undefined) {
-      updateData.queuedReviewerName = body.queuedReviewerName;
+    if (data.queuedReviewerName !== undefined) {
+      updateData.queuedReviewerName = data.queuedReviewerName ?? null;
     }
 
     // Review workflow fields (for formal approval process)
-    if (body.reviewStatus !== undefined) {
-      updateData.reviewStatus = body.reviewStatus as RowReviewStatus;
+    if (data.reviewStatus !== undefined) {
+      updateData.reviewStatus = data.reviewStatus as RowReviewStatus;
     }
-    if (body.reviewNote !== undefined) {
-      updateData.reviewNote = body.reviewNote;
+    if (data.reviewNote !== undefined) {
+      updateData.reviewNote = data.reviewNote;
     }
-    if (body.reviewedAt !== undefined) {
-      updateData.reviewedAt = body.reviewedAt ? new Date(body.reviewedAt) : null;
+    if (data.reviewedAt !== undefined) {
+      updateData.reviewedAt = data.reviewedAt ? new Date(data.reviewedAt) : null;
     }
-    if (body.reviewedBy !== undefined) {
-      updateData.reviewedBy = body.reviewedBy;
+    if (data.reviewedBy !== undefined) {
+      updateData.reviewedBy = data.reviewedBy;
     }
-    if (body.userEditedAnswer !== undefined) {
-      updateData.userEditedAnswer = body.userEditedAnswer;
+    if (data.userEditedAnswer !== undefined) {
+      updateData.userEditedAnswer = data.userEditedAnswer;
     }
 
     // Track original response for feedback (first edit only)
-    if (body.userEditedAnswer !== undefined && body.userEditedAnswer !== row.response) {
+    if (data.userEditedAnswer !== undefined && data.userEditedAnswer !== row.response) {
       // Only capture original if not already captured
       if (!row.originalResponse && row.response) {
         updateData.originalResponse = row.response;
@@ -132,7 +138,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const requestContext = getRequestContext(request);
 
     // Determine the action based on what changed
-    if (body.reviewStatus === "CORRECTED" || body.userEditedAnswer !== undefined) {
+    if (data.reviewStatus === "CORRECTED" || data.userEditedAnswer !== undefined) {
       // Answer was corrected
       const changes = computeChanges(
         {
@@ -157,12 +163,12 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           projectId,
           projectName: row.project.name,
           originalResponse: row.response,
-          correctedAnswer: body.userEditedAnswer || updatedRow.userEditedAnswer,
+          correctedAnswer: data.userEditedAnswer || updatedRow.userEditedAnswer,
           confidence: row.confidence,
         },
         requestContext
       );
-    } else if (body.reviewStatus === "APPROVED") {
+    } else if (data.reviewStatus === "APPROVED") {
       // Answer was approved
       await logAnswerChange(
         "APPROVED",
@@ -178,7 +184,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         },
         requestContext
       );
-    } else if (body.flagResolved === true) {
+    } else if (data.flagResolved === true) {
       // Flag was resolved/closed
       await logAnswerChange(
         "FLAG_RESOLVED",
@@ -192,7 +198,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
           flagNote: row.flagNote,
           flaggedBy: row.flaggedBy,
           flaggedAt: row.flaggedAt,
-          resolutionNote: body.flagResolutionNote,
+          resolutionNote: data.flagResolutionNote,
         },
         requestContext
       );

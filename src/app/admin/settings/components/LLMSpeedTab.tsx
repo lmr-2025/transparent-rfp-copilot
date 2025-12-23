@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Zap, Gauge, RotateCcw, Info } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { toast } from "sonner";
@@ -92,21 +92,38 @@ type PreferencesResponse = {
 };
 
 export default function LLMSpeedTab() {
-  const [userOverrides, setUserOverrides] = useState<Record<string, ModelSpeed>>({});
-  const [hasChanges, setHasChanges] = useState(false);
-
-  // Fetch preferences
   const { data: prefsData, isLoading: loading } = useApiQuery<PreferencesResponse>({
     queryKey: ["user-preferences"],
     url: "/api/user/preferences",
   });
 
-  // Sync fetched data to local state
-  useEffect(() => {
-    if (prefsData?.preferences?.llmSpeedOverrides) {
-      setUserOverrides(prefsData.preferences.llmSpeedOverrides);
-    }
-  }, [prefsData]);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <InlineLoader size="md" className="text-gray-400" />
+        <span className="ml-2 text-gray-500">Loading preferences...</span>
+      </div>
+    );
+  }
+
+  const initialOverrides = prefsData?.preferences?.llmSpeedOverrides || {};
+  const overridesKey = JSON.stringify(initialOverrides);
+
+  return (
+    <LLMSpeedSettings
+      key={overridesKey}
+      initialOverrides={initialOverrides}
+    />
+  );
+}
+
+type LLMSpeedSettingsProps = {
+  initialOverrides: Record<string, ModelSpeed>;
+};
+
+function LLMSpeedSettings({ initialOverrides }: LLMSpeedSettingsProps) {
+  const [userOverrides, setUserOverrides] = useState<Record<string, ModelSpeed>>(initialOverrides);
+  const [hasChanges, setHasChanges] = useState(false);
 
   // Save mutation
   const saveMutation = useApiMutation<void, { llmSpeedOverrides: Record<string, ModelSpeed> }>({

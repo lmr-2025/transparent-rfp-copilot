@@ -32,8 +32,8 @@ import type {
   QuestionLogStatus,
   QuestionLogSource,
   Pagination,
-  statusConfig,
 } from "./types";
+import { statusConfig } from "./types";
 
 type QuestionsTabProps = {
   isAdmin: boolean;
@@ -74,9 +74,6 @@ export default function QuestionsTab({ isAdmin }: QuestionsTabProps) {
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
   const [expandedLogIds, setExpandedLogIds] = useState<Set<string>>(new Set());
-
-  // Import statusConfig at runtime to avoid circular dependency
-  const { statusConfig } = require("./types");
 
   type QuestionLogResponse = {
     entries: QuestionLogEntry[];

@@ -22,8 +22,6 @@ export default function CategoriesTab() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     loadCategoriesFromApi()
@@ -42,7 +40,6 @@ export default function CategoriesTab() {
       setError("A category with this name already exists");
       return;
     }
-    setIsSaving(true);
     try {
       const added = await addCategory(newName, newDescription);
       setCategories([...categories, added]);
@@ -54,8 +51,6 @@ export default function CategoriesTab() {
       const message = err instanceof Error ? err.message : "Failed to create category";
       toast.error(message);
       setError(message);
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -69,7 +64,6 @@ export default function CategoriesTab() {
       setError("A category with this name already exists");
       return;
     }
-    setIsSaving(true);
     try {
       await updateCategory(id, { name: newName.trim(), description: newDescription.trim() || undefined });
       setCategories(categories.map((cat) =>
@@ -83,13 +77,10 @@ export default function CategoriesTab() {
       const message = err instanceof Error ? err.message : "Failed to update category";
       toast.error(message);
       setError(message);
-    } finally {
-      setIsSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    setDeletingId(id);
     try {
       await deleteCategory(id);
       setCategories(categories.filter((cat) => cat.id !== id));
@@ -97,8 +88,6 @@ export default function CategoriesTab() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to delete category";
       toast.error(message);
-    } finally {
-      setDeletingId(null);
     }
   };
 

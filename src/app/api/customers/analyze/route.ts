@@ -8,6 +8,8 @@ import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 
+export const maxDuration = 60; // 1 minute for analysis
+
 type ExistingProfileInfo = {
   id: string;
   name: string;

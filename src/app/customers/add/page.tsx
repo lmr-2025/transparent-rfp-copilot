@@ -6,6 +6,7 @@ import { createProfile, updateProfile } from "@/lib/customerProfileApi";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseApiData } from "@/lib/apiClient";
 import {
+  CustomerProfile,
   CustomerProfileDraft,
   CustomerProfileSourceUrl,
   CustomerProfileSourceDocument,
@@ -351,7 +352,7 @@ export default function CustomerProfileBuilderPage() {
           throw new Error("Failed to fetch existing profile");
         }
         const profileJson = await profileResponse.json();
-        const profile = parseApiData<{ profile: any }>(profileJson);
+        const profile = parseApiData<{ profile: CustomerProfile }>(profileJson);
         existingProfileData = {
           name: profile.profile.name,
           content: profile.profile.content || profile.profile.overview || "",

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause for BulkRow based on type
-    let rowWhereClause: Record<string, unknown> = { ...assignedToClause };
+    const rowWhereClause: Record<string, unknown> = { ...assignedToClause };
     if (type === "flagged") {
       // Flagged items only (exclude resolved flags)
       rowWhereClause.flaggedForReview = true;
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause for QuestionHistory (same pattern)
-    let questionWhereClause: Record<string, unknown> = { ...assignedToClause };
+    const questionWhereClause: Record<string, unknown> = { ...assignedToClause };
     if (type === "flagged") {
       // Flagged items only (exclude resolved flags)
       questionWhereClause.flaggedForReview = true;
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build where clause for CollateralOutput (same pattern)
-    let collateralWhereClause: Record<string, unknown> = { ...assignedToClause };
+    const collateralWhereClause: Record<string, unknown> = { ...assignedToClause };
     if (type === "flagged") {
       collateralWhereClause.flaggedForReview = true;
       collateralWhereClause.flagResolved = { not: true };

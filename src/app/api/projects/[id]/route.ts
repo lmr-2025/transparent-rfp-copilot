@@ -5,6 +5,7 @@ import { requireAuth } from "@/lib/apiAuth";
 import { logProjectChange, getUserFromSession, computeChanges } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { updateProjectSchema, validateBody } from "@/lib/validations";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -94,11 +95,16 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const { id } = params;
     const body = await request.json();
 
+    const validation = validateBody(updateProjectSchema, body);
+    if (!validation.success) {
+      return errors.validation(validation.error);
+    }
+
     const {
       name, sheetName, columns, rows, ownerId, ownerName, customerName, customerId, notes, status,
       reviewRequestedAt, reviewRequestedBy, reviewedAt, reviewedBy,
       customerProfileIds
-    } = body;
+    } = validation.data;
 
     // Map status string to enum
     const projectStatus: ProjectStatus | undefined = status

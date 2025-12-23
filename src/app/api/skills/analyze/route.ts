@@ -9,6 +9,8 @@ import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
 
+export const maxDuration = 60; // 1 minute for analysis
+
 type ExistingSkillInfo = {
   id: string;
   title: string;

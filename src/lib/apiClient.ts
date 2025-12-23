@@ -68,6 +68,17 @@ export function parseApiData<T>(result: unknown, key?: string): T {
 // ERROR HANDLING
 // ============================================
 
+export class ApiRequestError extends Error {
+  status: number;
+  body?: unknown;
+
+  constructor(message: string, status: number, body?: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /**
  * Extract error message from API error response
  */
@@ -129,15 +140,21 @@ async function apiFetch<T>(
   const response = await fetch(url, fetchOptions);
 
   if (!response.ok) {
-    // Try to get structured error message
-    let errorMessage: string;
-    try {
-      const errorResult = await response.json();
-      errorMessage = getApiErrorMessage(errorResult, `Request failed with status ${response.status}`);
-    } catch {
-      errorMessage = `Request failed with status ${response.status}`;
+    let errorBody: unknown;
+    if (response.headers.get("content-type")?.includes("application/json")) {
+      try {
+        errorBody = await response.json();
+      } catch {
+        // Swallow JSON parse errors - we'll fall back to status message
+      }
     }
-    throw new Error(errorMessage);
+
+    const errorMessage = getApiErrorMessage(
+      errorBody,
+      `Request failed with status ${response.status}`
+    );
+
+    throw new ApiRequestError(errorMessage, response.status, errorBody);
   }
 
   // Handle 204 No Content
@@ -228,8 +245,7 @@ export function createApiClient<T, TCreate = Partial<T>, TUpdate = Partial<T>>(
         const item = await apiFetch<unknown>(`${baseUrl}/${id}`, {}, singularKey);
         return item ? transformItem(item) : null;
       } catch (error) {
-        // Return null for 404s
-        if (error instanceof Error && error.message.includes("404")) {
+        if (error instanceof ApiRequestError && error.status === 404) {
           return null;
         }
         throw error;

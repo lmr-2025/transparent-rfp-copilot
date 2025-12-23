@@ -81,7 +81,7 @@ export default function FeedbackTab() {
           const data = await collateralRes.json();
           setCollateralFeedback(data.data?.outputs || []);
         }
-      } catch (error) {
+      } catch {
         toast.error("Failed to load feedback");
       } finally {
         setIsLoading(false);

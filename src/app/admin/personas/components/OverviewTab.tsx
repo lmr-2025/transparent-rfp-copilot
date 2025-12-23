@@ -11,7 +11,6 @@ import {
   MessageSquare,
   FileText,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { type InstructionPreset, statusColors, personaFeatures } from "./types";
 
 export function OverviewTab({ presets }: { presets: InstructionPreset[] }) {

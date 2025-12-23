@@ -380,7 +380,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   const getHighlightedContract = useMemo(() => {
     if (!contract?.extractedText) return "";
 
-    let text = contract.extractedText;
+    const text = contract.extractedText;
     const clauseLocations: Array<{ start: number; end: number; finding: ContractFinding }> = [];
 
     // Find all clause positions in the contract text

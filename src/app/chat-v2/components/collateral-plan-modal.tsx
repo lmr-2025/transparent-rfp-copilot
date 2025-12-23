@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { X, FileText, Sparkles, CheckCircle, Loader2, Presentation, Table2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConversationalPanel, type Message } from "@/components/ui/conversational-panel";
@@ -55,14 +55,6 @@ export function CollateralPlanModal({
   onApplyPlan,
   onFillSlides,
 }: CollateralPlanModalProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState<string>("");
-  const [approvedPlan, setApprovedPlan] = useState<CollateralPlan | null>(null);
-  const [slideData, setSlideData] = useState<SlideData | null>(null);
-  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
-
-  // Fetch planning prompt and templates on mount
   const { data: planningData, isLoading: isLoadingPrompt } = useApiQuery<{
     systemPrompt: string;
     templates: TemplateInfo[];
@@ -72,60 +64,102 @@ export function CollateralPlanModal({
     enabled: isOpen,
   });
 
-  useEffect(() => {
-    if (planningData) {
-      setSystemPrompt(planningData.systemPrompt || "");
-      setTemplates(planningData.templates || []);
+  if (!isOpen) {
+    return null;
+  }
+
+  const systemPrompt = planningData?.systemPrompt || "";
+  const templates = planningData?.templates || [];
+  const sessionKey = [
+    customer?.id ?? "none",
+    skills.length,
+    gtmData?.gongCalls.length ?? 0,
+    gtmData?.hubspotActivities.length ?? 0,
+    templates.length,
+    systemPrompt.length,
+    planningData ? "ready" : "loading",
+  ].join("|");
+
+  return (
+    <CollateralPlanModalContent
+      key={sessionKey}
+      onClose={onClose}
+      customer={customer}
+      skills={skills}
+      gtmData={gtmData}
+      onApplyPlan={onApplyPlan}
+      onFillSlides={onFillSlides}
+      isLoadingPrompt={isLoadingPrompt}
+      systemPrompt={systemPrompt}
+      templates={templates}
+    />
+  );
+}
+
+type CollateralPlanModalContentProps = {
+  onClose: () => void;
+  customer: CustomerProfile | null;
+  skills: Skill[];
+  gtmData: CustomerGTMData | null;
+  onApplyPlan?: (plan: CollateralPlan) => void;
+  onFillSlides?: (data: SlideData) => void;
+  isLoadingPrompt: boolean;
+  systemPrompt: string;
+  templates: TemplateInfo[];
+};
+
+function CollateralPlanModalContent({
+  onClose,
+  customer,
+  skills,
+  gtmData,
+  onApplyPlan,
+  onFillSlides,
+  isLoadingPrompt,
+  systemPrompt,
+  templates,
+}: CollateralPlanModalContentProps) {
+  const buildInitialMessage = () => {
+    const contextParts: string[] = [];
+
+    if (customer) {
+      contextParts.push(`Customer: ${customer.name}${customer.industry ? ` (${customer.industry})` : ""}`);
+    } else {
+      contextParts.push("No customer selected");
     }
-  }, [planningData]);
 
-  // Initialize conversation when modal opens
-  useEffect(() => {
-    if (isOpen && messages.length === 0 && !isLoadingPrompt) {
-      // Build initial context description
-      const contextParts: string[] = [];
+    contextParts.push(`${skills.length} skills available`);
 
-      if (customer) {
-        contextParts.push(`Customer: ${customer.name}${customer.industry ? ` (${customer.industry})` : ""}`);
-      } else {
-        contextParts.push("No customer selected");
+    if (gtmData) {
+      if (gtmData.gongCalls.length > 0) {
+        contextParts.push(`${gtmData.gongCalls.length} Gong calls`);
       }
-
-      contextParts.push(`${skills.length} skills available`);
-
-      if (gtmData) {
-        if (gtmData.gongCalls.length > 0) {
-          contextParts.push(`${gtmData.gongCalls.length} Gong calls`);
-        }
-        if (gtmData.hubspotActivities.length > 0) {
-          contextParts.push(`${gtmData.hubspotActivities.length} HubSpot activities`);
-        }
+      if (gtmData.hubspotActivities.length > 0) {
+        contextParts.push(`${gtmData.hubspotActivities.length} HubSpot activities`);
       }
-
-      if (templates.length > 0) {
-        contextParts.push(`${templates.length} templates available`);
-      }
-
-      const initialMessage: Message = {
-        role: "assistant",
-        content: customer
-          ? `I'm ready to help you plan collateral for **${customer.name}**.\n\n**Context I have:**\n- ${contextParts.join("\n- ")}\n\nWhat would you like to create? I can suggest battlecards, one-pagers, proposals, case studies, or custom content based on your needs.`
-          : `I'm ready to help you plan sales collateral.\n\n**Context I have:**\n- ${contextParts.join("\n- ")}\n\nSelect a customer from the Focus Bar to get personalized recommendations, or tell me what type of collateral you'd like to create.`,
-      };
-
-      setMessages([initialMessage]);
     }
-  }, [isOpen, messages.length, isLoadingPrompt, customer, skills, gtmData, templates]);
 
-  // Reset state when modal closes
-  useEffect(() => {
-    if (!isOpen) {
-      setMessages([]);
-      setInput("");
-      setApprovedPlan(null);
-      setSlideData(null);
+    if (templates.length > 0) {
+      contextParts.push(`${templates.length} templates available`);
     }
-  }, [isOpen]);
+
+    return {
+      role: "assistant",
+      content: customer
+        ? `I'm ready to help you plan collateral for **${customer.name}**.\n\n**Context I have:**\n- ${contextParts.join("\n- ")}\n\nWhat would you like to create? I can suggest battlecards, one-pagers, proposals, case studies, or custom content based on your needs.`
+        : `I'm ready to help you plan sales collateral.\n\n**Context I have:**\n- ${contextParts.join("\n- ")}\n\nSelect a customer from the Focus Bar to get personalized recommendations, or tell me what type of collateral you'd like to create.`,
+    };
+  };
+
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (isLoadingPrompt) {
+      return [];
+    }
+    return [buildInitialMessage()];
+  });
+  const [input, setInput] = useState("");
+  const [approvedPlan, setApprovedPlan] = useState<CollateralPlan | null>(null);
+  const [slideData, setSlideData] = useState<SlideData | null>(null);
 
   // Send message mutation
   type SendMessageInput = {
@@ -245,8 +279,6 @@ export function CollateralPlanModal({
       onClose();
     }
   };
-
-  if (!isOpen) return null;
 
   return (
     <div
