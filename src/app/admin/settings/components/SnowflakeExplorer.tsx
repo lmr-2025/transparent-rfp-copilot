@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronDown, ChevronRight, Database, Table, Columns, Eye, RefreshCw, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { parseApiData } from "@/lib/apiClient";
@@ -51,7 +51,22 @@ export default function SnowflakeExplorer() {
     setExpandedSections(newExpanded);
   };
 
-  const testConnection = async () => {
+  const loadSchemas = useCallback(async () => {
+    setLoading("schemas");
+    try {
+      const res = await fetch("/api/snowflake/schema?action=schemas");
+      if (!res.ok) throw new Error("Failed to load schemas");
+      const json = await res.json();
+      const data = parseApiData<{ schemas: string[] }>(json);
+      setSchemas(data.schemas || []);
+    } catch {
+      toast.error("Failed to load schemas");
+    } finally {
+      setLoading(null);
+    }
+  }, []);
+
+  const testConnection = useCallback(async () => {
     setTesting(true);
     try {
       const res = await fetch("/api/snowflake/test");
@@ -75,24 +90,9 @@ export default function SnowflakeExplorer() {
     } finally {
       setTesting(false);
     }
-  };
+  }, [loadSchemas]);
 
-  const loadSchemas = async () => {
-    setLoading("schemas");
-    try {
-      const res = await fetch("/api/snowflake/schema?action=schemas");
-      if (!res.ok) throw new Error("Failed to load schemas");
-      const json = await res.json();
-      const data = parseApiData<{ schemas: string[] }>(json);
-      setSchemas(data.schemas || []);
-    } catch (error) {
-      toast.error("Failed to load schemas");
-    } finally {
-      setLoading(null);
-    }
-  };
-
-  const loadTables = async (schema: string) => {
+  const loadTables = useCallback(async (schema: string) => {
     setSelectedSchema(schema);
     setSelectedTable(null);
     setColumns([]);
@@ -104,14 +104,14 @@ export default function SnowflakeExplorer() {
       const json = await res.json();
       const data = parseApiData<{ tables: TableInfo[] }>(json);
       setTables(data.tables || []);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load tables");
     } finally {
       setLoading(null);
     }
-  };
+  }, []);
 
-  const loadColumns = async (table: string) => {
+  const loadColumns = useCallback(async (table: string) => {
     if (!selectedSchema) return;
     setSelectedTable(table);
     setPreviewData(null);
@@ -124,14 +124,14 @@ export default function SnowflakeExplorer() {
       const json = await res.json();
       const data = parseApiData<{ columns: ColumnInfo[] }>(json);
       setColumns(data.columns || []);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load columns");
     } finally {
       setLoading(null);
     }
-  };
+  }, [selectedSchema]);
 
-  const loadPreview = async () => {
+  const loadPreview = useCallback(async () => {
     if (!selectedSchema || !selectedTable) return;
     setLoading("preview");
     try {
@@ -142,17 +142,17 @@ export default function SnowflakeExplorer() {
       const json = await res.json();
       const data = parseApiData<{ data: Record<string, unknown>[] }>(json);
       setPreviewData(data.data || []);
-    } catch (error) {
+    } catch {
       toast.error("Failed to load preview data");
     } finally {
       setLoading(null);
     }
-  };
+  }, [selectedSchema, selectedTable]);
 
   // Test connection on mount
   useEffect(() => {
     testConnection();
-  }, []);
+  }, [testConnection]);
 
   return (
     <div className="mt-4 border border-blue-200 rounded-lg bg-blue-50 p-4">

@@ -135,9 +135,6 @@ export function KnowledgeLibraryPanel({
   // Additional sources (docs + standalone URLs that user can customize)
   const additionalSourceCount = selectedDocCount + selectedUrlCount;
 
-  // Total only includes skill sources if the toggle is on
-  const totalSourceCount = (includeSkillSources ? skillSourceUrlCount : 0) + additionalSourceCount;
-
   const toggleCategory = (category: string) => {
     setCollapsedCategories((prev) => {
       const next = new Set(prev);

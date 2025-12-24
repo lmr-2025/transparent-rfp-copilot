@@ -5,7 +5,7 @@ import { createSkillSchema, validateBody } from "@/lib/validations";
 import { logSkillChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
-import { cacheGetOrSet, CacheKeys, CacheTTL, invalidateSkillCache } from "@/lib/cache";
+import { invalidateSkillCache } from "@/lib/cache";
 import { getSkillSlug } from "@/lib/skillFiles";
 import { saveSkillAndCommit } from "@/lib/skillGitSync";
 import { getInitialSkillStatus } from "@/lib/reviewConfig";

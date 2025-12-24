@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { ZodSchema, ZodError } from "zod";
+import { ZodSchema } from "zod";
 import { requireAuth, requireAdmin } from "@/lib/apiAuth";
 import { checkRateLimit, getRateLimitIdentifier, rateLimitConfigs } from "@/lib/rateLimit";
 import { logger } from "@/lib/logger";

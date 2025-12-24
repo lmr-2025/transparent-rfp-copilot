@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
@@ -30,7 +29,7 @@ const execAsync = promisify(exec);
  *   "output": "✨ Created: 2\n🔄 Updated: 5\n⏭️  Skipped: 10\n❌ Errors: 0\n📁 Total: 17"
  * }
  */
-export async function POST(request: NextRequest) {
+export async function POST() {
   const auth = await requireAuth();
   if (!auth.authorized) {
     return auth.response;

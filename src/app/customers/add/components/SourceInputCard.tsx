@@ -3,7 +3,7 @@
 import { useRef } from "react";
 import Link from "next/link";
 import { styles } from "./styles";
-import { UploadedDocument, SalesforceSearchResult, SalesforceEnrichment } from "./types";
+import { UploadedDocument, SalesforceSearchResult } from "./types";
 
 type UploadProgress = {
   current: number;

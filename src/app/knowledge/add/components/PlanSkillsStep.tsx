@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { SkipForward, AlertTriangle, X } from "lucide-react";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
@@ -107,7 +107,7 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
   }, [urls, existingSkills]);
 
   // Build source summaries for context
-  const buildSourceSummaries = () => {
+  const buildSourceSummaries = useCallback(() => {
     const sources: {
       urls: { url: string; title?: string; preview?: string }[];
       documents: { id: string; filename: string; preview?: string }[];
@@ -120,16 +120,16 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
       })),
     };
     return sources;
-  };
+  }, [urls, uploadedDocuments]);
 
   // Build existing skills summaries
-  const buildExistingSkillsSummaries = () => {
+  const buildExistingSkillsSummaries = useCallback(() => {
     return existingSkills.map((skill) => ({
       id: skill.id,
       title: skill.title,
       contentPreview: skill.content.slice(0, 200) + (skill.content.length > 200 ? "..." : ""),
     }));
-  };
+  }, [existingSkills]);
 
   // Parse skill plan from response
   const parseSkillPlan = (response: string): SkillPlan | null => {
@@ -180,7 +180,7 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
   };
 
   // Build initial message based on planning mode
-  const buildInitialMessage = (): string => {
+  const buildInitialMessage = useCallback((): string => {
     if (planningMode.type === "merge") {
       const skillTitles = planningMode.skillIds
         .map(id => existingSkills.find(s => s.id === id)?.title)
@@ -193,10 +193,10 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
       return `I need to create a new skill about "${planningMode.topic}". This was identified as a gap in my knowledge library. What sources would you recommend I add, and what key questions should this skill answer?`;
     }
     return "Please analyze the sources I've added and suggest how to organize them into skills. Look at the actual content and tell me what you see.";
-  };
+  }, [planningMode, existingSkills]);
 
   // Build mode context for API (includes full skill content and source URLs for merge/split)
-  const buildModeContext = () => {
+  const buildModeContext = useCallback(() => {
     if (planningMode.type === "merge") {
       return {
         mode: "merge",
@@ -228,7 +228,7 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
       };
     }
     return { mode: "normal" };
-  };
+  }, [planningMode, existingSkills]);
 
   // Initialize conversation by calling API to analyze sources
   useEffect(() => {
@@ -306,7 +306,18 @@ export default function PlanSkillsStep({ existingSkills }: PlanSkillsStepProps) 
     };
 
     initializeConversation();
-  }, [planningMode]);
+  }, [
+    addPlanningMessage,
+    buildExistingSkillsSummaries,
+    buildInitialMessage,
+    buildModeContext,
+    buildSourceSummaries,
+    planningMessages.length,
+    planningMode,
+    setSkillPlan,
+    uploadedDocuments.length,
+    urls.length,
+  ]);
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;

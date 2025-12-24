@@ -416,7 +416,7 @@ ${keyFactsText}`;
     }
   };
 
-  const handleViewTransparency = (_message: ChatMessage) => {
+  const handleViewTransparency = () => {
     const data = lastTransparency || buildTransparencyData();
     setTransparencyData(data);
     setShowTransparency(true);

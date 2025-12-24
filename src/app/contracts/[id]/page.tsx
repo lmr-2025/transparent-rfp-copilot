@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useEffect, useCallback, use, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
-import { ArrowLeft, Flag, Check, AlertTriangle, Info, Plus, RefreshCw, ChevronDown, ChevronUp, FileText, X, Download, Shield, ShieldCheck, MessageSquareText } from "lucide-react";
+import { ArrowLeft, Flag, Check, Plus, RefreshCw, ChevronDown, ChevronUp, FileText, X, Download, Shield, MessageSquareText } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +92,6 @@ const categoryBuckets: Record<CategoryBucket, { label: string; categories: Findi
 
 export default function ContractDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const router = useRouter();
   const { data: session } = useSession();
   const [contract, setContract] = useState<ContractReview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -355,7 +353,7 @@ export default function ContractDetailPage({ params }: { params: Promise<{ id: s
   };
 
   // Computed values
-  const findings = contract?.findings || [];
+  const findings = useMemo(() => contract?.findings ?? [], [contract?.findings]);
   const filteredFindings = useMemo(() => {
     return findings.filter((f) => {
       if (filterRating !== "all" && f.rating !== filterRating) return false;

@@ -200,7 +200,7 @@ const initialState = {
   editingDraft: null as { groupId: string; field: "title" | "content" } | null,
 };
 
-export const useBulkImportStore = create<BulkImportState>((set, get) => ({
+export const useBulkImportStore = create<BulkImportState>((set) => ({
   ...initialState,
 
   // Workflow actions

@@ -6,7 +6,6 @@
 import type {
   ParsedPlaceholder,
   PlaceholderType,
-  PlaceholderMapping,
   TemplateFillContext,
 } from "@/types/template";
 

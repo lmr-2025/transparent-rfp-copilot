@@ -15,6 +15,5 @@ export function getTestMocks(): TestMocks {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __testMocks: TestMocks | undefined;
 }

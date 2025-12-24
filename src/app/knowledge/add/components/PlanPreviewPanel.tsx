@@ -1,6 +1,6 @@
 "use client";
 
-import { FileText, Merge, HelpCircle, Check, SkipForward, ArrowRight } from "lucide-react";
+import { FileText, Merge, HelpCircle, Check, SkipForward } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SkillPlan, SkillPlanItem } from "@/stores/bulk-import-store";
 

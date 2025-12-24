@@ -61,7 +61,7 @@ export default function ReviewInbox() {
           const data = await response.json();
           setCounts(data.data?.counts || { pending: 0, approved: 0, corrected: 0 });
         }
-      } catch (error) {
+      } catch {
         // Silent fail for background fetch
       }
     };
@@ -110,7 +110,7 @@ export function ReviewBadge() {
           const data = await response.json();
           setCount(data.data?.counts?.pending || 0);
         }
-      } catch (error) {
+      } catch {
         // Silent fail
       }
     };

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2, ChevronDown, ChevronUp, ChevronRight, BookOpen, FileText, Globe, Code, User, ExternalLink, History, UserCog, CheckSquare, Square, RefreshCw, Tag, Wand2, Link2, Pencil, Check, X, GitBranch, AlertTriangle, Save } from "lucide-react";
+import { Trash2, ChevronDown, ChevronUp, BookOpen, FileText, Globe, Code, User, ExternalLink, History, UserCog, CheckSquare, Square, RefreshCw, Tag, Wand2, Link2, Pencil, Check, X, GitBranch, AlertTriangle, Save } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -130,7 +130,7 @@ export function KnowledgeItemCard({
     try {
       const result = await onRefresh(item.id);
       setRefreshResult(result);
-    } catch (error) {
+    } catch {
       // Error will be shown in dialog
       setRefreshResult(null);
     }

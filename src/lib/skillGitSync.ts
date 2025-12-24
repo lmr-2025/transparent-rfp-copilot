@@ -39,7 +39,7 @@ export async function saveSkillAndCommit(
     await execAsync("git diff --staged --quiet");
     // No changes, skip commit
     return null;
-  } catch (error) {
+  } catch {
     // Has changes, proceed with commit
   }
 
@@ -87,7 +87,7 @@ export async function updateSkillAndCommit(
   try {
     await execAsync("git diff --staged --quiet");
     return null; // No changes
-  } catch (error) {
+  } catch {
     // Has changes, proceed
   }
 
@@ -128,7 +128,7 @@ export async function deleteSkillAndCommit(
   try {
     await execAsync("git diff --staged --quiet");
     return null; // No changes
-  } catch (error) {
+  } catch {
     // Has changes, proceed
   }
 
@@ -179,7 +179,7 @@ export async function getSkillHistory(
         const [sha, author, email, date, message] = line.split("|");
         return { sha, author, email, date, message };
       });
-  } catch (error) {
+  } catch {
     // File not found or no commits
     return [];
   }
@@ -204,7 +204,7 @@ export async function getSkillDiff(
       `git diff ${fromCommit} ${toCommit} -- "${filepath}"`
     );
     return stdout;
-  } catch (error) {
+  } catch {
     return "";
   }
 }

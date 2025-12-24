@@ -79,7 +79,7 @@ export function PersonasTab() {
     queryKey: ["instruction-presets"],
   });
 
-  const presets = presetsData?.presets || [];
+  const presets = useMemo(() => presetsData?.presets ?? [], [presetsData?.presets]);
 
   // Fetch skill categories for the category picker
   const { data: categoriesData } = useApiQuery<{ categories: SkillCategory[] }>({

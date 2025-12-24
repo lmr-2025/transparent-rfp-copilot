@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Upload, FileText, Trash2, ChevronDown, ChevronUp } from "lucide-react";
 import { useConfirm } from "@/components/ConfirmModal";
 
@@ -135,14 +135,7 @@ export default function CustomerDocuments({ customerId, customerName }: Props) {
   const [uploadDocType, setUploadDocType] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
 
-  // Load documents when expanded
-  useEffect(() => {
-    if (expanded && documents.length === 0) {
-      loadDocuments();
-    }
-  }, [expanded]);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -155,7 +148,14 @@ export default function CustomerDocuments({ customerId, customerName }: Props) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerId]);
+
+  // Load documents when expanded
+  useEffect(() => {
+    if (expanded && documents.length === 0) {
+      loadDocuments();
+    }
+  }, [expanded, documents.length, loadDocuments]);
 
   const handleFileSelect = (file: File) => {
     setUploadFile(file);

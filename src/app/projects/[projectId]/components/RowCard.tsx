@@ -110,7 +110,6 @@ export default function RowCard({
   // Lock by default when response exists and has been reviewed/approved
   // Project is fully locked when finalized
   const hasResponse = Boolean(row.response);
-  const isReviewed = row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED";
   const isProjectFinalized = projectStatus === "finalized";
   const locked = isProjectFinalized || (hasResponse && !isEditing);
 

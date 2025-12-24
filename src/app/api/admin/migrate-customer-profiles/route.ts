@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
@@ -18,7 +17,7 @@ type KeyFact = {
  *
  * This is idempotent - profiles that already have content are skipped.
  */
-export async function POST(request: NextRequest) {
+export async function POST() {
   const auth = await requireAuth();
   if (!auth.authorized) {
     return auth.response;

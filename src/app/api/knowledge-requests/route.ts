@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAuth, requireAnyCapability } from "@/lib/apiAuth";
+import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { z } from "zod";

@@ -39,9 +39,6 @@ const PROMPTS_DIR = path.join(process.cwd(), "prompts");
 const BLOCKS_DIR = path.join(PROMPTS_DIR, "blocks");
 const MODIFIERS_DIR = path.join(PROMPTS_DIR, "modifiers");
 
-// Variant separator pattern: ---variant:{context}---
-const VARIANT_SEPARATOR = /^---variant:(\w+)---$/m;
-
 /**
  * Parse variants from content using ---variant:{context}--- markers
  * The content before the first marker is the "default" variant

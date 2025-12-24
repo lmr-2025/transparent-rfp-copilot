@@ -44,7 +44,6 @@ export default function CustomerProfileBuilderPage() {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number; currentFileName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   // Transparency state
   const [analyzeTransparency, setAnalyzeTransparency] = useState<TransparencyData | null>(null);

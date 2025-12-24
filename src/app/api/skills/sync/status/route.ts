@@ -1,4 +1,3 @@
-import { NextRequest } from "next/server";
 import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
@@ -32,7 +31,7 @@ import { getSyncHealthStatus } from "@/lib/skillSyncLog";
  *   "healthy": true
  * }
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   const auth = await requireAuth();
   if (!auth.authorized) {
     return auth.response;

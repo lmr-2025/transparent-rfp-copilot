@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { parseApiData } from "@/lib/apiClient";
-import { PromptBlock, PromptModifier, PromptContext, PromptComposition } from "@/lib/promptBlocks";
+import { PromptBlock, PromptContext, PromptComposition } from "@/lib/promptBlocks";
 
 // Types for optimization suggestions
 type OptimizationSuggestion = {
@@ -27,7 +27,6 @@ type OptimizeResponse = {
 
 type PromptPreviewPanelProps = {
   blocks: PromptBlock[];
-  modifiers: PromptModifier[];
   compositions: PromptComposition[];
   previewContext: PromptContext;
   onContextChange: (context: PromptContext) => void;
@@ -71,7 +70,6 @@ const contextColors: Record<PromptContext, { bg: string; border: string; text: s
 
 export default function PromptPreviewPanel({
   blocks,
-  modifiers,
   compositions,
   previewContext,
   onContextChange,

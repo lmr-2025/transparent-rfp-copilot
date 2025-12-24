@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import {
   BookOpen,
   FileText,
@@ -43,29 +43,10 @@ type CustomerDocument = {
   uploadedAt: string;
 };
 
-// Helper to extract a readable title from a URL path
-function getTitleFromUrl(url: string): string {
-  try {
-    const urlObj = new URL(url);
-    const pathSegments = urlObj.pathname.split("/").filter(Boolean);
-    const lastSegment = pathSegments[pathSegments.length - 1] || "";
-    const withoutExt = lastSegment.replace(/\.(md|html|htm|pdf|txt)$/i, "");
-    if (withoutExt) {
-      return withoutExt
-        .replace(/[-_]/g, " ")
-        .replace(/\b\w/g, (c) => c.toUpperCase());
-    }
-    return urlObj.hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
 interface CollapsibleKnowledgeSidebarProps {
   skills: Skill[];
   documents: { id: string; title: string; filename: string }[];
   urls: ReferenceUrl[];
-  customers: CustomerProfile[];
   selectedCustomer: CustomerProfile | null;
   selectedPersonaName?: string | null;
   isLoading?: boolean;
@@ -80,7 +61,6 @@ export function CollapsibleKnowledgeSidebar({
   skills,
   documents,
   urls,
-  customers,
   selectedCustomer,
   selectedPersonaName,
   isLoading,

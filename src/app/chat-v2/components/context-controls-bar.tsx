@@ -108,7 +108,7 @@ export function ContextControlsBar({
       }
     };
     loadPresets();
-  }, []);
+  }, [onPresetChange, onUserInstructionsChange, userInstructions]);
 
   const handlePresetSelect = (preset: InstructionPreset | null) => {
     onPresetChange(preset);

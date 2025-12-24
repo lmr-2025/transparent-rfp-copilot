@@ -20,8 +20,6 @@ const createTemplateSchema = z.object({
   sortOrder: z.number().int().optional().default(0),
 });
 
-const updateTemplateSchema = createTemplateSchema.partial();
-
 // GET /api/templates - List all templates
 export async function GET(request: NextRequest) {
   try {

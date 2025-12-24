@@ -1,6 +1,6 @@
 "use client";
 
-import { BulkProject, ProjectCustomerProfileRef } from "@/types/bulkProject";
+import { BulkProject } from "@/types/bulkProject";
 import ExportDropdown from "./ExportDropdown";
 
 const styles = {

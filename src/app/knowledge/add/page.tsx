@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState, useRef, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
-import { Skill, SourceUrl, SkillHistoryEntry, SkillCategoryItem } from "@/types/skill";
+import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import { useAllCategories } from "@/hooks/use-knowledge-data";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
@@ -76,8 +76,6 @@ function AddKnowledgeContent() {
     moveUrl,
     createNewGroupFromUrl,
     reset,
-    skillPlan,
-    planningMode,
     setPlanningMode,
     clearPlanningMessages,
   } = useBulkImportStore();
@@ -105,7 +103,15 @@ function AddKnowledgeContent() {
 
   useEffect(() => {
     isProcessingRef.current = ["analyzing", "generating", "saving"].includes(workflowStep);
-  }, [workflowStep]);
+  }, [
+    analyzeAndGroupSources,
+    clearUploadedDocuments,
+    setUrlInput,
+    skillGroups.length,
+    uploadedDocuments,
+    urlInput,
+    workflowStep,
+  ]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -206,7 +212,7 @@ function AddKnowledgeContent() {
   };
 
   // Step 1: Analyze and group sources (URLs and/or documents)
-  const analyzeAndGroupSources = async (urls: string[], documents: DocumentSource[]) => {
+  const analyzeAndGroupSources = useCallback(async (urls: string[], documents: DocumentSource[]) => {
     setWorkflowStep("analyzing");
     setErrorMessage(null);
 
@@ -289,7 +295,7 @@ function AddKnowledgeContent() {
       setErrorMessage(error instanceof Error ? error.message : "Analysis failed");
       setWorkflowStep("input");
     }
-  };
+  }, [setErrorMessage, setSkillGroups, setWorkflowStep, skills]);
 
   const handleStartAnalysis = () => {
     setErrorMessage(null);
@@ -321,7 +327,15 @@ function AddKnowledgeContent() {
 
       analyzeAndGroupSources(urls, documents);
     }
-  }, [workflowStep]);
+  }, [
+    analyzeAndGroupSources,
+    clearUploadedDocuments,
+    setUrlInput,
+    skillGroups.length,
+    uploadedDocuments,
+    urlInput,
+    workflowStep,
+  ]);
 
   // Step 2: Generate drafts for approved groups
   const generateDrafts = async () => {

@@ -547,7 +547,6 @@ function KnowledgeLibraryContent() {
     if (!match) return;
 
     // Parse the ID to extract skillId and url
-    const parts = itemId.replace("skill-url-", "").split("-");
     // URL is everything after the skill ID (which is a UUID with dashes)
     // Skill ID is 36 chars (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
     const skillId = itemId.substring("skill-url-".length, "skill-url-".length + 36);

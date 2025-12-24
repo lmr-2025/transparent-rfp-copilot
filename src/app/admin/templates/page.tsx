@@ -74,7 +74,6 @@ export default function TemplatesPage() {
   const {
     data: templates = [],
     isLoading,
-    refetch: refetchTemplates,
   } = useApiQuery<TemplateListItem[]>({
     queryKey: ["admin-templates"],
     url: "/api/templates",

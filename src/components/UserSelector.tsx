@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Search, X, ChevronDown, User as UserIcon } from "lucide-react";
+import { Search, X } from "lucide-react";
 
 export type SelectableUser = {
   id: string;
@@ -233,6 +233,7 @@ export default function UserSelector({
             >
               {/* Avatar */}
               {user.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={user.image}
                   alt={user.name || "User"}

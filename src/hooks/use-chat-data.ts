@@ -3,9 +3,7 @@ import { loadSkillsFromApi } from "@/lib/skillStorage";
 import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
-import { Skill } from "@/types/skill";
 import { ReferenceUrl } from "@/types/referenceUrl";
-import { CustomerProfile } from "@/types/customerProfile";
 import { KnowledgeDocument } from "@/types/document";
 
 // Query keys for cache management
