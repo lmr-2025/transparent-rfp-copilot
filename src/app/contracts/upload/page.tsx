@@ -1,11 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { parseApiData } from "@/lib/apiClient";
 import { InlineError, InlineSuccess } from "@/components/ui/status-display";
+
+type CustomerOption = {
+  id: string;
+  name: string;
+};
 
 // The analysis prompt shown to the AI - keeping this visible for transparency
 const ANALYSIS_PROMPT = `You are a security and compliance expert reviewing customer contracts. Your task is to analyze security-related clauses and assess whether the organization can meet the requirements based on their documented capabilities.
@@ -163,7 +168,7 @@ export default function ContractUploadPage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState("");
-  const [customerName, setCustomerName] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [contractType, setContractType] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -171,6 +176,28 @@ export default function ContractUploadPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadedId, setUploadedId] = useState<string | null>(null);
   const [showPromptModal, setShowPromptModal] = useState(false);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+
+  // Fetch customers on mount
+  useEffect(() => {
+    async function fetchCustomers() {
+      try {
+        const res = await fetch("/api/customers");
+        if (res.ok) {
+          const json = await res.json();
+          setCustomers(json.data?.profiles || json.profiles || []);
+        }
+      } catch {
+        // Silently fail - customers are optional
+      } finally {
+        setCustomersLoading(false);
+      }
+    }
+    fetchCustomers();
+  }, []);
+
+  const selectedCustomer = customers.find((c) => c.id === customerId);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -220,7 +247,8 @@ export default function ContractUploadPage() {
       const formData = new FormData();
       formData.append("file", file);
       formData.append("name", name || file.name.replace(/\.[^.]+$/, ""));
-      if (customerName) formData.append("customerName", customerName);
+      if (customerId) formData.append("customerId", customerId);
+      if (selectedCustomer) formData.append("customerName", selectedCustomer.name);
       if (contractType) formData.append("contractType", contractType);
 
       const response = await fetch("/api/contracts", {
@@ -272,7 +300,7 @@ export default function ContractUploadPage() {
   const handleReset = () => {
     setFile(null);
     setName("");
-    setCustomerName("");
+    setCustomerId("");
     setContractType("");
     setUploadedId(null);
     setError(null);
@@ -362,14 +390,28 @@ export default function ContractUploadPage() {
               style={styles.input}
             />
 
-            <label style={styles.label}>Customer Name</label>
-            <input
-              type="text"
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="e.g., Acme Corporation"
-              style={styles.input}
-            />
+            <label style={styles.label}>Customer</label>
+            <select
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              style={styles.select}
+              disabled={customersLoading}
+            >
+              <option value="">{customersLoading ? "Loading customers..." : "Select customer (optional)"}</option>
+              {customers.map((customer) => (
+                <option key={customer.id} value={customer.id}>
+                  {customer.name}
+                </option>
+              ))}
+            </select>
+            {customers.length === 0 && !customersLoading && (
+              <p style={{ color: "#64748b", fontSize: "13px", marginTop: "-12px", marginBottom: "16px" }}>
+                No customer profiles yet.{" "}
+                <Link href="/customers" style={{ color: "#3b82f6" }}>
+                  Create one
+                </Link>
+              </p>
+            )}
 
             <label style={styles.label}>Contract Type</label>
             <select
@@ -409,9 +451,9 @@ export default function ContractUploadPage() {
             {name || file?.name}
           </h3>
 
-          {customerName && (
+          {selectedCustomer && (
             <p style={{ color: "#6b7280", margin: "4px 0" }}>
-              <strong>Customer:</strong> {customerName}
+              <strong>Customer:</strong> {selectedCustomer.name}
             </p>
           )}
           {contractType && (

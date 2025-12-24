@@ -133,13 +133,21 @@ export default function HomePage() {
         <p style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "16px" }}>
           These power everything else. Build your knowledge base and configure how AI responds.
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "repeat(2, 1fr)" : "1fr", gap: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
           <Card
             href="/knowledge"
             title="Knowledge Base"
-            description="Skills, documents, URLs, and customer profiles that ground all AI responses. Your single source of truth."
+            description="Skills, documents, and URLs that ground all AI responses. Your single source of truth."
             accentColor="#f59e0b"
             bgColor="#fffbeb"
+            featured
+          />
+          <Card
+            href="/customers"
+            title="Customer Profiles"
+            description="Manage customer information to personalize AI responses for specific accounts and industries."
+            accentColor="#f97316"
+            bgColor="#fff7ed"
             featured
           />
           {isAdmin && (

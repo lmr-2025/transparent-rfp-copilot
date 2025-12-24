@@ -32,6 +32,13 @@ export async function GET(request: NextRequest) {
         filename: true,
         fileType: true,
         customerName: true,
+        customerId: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         contractType: true,
         status: true,
         overallRating: true,
@@ -56,7 +63,9 @@ export async function GET(request: NextRequest) {
         id: r.id,
         name: r.name,
         filename: r.filename,
-        customerName: r.customerName,
+        customerName: r.customer?.name || r.customerName, // Prefer linked customer name
+        customerId: r.customerId,
+        customer: r.customer,
         contractType: r.contractType,
         status: r.status,
         overallRating: r.overallRating,
@@ -90,6 +99,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const name = formData.get("name") as string | null;
     const customerName = formData.get("customerName") as string | null;
+    const customerId = formData.get("customerId") as string | null;
     const contractType = formData.get("contractType") as string | null;
 
     if (!file) {
@@ -129,6 +139,7 @@ export async function POST(request: NextRequest) {
         filename,
         fileType,
         customerName: customerName || undefined,
+        customerId: customerId || undefined,
         contractType: contractType || undefined,
         extractedText,
         status: "PENDING",

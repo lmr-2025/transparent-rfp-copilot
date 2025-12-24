@@ -337,6 +337,7 @@ model CustomerProfile {
   projects          ProjectCustomerProfile[] // Legacy many-to-many relation
   documents         CustomerDocument[]
   collateralOutputs CollateralOutput[]
+  contractReviews   ContractReview[] @relation("ContractCustomer") // Contracts for this customer
 
   @@index([isActive, updatedAt])
   @@index([industry])
@@ -750,7 +751,9 @@ model ContractReview {
   name            String   // Contract/document name
   filename        String   // Original filename
   fileType        String   // pdf, docx
-  customerName    String?  // Who the contract is with
+  customerName    String?  // Legacy: kept for backwards compatibility
+  customerId      String?  // Foreign key to CustomerProfile
+  customer        CustomerProfile? @relation("ContractCustomer", fields: [customerId], references: [id], onDelete: SetNull)
   contractType    String?  // e.g., "MSA", "DPA", "NDA", "SaaS Agreement"
   extractedText   String   @db.Text // Full extracted text
   status          ContractReviewStatus @default(PENDING)
@@ -789,6 +792,7 @@ model ContractReview {
   @@index([status])
   @@index([createdAt])
   @@index([customerName])
+  @@index([customerId])
   @@index([ownerId])
 }
 

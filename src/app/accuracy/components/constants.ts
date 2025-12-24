@@ -12,6 +12,7 @@ export const TABS: { id: TabId; label: string }[] = [
   { id: "questions", label: "Questions" },
   { id: "contracts", label: "Contracts" },
   { id: "rfps", label: "RFPs" },
+  { id: "feedback", label: "Feedback" },
 ];
 
 // Helper functions

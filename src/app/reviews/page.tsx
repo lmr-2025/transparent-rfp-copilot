@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
+import { Loader2 } from "lucide-react";
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 interface ReviewItem {
@@ -253,7 +254,7 @@ function formatTimeAgo(dateString?: string) {
 
 type TabType = "pending" | "flagged" | "resolved" | "approved" | "corrected" | "all";
 
-export default function ReviewsPage() {
+function ReviewsContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -746,5 +747,19 @@ export default function ReviewsPage() {
         ))
       )}
     </div>
+  );
+}
+
+export default function ReviewsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      }
+    >
+      <ReviewsContent />
+    </Suspense>
   );
 }

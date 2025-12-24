@@ -4,6 +4,11 @@ export interface User {
   email: string | null;
 }
 
+export interface CustomerOption {
+  id: string;
+  name: string;
+}
+
 export type SheetData = {
   name: string;
   columns: string[];

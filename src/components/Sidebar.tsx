@@ -66,7 +66,7 @@ const navItems: NavSection[] = [
     adminOnly: true,
     items: [
       { href: "/admin/libraries", label: "Libraries", hint: "Prompts, personas, templates" },
-      { href: "/accuracy", label: "AI Accuracy", hint: "Track performance" },
+      { href: "/accuracy", label: "AI Accuracy & Feedback", hint: "Track performance & feedback" },
       { href: "/admin/settings", label: "Settings", hint: "App configuration" },
     ],
   },

@@ -245,21 +245,21 @@ What would you like to create?`,
       }
 
       toast.success("Template created successfully!");
-      router.push("/admin/templates");
+      router.push("/admin/libraries?library=templates&tab=manage");
     } catch {
       toast.error("Failed to create template");
     }
   };
 
   const handleSkip = () => {
-    router.push("/admin/templates");
+    router.push("/admin/libraries?library=templates&tab=manage");
   };
 
   const handleCancel = () => {
     if (messages.length > 1 || templatePlan) {
       setShowCancelConfirm(true);
     } else {
-      router.push("/admin/templates");
+      router.push("/admin/libraries?library=templates&tab=manage");
     }
   };
 
@@ -275,7 +275,7 @@ What would you like to create?`,
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <Link href="/admin/templates">
+        <Link href="/admin/libraries?library=templates&tab=manage">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Back
@@ -390,7 +390,7 @@ What would you like to create?`,
               <Button variant="outline" onClick={() => setShowCancelConfirm(false)}>
                 Keep building
               </Button>
-              <Button variant="destructive" onClick={() => router.push("/admin/templates")}>
+              <Button variant="destructive" onClick={() => router.push("/admin/libraries?library=templates&tab=manage")}>
                 Cancel
               </Button>
             </div>

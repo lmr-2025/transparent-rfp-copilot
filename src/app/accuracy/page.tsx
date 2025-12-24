@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { Loader2 } from "lucide-react";
 import {
   DashboardTab,
   QuestionsTab,
   ContractsTab,
   RFPsTab,
+  FeedbackTab,
   TABS,
   type TabId,
 } from "./components";
 
-export default function AccuracyPage() {
+function AccuracyContent() {
   const { data: session } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -36,10 +38,10 @@ export default function AccuracyPage() {
       {/* Header */}
       <div style={{ marginBottom: "24px" }}>
         <h1 style={{ fontSize: "2rem", fontWeight: 700, marginBottom: "8px" }}>
-          AI Accuracy
+          AI Accuracy & Feedback
         </h1>
         <p style={{ color: "#64748b" }}>
-          Track answer quality and review feedback from all sources
+          Track answer quality, review corrections, and monitor user feedback
         </p>
       </div>
 
@@ -83,6 +85,10 @@ export default function AccuracyPage() {
         <RFPsTab />
       )}
 
+      {activeTab === "feedback" && (
+        <FeedbackTab />
+      )}
+
       {/* Back Link */}
       <div style={{ marginTop: "32px", textAlign: "center" }}>
         <Link
@@ -97,5 +103,19 @@ export default function AccuracyPage() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function AccuracyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      }
+    >
+      <AccuracyContent />
+    </Suspense>
   );
 }

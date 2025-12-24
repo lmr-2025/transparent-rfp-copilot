@@ -1,32 +1,37 @@
 "use client";
 
 import { ChangeEvent } from "react";
-import { User, styles } from "./types";
+import Link from "next/link";
+import { User, CustomerOption, styles } from "./types";
 
 type ProjectMetadataCardProps = {
   projectName: string;
-  customerName: string;
+  customerId: string;
   selectedOwnerId: string;
   users: User[];
+  customers: CustomerOption[];
+  customersLoading: boolean;
   currentUserId?: string;
   detectedRows: number;
   isParsing: boolean;
   onProjectNameChange: (value: string) => void;
-  onCustomerNameChange: (value: string) => void;
+  onCustomerIdChange: (value: string) => void;
   onOwnerIdChange: (value: string) => void;
   onFileUpload: (event: ChangeEvent<HTMLInputElement>) => void;
 };
 
 export default function ProjectMetadataCard({
   projectName,
-  customerName,
+  customerId,
   selectedOwnerId,
   users,
+  customers,
+  customersLoading,
   currentUserId,
   detectedRows,
   isParsing,
   onProjectNameChange,
-  onCustomerNameChange,
+  onCustomerIdChange,
   onOwnerIdChange,
   onFileUpload,
 }: ProjectMetadataCardProps) {
@@ -55,17 +60,31 @@ export default function ProjectMetadataCard({
         The owner can edit this project and will receive review notifications.
       </p>
 
-      <label style={styles.label} htmlFor="customerName">
-        Customer Name (optional)
+      <label style={styles.label} htmlFor="customerId">
+        Customer (optional)
       </label>
-      <input
-        id="customerName"
-        type="text"
-        value={customerName}
-        onChange={(event) => onCustomerNameChange(event.target.value)}
+      <select
+        id="customerId"
+        value={customerId}
+        onChange={(event) => onCustomerIdChange(event.target.value)}
         style={styles.input}
-        placeholder="e.g. Acme Corp"
-      />
+        disabled={customersLoading}
+      >
+        <option value="">{customersLoading ? "Loading customers..." : "Select customer"}</option>
+        {customers.map((customer) => (
+          <option key={customer.id} value={customer.id}>
+            {customer.name}
+          </option>
+        ))}
+      </select>
+      {customers.length === 0 && !customersLoading && (
+        <p style={{ color: "#64748b", fontSize: "13px", marginTop: "-8px", marginBottom: "12px" }}>
+          No customer profiles yet.{" "}
+          <Link href="/customers" style={{ color: "#3b82f6" }}>
+            Create one
+          </Link>
+        </p>
+      )}
 
       <label style={styles.label} htmlFor="projectName">
         Project name

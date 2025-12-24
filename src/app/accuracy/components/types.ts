@@ -9,7 +9,7 @@ export type {
 export { statusConfig } from "@/app/admin/question-log/types";
 
 // Tab types
-export type TabId = "dashboard" | "questions" | "contracts" | "rfps";
+export type TabId = "dashboard" | "questions" | "contracts" | "rfps" | "feedback";
 
 // Accuracy dashboard data
 export type AccuracyData = {

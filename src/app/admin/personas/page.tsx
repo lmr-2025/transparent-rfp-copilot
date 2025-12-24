@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -16,7 +16,7 @@ import { OverviewTab, PersonasTab, BuilderTab, type InstructionPreset } from "./
 
 type TabType = "overview" | "personas" | "builder";
 
-export default function PersonasPage() {
+function PersonasContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -104,5 +104,19 @@ export default function PersonasPage() {
       {activeTab === "personas" && <PersonasTab />}
       {activeTab === "builder" && <BuilderTab onPresetSaved={() => handleTabChange("personas")} />}
     </div>
+  );
+}
+
+export default function PersonasPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen">
+          <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+        </div>
+      }
+    >
+      <PersonasContent />
+    </Suspense>
   );
 }

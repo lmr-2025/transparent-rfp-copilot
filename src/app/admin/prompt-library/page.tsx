@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -10,7 +10,7 @@ import { OverviewTab, BuilderTab } from "./components";
 
 type TabType = "overview" | "builder";
 
-export default function PromptBuilderV5Page() {
+function PromptLibraryContent() {
   const { data: session, status } = useSession();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -78,5 +78,19 @@ export default function PromptBuilderV5Page() {
       {/* Tab Content */}
       {activeTab === "overview" ? <OverviewTab /> : <BuilderTab />}
     </div>
+  );
+}
+
+export default function PromptBuilderV5Page() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center h-screen text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      }
+    >
+      <PromptLibraryContent />
+    </Suspense>
   );
 }

@@ -21,12 +21,19 @@ import {
   PreviewRow,
 } from "./components";
 
+type CustomerOption = {
+  id: string;
+  name: string;
+};
+
 export default function BulkUploadPage() {
   const router = useRouter();
   const { data: session } = useSession();
   const [projectName, setProjectName] = useState("");
-  const [customerName, setCustomerName] = useState("");
+  const [customerId, setCustomerId] = useState("");
   const [users, setUsers] = useState<User[]>([]);
+  const [customers, setCustomers] = useState<CustomerOption[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>("");
   const [sheets, setSheets] = useState<SheetData[]>([]);
 
@@ -40,6 +47,17 @@ export default function BulkUploadPage() {
         setUsers(userList);
       })
       .catch(() => {});
+  }, []);
+
+  // Fetch customers for customer dropdown
+  useEffect(() => {
+    fetch("/api/customers")
+      .then((res) => res.json())
+      .then((json) => {
+        setCustomers(json.data?.profiles || json.profiles || []);
+      })
+      .catch(() => {})
+      .finally(() => setCustomersLoading(false));
   }, []);
 
   // Set default owner to current user when session loads
@@ -316,11 +334,13 @@ export default function BulkUploadPage() {
       ? [...new Set(sheets.flatMap((s) => s.columns))]
       : (columns.length > 0 ? columns : activeSheet?.columns || []);
     const selectedOwner = users.find((u) => u.id === selectedOwnerId);
+    const selectedCustomer = customers.find((c) => c.id === customerId);
 
     const project: BulkProject = {
       id: projectId,
       name: projectName.trim() || "Untitled Project",
-      customerName: customerName.trim() || undefined,
+      customerId: customerId || undefined,
+      customerName: selectedCustomer?.name || undefined,
       ownerId: selectedOwnerId || undefined,
       ownerName: selectedOwner ? (selectedOwner.name || selectedOwner.email || undefined) : undefined,
       sheetName: sheetNameForProject,
@@ -369,14 +389,16 @@ export default function BulkUploadPage() {
 
       <ProjectMetadataCard
         projectName={projectName}
-        customerName={customerName}
+        customerId={customerId}
         selectedOwnerId={selectedOwnerId}
         users={users}
+        customers={customers}
+        customersLoading={customersLoading}
         currentUserId={session?.user?.id}
         detectedRows={detectedRows}
         isParsing={isParsing}
         onProjectNameChange={setProjectName}
-        onCustomerNameChange={setCustomerName}
+        onCustomerIdChange={setCustomerId}
         onOwnerIdChange={setSelectedOwnerId}
         onFileUpload={handleFileUpload}
       />

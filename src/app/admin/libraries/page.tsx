@@ -12,7 +12,6 @@ import {
   Sparkles,
   Loader2,
   Layers,
-  MessageSquare,
   ArrowRight,
   Zap,
 } from "lucide-react";
@@ -23,10 +22,9 @@ import { useApiQuery } from "@/hooks/use-api";
 import { OverviewTab as PromptsOverview, BuilderTab as PromptsBuilder } from "../prompt-library/components";
 import { OverviewTab as PersonasOverview, PersonasTab, BuilderTab as PersonasBuilder, type InstructionPreset } from "../personas/components";
 import TemplatesTab from "../content-manager/components/TemplatesTab";
-import FeedbackTab from "../content-manager/components/FeedbackTab";
 
 type LibraryType = "all" | "prompts" | "personas" | "templates";
-type SubTab = "overview" | "manage" | "builder" | "feedback";
+type SubTab = "overview" | "manage" | "builder";
 
 const LIBRARIES: {
   id: LibraryType;
@@ -76,7 +74,6 @@ const LIBRARIES: {
     subTabs: [
       { id: "overview", label: "Overview", icon: <Map className="h-3.5 w-3.5" /> },
       { id: "manage", label: "Manage", icon: <Pencil className="h-3.5 w-3.5" /> },
-      { id: "feedback", label: "Feedback", icon: <MessageSquare className="h-3.5 w-3.5" /> },
     ],
   },
 ];
@@ -539,7 +536,6 @@ function LibrariesContent() {
     if (activeLibrary === "templates") {
       if (activeSubTab === "overview") return <TemplatesOverview templates={templates} onNavigate={handleLibraryChange} />;
       if (activeSubTab === "manage") return <TemplatesTab />;
-      if (activeSubTab === "feedback") return <FeedbackTab />;
     }
 
     return null;
