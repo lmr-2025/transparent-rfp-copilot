@@ -103,15 +103,7 @@ function AddKnowledgeContent() {
 
   useEffect(() => {
     isProcessingRef.current = ["analyzing", "generating", "saving"].includes(workflowStep);
-  }, [
-    analyzeAndGroupSources,
-    clearUploadedDocuments,
-    setUrlInput,
-    skillGroups.length,
-    uploadedDocuments,
-    urlInput,
-    workflowStep,
-  ]);
+  }, [workflowStep]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {

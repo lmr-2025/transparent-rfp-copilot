@@ -174,15 +174,6 @@ function LLMSpeedSettings({ initialOverrides }: LLMSpeedSettingsProps) {
     return feature in userOverrides;
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <InlineLoader size="md" className="text-gray-400" />
-        <span className="ml-2 text-gray-500">Loading preferences...</span>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       {/* Header */}

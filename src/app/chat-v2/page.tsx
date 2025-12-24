@@ -648,7 +648,6 @@ ${keyFactsText}`;
           skills={skills}
           documents={documents}
           urls={urls}
-          customers={customers}
           selectedCustomer={focusedCustomer}
           selectedPersonaName={selectedPresetName}
           isLoading={isDataLoading}

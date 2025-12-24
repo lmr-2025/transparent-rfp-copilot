@@ -96,7 +96,16 @@ export async function GET(request: NextRequest) {
 
     // Transform customerProfiles to a simpler format
     const transformedProjects = projects.map((project) => {
-      const transformed = {
+      const transformed: Omit<typeof project, 'customerProfiles'> & {
+        customerProfiles: { id: string; name: string; industry: string | null }[];
+        feedbackStats?: {
+          totalRows: number;
+          completedRows: number;
+          editedResponses: number;
+          reviewedRows: number;
+          flaggedRows: number;
+        };
+      } = {
         ...project,
         customerProfiles: project.customerProfiles.map((cp) => cp.profile),
       };

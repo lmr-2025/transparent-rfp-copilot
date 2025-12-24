@@ -438,7 +438,7 @@ export function GoogleSlidesPicker({ context, disabled }: GoogleSlidesPickerProp
       )}
 
       {/* Context hint */}
-      {selectedPresentation && placeholders.length > 0 && (
+      {selectedPresentation && placeholderList.length > 0 && (
         <p className="text-[10px] text-muted-foreground">
           Creates a copy and fills placeholders. Original is not modified.
         </p>

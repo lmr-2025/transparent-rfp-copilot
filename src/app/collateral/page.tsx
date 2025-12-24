@@ -618,7 +618,6 @@ Use the provided customer information and knowledge sources to fill in template 
         skills={skills}
         documents={documents}
         urls={urls}
-        customers={customers}
         selectedCustomer={selectedCustomer}
         isLoading={isContextLoading}
         isCollapsed={sidebarCollapsed}

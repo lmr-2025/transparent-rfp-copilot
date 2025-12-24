@@ -9,7 +9,7 @@ import { randomUUID } from "crypto";
 import { createHash } from "crypto";
 import prisma from "./prisma";
 import { logger } from "./logger";
-import type { Prisma } from "@prisma/client";
+import { type Prisma, FeedbackCategory } from "@prisma/client";
 
 export type TraceContext = {
   traceId: string;
@@ -157,10 +157,15 @@ export async function attachFeedbackToTrace(
   }
 ): Promise<void> {
   try {
+    // Filter to only valid FeedbackCategory values
+    const validCategories = feedback.categories.filter(
+      (c): c is FeedbackCategory => Object.values(FeedbackCategory).includes(c as FeedbackCategory)
+    );
+
     await prisma.lLMTrace.update({
       where: { traceId },
       data: {
-        feedbackCategories: feedback.categories as Prisma.InputJsonValue,
+        feedbackCategories: validCategories,
         feedbackNote: feedback.note,
         wasEdited: feedback.wasEdited,
         editDelta: feedback.editDelta,

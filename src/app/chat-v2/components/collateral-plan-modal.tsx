@@ -153,9 +153,9 @@ function CollateralPlanModalContent({
 
   const [messages, setMessages] = useState<Message[]>(() => {
     if (isLoadingPrompt) {
-      return [];
+      return [] as Message[];
     }
-    return [buildInitialMessage()];
+    return [buildInitialMessage()] as Message[];
   });
   const [input, setInput] = useState("");
   const [approvedPlan, setApprovedPlan] = useState<CollateralPlan | null>(null);

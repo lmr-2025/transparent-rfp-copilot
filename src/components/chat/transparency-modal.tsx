@@ -1,6 +1,6 @@
 "use client";
 
-import TransparencyModal, {
+import TransparencyModalBase, {
   type TransparencyConfig,
   type TransparencySection,
 } from "@/components/TransparencyModal";
@@ -76,7 +76,7 @@ export function TransparencyModal({
   ].filter(Boolean) as TransparencySection[];
 
   return (
-    <TransparencyModal
+    <TransparencyModalBase
       open={open}
       onClose={onClose}
       title={isPreview ? "System Prompt Preview" : "Prompt Transparency"}
