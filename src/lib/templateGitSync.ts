@@ -1,5 +1,3 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import {
   writeTemplateFile,
   getTemplateSlug,
@@ -7,16 +5,14 @@ import {
   deleteTemplateFile,
 } from "./templateFiles";
 import type { TemplateFile } from "./templateFiles";
-
-const execAsync = promisify(exec);
-
-/**
- * Git author information for commits
- */
-export interface GitAuthor {
-  name: string;
-  email: string;
-}
+import {
+  gitAdd,
+  gitRemove,
+  commitStagedChangesIfAny,
+  getFileHistory,
+  isPathClean,
+  GitAuthor,
+} from "./gitCommitHelpers";
 
 /**
  * Save a template to the templates/ directory and commit to git
@@ -37,28 +33,10 @@ export async function saveTemplateAndCommit(
 
   // 2. Git add
   const filepath = `templates/${slug}.md`;
-  await execAsync(`git add "${filepath}"`);
+  await gitAdd(filepath);
 
-  // 3. Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    // No changes, skip commit
-    return null;
-  } catch {
-    // Has changes, proceed with commit
-  }
-
-  // 4. Git commit with author
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // 5. Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  // 3. Commit if there are changes
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -81,32 +59,14 @@ export async function updateTemplateAndCommit(
   // If slug changed (name changed), rename the file
   if (oldSlug !== newSlug) {
     await renameTemplateFile(oldSlug, newSlug);
-    await execAsync(`git add "templates/${oldSlug}.md" "templates/${newSlug}.md"`);
+    await gitAdd([`templates/${oldSlug}.md`, `templates/${newSlug}.md`]);
   }
 
   // Write updated content
   await writeTemplateFile(newSlug, template);
-  await execAsync(`git add "templates/${newSlug}.md"`);
+  await gitAdd(`templates/${newSlug}.md`);
 
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -127,27 +87,9 @@ export async function deleteTemplateAndCommit(
   await deleteTemplateFile(slug);
 
   // Git remove
-  await execAsync(`git rm "${filepath}"`);
+  await gitRemove(filepath);
 
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -167,27 +109,7 @@ export async function getTemplateHistory(
   message: string;
 }>> {
   const filepath = `templates/${slug}.md`;
-
-  try {
-    const { stdout } = await execAsync(
-      `git log -n ${limit} --format='%H|%an|%ae|%aI|%s' -- "${filepath}"`
-    );
-
-    if (!stdout.trim()) {
-      return [];
-    }
-
-    return stdout
-      .trim()
-      .split("\n")
-      .map((line) => {
-        const [sha, author, email, date, message] = line.split("|");
-        return { sha, author, email, date, message };
-      });
-  } catch {
-    // File not found or no commits
-    return [];
-  }
+  return getFileHistory(filepath, limit);
 }
 
 /**
@@ -195,10 +117,5 @@ export async function getTemplateHistory(
  * @returns True if no uncommitted changes in templates/
  */
 export async function isTemplatesGitClean(): Promise<boolean> {
-  try {
-    await execAsync("git diff --quiet -- templates/ && git diff --staged --quiet -- templates/");
-    return true;
-  } catch {
-    return false;
-  }
+  return isPathClean("templates/");
 }

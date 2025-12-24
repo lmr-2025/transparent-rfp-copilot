@@ -1,6 +1,12 @@
-import fs from "fs/promises";
 import path from "path";
-import matter from "gray-matter";
+import {
+  readFrontmatterFile,
+  writeFrontmatterFile,
+  listMarkdownFiles,
+  fileExists,
+  ensureDir,
+  deleteFile,
+} from "./frontmatterStore";
 
 /**
  * Prompt Block file format
@@ -97,26 +103,21 @@ function serializeVariants(variants: Record<string, string>): string {
 export async function readBlockFile(blockId: string): Promise<PromptBlockFile> {
   const filepath = path.join(BLOCKS_DIR, `${blockId}.md`);
 
-  try {
-    const fileContent = await fs.readFile(filepath, "utf-8");
-    const { data: frontmatter, content } = matter(fileContent);
+  const { frontmatter, content } = await readFrontmatterFile(
+    filepath,
+    `Block file not found: ${blockId}.md`
+  );
 
-    return {
-      id: frontmatter.id || blockId,
-      name: frontmatter.name,
-      description: frontmatter.description || "",
-      tier: frontmatter.tier || 3,
-      variants: parseVariants(content),
-      created: frontmatter.created,
-      updated: frontmatter.updated,
-      updatedBy: frontmatter.updatedBy,
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Block file not found: ${blockId}.md`);
-    }
-    throw error;
-  }
+  return {
+    id: (frontmatter.id as string) || blockId,
+    name: frontmatter.name as string,
+    description: (frontmatter.description as string) || "",
+    tier: (frontmatter.tier as PromptBlockFile["tier"]) || 3,
+    variants: parseVariants(content),
+    created: frontmatter.created as string,
+    updated: frontmatter.updated as string,
+    updatedBy: frontmatter.updatedBy as string | undefined,
+  };
 }
 
 /**
@@ -126,7 +127,7 @@ export async function readBlockFile(blockId: string): Promise<PromptBlockFile> {
  */
 export async function writeBlockFile(blockId: string, block: PromptBlockFile): Promise<void> {
   // Ensure blocks directory exists
-  await fs.mkdir(BLOCKS_DIR, { recursive: true });
+  await ensureDir(BLOCKS_DIR);
 
   const frontmatter = {
     id: block.id,
@@ -140,10 +141,8 @@ export async function writeBlockFile(blockId: string, block: PromptBlockFile): P
 
   // Generate markdown with YAML frontmatter and variant content
   const content = serializeVariants(block.variants);
-  const markdown = matter.stringify(content, frontmatter);
-
   const filepath = path.join(BLOCKS_DIR, `${blockId}.md`);
-  await fs.writeFile(filepath, markdown, "utf-8");
+  await writeFrontmatterFile(filepath, content, frontmatter);
 }
 
 /**
@@ -151,17 +150,7 @@ export async function writeBlockFile(blockId: string, block: PromptBlockFile): P
  * @returns Array of block IDs (filenames without .md extension)
  */
 export async function listBlockFiles(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(BLOCKS_DIR);
-    return files
-      .filter((file) => file.endsWith(".md") && file !== "README.md")
-      .map((file) => file.replace(/\.md$/, ""));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []; // Directory doesn't exist yet
-    }
-    throw error;
-  }
+  return listMarkdownFiles(BLOCKS_DIR);
 }
 
 /**
@@ -171,12 +160,7 @@ export async function listBlockFiles(): Promise<string[]> {
  */
 export async function blockFileExists(blockId: string): Promise<boolean> {
   const filepath = path.join(BLOCKS_DIR, `${blockId}.md`);
-  try {
-    await fs.access(filepath);
-    return true;
-  } catch {
-    return false;
-  }
+  return fileExists(filepath);
 }
 
 /**
@@ -185,7 +169,7 @@ export async function blockFileExists(blockId: string): Promise<boolean> {
  */
 export async function deleteBlockFile(blockId: string): Promise<void> {
   const filepath = path.join(BLOCKS_DIR, `${blockId}.md`);
-  await fs.unlink(filepath);
+  await deleteFile(filepath);
 }
 
 // ============================================
@@ -200,26 +184,21 @@ export async function deleteBlockFile(blockId: string): Promise<void> {
 export async function readModifierFile(modifierId: string): Promise<PromptModifierFile> {
   const filepath = path.join(MODIFIERS_DIR, `${modifierId}.md`);
 
-  try {
-    const fileContent = await fs.readFile(filepath, "utf-8");
-    const { data: frontmatter, content } = matter(fileContent);
+  const { frontmatter, content } = await readFrontmatterFile(
+    filepath,
+    `Modifier file not found: ${modifierId}.md`
+  );
 
-    return {
-      id: frontmatter.id || modifierId,
-      name: frontmatter.name,
-      type: frontmatter.type || "mode",
-      tier: frontmatter.tier || 3,
-      content: content.trim(),
-      created: frontmatter.created,
-      updated: frontmatter.updated,
-      updatedBy: frontmatter.updatedBy,
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Modifier file not found: ${modifierId}.md`);
-    }
-    throw error;
-  }
+  return {
+    id: (frontmatter.id as string) || modifierId,
+    name: frontmatter.name as string,
+    type: (frontmatter.type as PromptModifierFile["type"]) || "mode",
+    tier: (frontmatter.tier as PromptModifierFile["tier"]) || 3,
+    content: content.trim(),
+    created: frontmatter.created as string,
+    updated: frontmatter.updated as string,
+    updatedBy: frontmatter.updatedBy as string | undefined,
+  };
 }
 
 /**
@@ -229,7 +208,7 @@ export async function readModifierFile(modifierId: string): Promise<PromptModifi
  */
 export async function writeModifierFile(modifierId: string, modifier: PromptModifierFile): Promise<void> {
   // Ensure modifiers directory exists
-  await fs.mkdir(MODIFIERS_DIR, { recursive: true });
+  await ensureDir(MODIFIERS_DIR);
 
   const frontmatter = {
     id: modifier.id,
@@ -242,10 +221,8 @@ export async function writeModifierFile(modifierId: string, modifier: PromptModi
   };
 
   // Generate markdown with YAML frontmatter
-  const markdown = matter.stringify(modifier.content, frontmatter);
-
   const filepath = path.join(MODIFIERS_DIR, `${modifierId}.md`);
-  await fs.writeFile(filepath, markdown, "utf-8");
+  await writeFrontmatterFile(filepath, modifier.content, frontmatter);
 }
 
 /**
@@ -253,17 +230,7 @@ export async function writeModifierFile(modifierId: string, modifier: PromptModi
  * @returns Array of modifier IDs (filenames without .md extension)
  */
 export async function listModifierFiles(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(MODIFIERS_DIR);
-    return files
-      .filter((file) => file.endsWith(".md") && file !== "README.md")
-      .map((file) => file.replace(/\.md$/, ""));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []; // Directory doesn't exist yet
-    }
-    throw error;
-  }
+  return listMarkdownFiles(MODIFIERS_DIR);
 }
 
 /**
@@ -273,12 +240,7 @@ export async function listModifierFiles(): Promise<string[]> {
  */
 export async function modifierFileExists(modifierId: string): Promise<boolean> {
   const filepath = path.join(MODIFIERS_DIR, `${modifierId}.md`);
-  try {
-    await fs.access(filepath);
-    return true;
-  } catch {
-    return false;
-  }
+  return fileExists(filepath);
 }
 
 /**
@@ -287,5 +249,5 @@ export async function modifierFileExists(modifierId: string): Promise<boolean> {
  */
 export async function deleteModifierFile(modifierId: string): Promise<void> {
   const filepath = path.join(MODIFIERS_DIR, `${modifierId}.md`);
-  await fs.unlink(filepath);
+  await deleteFile(filepath);
 }

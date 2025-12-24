@@ -1,6 +1,14 @@
-import fs from "fs/promises";
 import path from "path";
-import matter from "gray-matter";
+import {
+  createSlug,
+  readFrontmatterFile,
+  writeFrontmatterFile,
+  listMarkdownFiles,
+  fileExists,
+  ensureDir,
+  deleteFile,
+  renameFile,
+} from "./frontmatterStore";
 
 /**
  * Skill file format - matches Anthropic-compatible skill structure
@@ -35,11 +43,7 @@ const SKILLS_DIR = path.join(process.cwd(), "skills");
  * e.g., "Compliance & Certifications" -> "compliance-and-certifications"
  */
 export function getSkillSlug(title: string): string {
-  return title
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return createSlug(title);
 }
 
 /**
@@ -50,28 +54,23 @@ export function getSkillSlug(title: string): string {
 export async function readSkillFile(slug: string): Promise<SkillFile> {
   const filepath = path.join(SKILLS_DIR, `${slug}.md`);
 
-  try {
-    const fileContent = await fs.readFile(filepath, "utf-8");
-    const { data: frontmatter, content } = matter(fileContent);
+  const { frontmatter, content } = await readFrontmatterFile(
+    filepath,
+    `Skill file not found: ${slug}.md`
+  );
 
-    return {
-      id: frontmatter.id,
-      slug,
-      title: frontmatter.title,
-      content: content.trim(),
-      categories: frontmatter.categories || [],
-      owners: frontmatter.owners || [],
-      sources: frontmatter.sources || [],
-      created: frontmatter.created,
-      updated: frontmatter.updated,
-      active: frontmatter.active !== false, // Default to true
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Skill file not found: ${slug}.md`);
-    }
-    throw error;
-  }
+  return {
+    id: frontmatter.id as string,
+    slug,
+    title: frontmatter.title as string,
+    content: content.trim(),
+    categories: (frontmatter.categories as SkillFile["categories"]) || [],
+    owners: (frontmatter.owners as SkillFile["owners"]) || [],
+    sources: (frontmatter.sources as SkillFile["sources"]) || [],
+    created: frontmatter.created as string,
+    updated: frontmatter.updated as string,
+    active: frontmatter.active !== false,
+  };
 }
 
 /**
@@ -81,7 +80,7 @@ export async function readSkillFile(slug: string): Promise<SkillFile> {
  */
 export async function writeSkillFile(slug: string, skill: SkillFile): Promise<void> {
   // Ensure skills directory exists
-  await fs.mkdir(SKILLS_DIR, { recursive: true });
+  await ensureDir(SKILLS_DIR);
 
   const frontmatter = {
     id: skill.id,
@@ -95,10 +94,8 @@ export async function writeSkillFile(slug: string, skill: SkillFile): Promise<vo
   };
 
   // Generate markdown with YAML frontmatter
-  const markdown = matter.stringify(skill.content, frontmatter);
-
   const filepath = path.join(SKILLS_DIR, `${slug}.md`);
-  await fs.writeFile(filepath, markdown, "utf-8");
+  await writeFrontmatterFile(filepath, skill.content, frontmatter);
 }
 
 /**
@@ -106,17 +103,7 @@ export async function writeSkillFile(slug: string, skill: SkillFile): Promise<vo
  * @returns Array of skill slugs (filenames without .md extension)
  */
 export async function listSkillFiles(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(SKILLS_DIR);
-    return files
-      .filter((file) => file.endsWith(".md") && file !== "README.md")
-      .map((file) => file.replace(/\.md$/, ""));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []; // Directory doesn't exist yet
-    }
-    throw error;
-  }
+  return listMarkdownFiles(SKILLS_DIR);
 }
 
 /**
@@ -126,12 +113,7 @@ export async function listSkillFiles(): Promise<string[]> {
  */
 export async function skillFileExists(slug: string): Promise<boolean> {
   const filepath = path.join(SKILLS_DIR, `${slug}.md`);
-  try {
-    await fs.access(filepath);
-    return true;
-  } catch {
-    return false;
-  }
+  return fileExists(filepath);
 }
 
 /**
@@ -140,7 +122,7 @@ export async function skillFileExists(slug: string): Promise<boolean> {
  */
 export async function deleteSkillFile(slug: string): Promise<void> {
   const filepath = path.join(SKILLS_DIR, `${slug}.md`);
-  await fs.unlink(filepath);
+  await deleteFile(filepath);
 }
 
 /**
@@ -154,5 +136,5 @@ export async function renameSkillFile(oldSlug: string, newSlug: string): Promise
   const oldPath = path.join(SKILLS_DIR, `${oldSlug}.md`);
   const newPath = path.join(SKILLS_DIR, `${newSlug}.md`);
 
-  await fs.rename(oldPath, newPath);
+  await renameFile(oldPath, newPath);
 }

@@ -1,17 +1,16 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import { writeSkillFile, getSkillSlug, renameSkillFile, deleteSkillFile } from "./skillFiles";
 import type { SkillFile } from "./skillFiles";
-
-const execAsync = promisify(exec);
-
-/**
- * Git author information for commits
- */
-export interface GitAuthor {
-  name: string;
-  email: string;
-}
+import {
+  gitAdd,
+  gitRemove,
+  commitStagedChangesIfAny,
+  getFileHistory,
+  getFileDiff,
+  isRepoClean,
+  getCurrentBranch as getGitCurrentBranch,
+  pushToRemote as pushToGitRemote,
+  GitAuthor,
+} from "./gitCommitHelpers";
 
 /**
  * Save a skill to the skills/ directory and commit to git
@@ -32,28 +31,10 @@ export async function saveSkillAndCommit(
 
   // 2. Git add
   const filepath = `skills/${slug}.md`;
-  await execAsync(`git add "${filepath}"`);
+  await gitAdd(filepath);
 
-  // 3. Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    // No changes, skip commit
-    return null;
-  } catch {
-    // Has changes, proceed with commit
-  }
-
-  // 4. Git commit with author
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // 5. Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  // 3. Commit if there are changes
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -76,32 +57,14 @@ export async function updateSkillAndCommit(
   // If slug changed (title changed), rename the file
   if (oldSlug !== newSlug) {
     await renameSkillFile(oldSlug, newSlug);
-    await execAsync(`git add "skills/${oldSlug}.md" "skills/${newSlug}.md"`);
+    await gitAdd([`skills/${oldSlug}.md`, `skills/${newSlug}.md`]);
   }
 
   // Write updated content
   await writeSkillFile(newSlug, skill);
-  await execAsync(`git add "skills/${newSlug}.md"`);
+  await gitAdd(`skills/${newSlug}.md`);
 
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -122,27 +85,9 @@ export async function deleteSkillAndCommit(
   await deleteSkillFile(slug);
 
   // Git remove
-  await execAsync(`git rm "${filepath}"`);
+  await gitRemove(filepath);
 
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return commitStagedChangesIfAny(commitMessage, author);
 }
 
 /**
@@ -162,27 +107,7 @@ export async function getSkillHistory(
   message: string;
 }>> {
   const filepath = `skills/${slug}.md`;
-
-  try {
-    const { stdout } = await execAsync(
-      `git log -n ${limit} --format='%H|%an|%ae|%aI|%s' -- "${filepath}"`
-    );
-
-    if (!stdout.trim()) {
-      return [];
-    }
-
-    return stdout
-      .trim()
-      .split("\n")
-      .map((line) => {
-        const [sha, author, email, date, message] = line.split("|");
-        return { sha, author, email, date, message };
-      });
-  } catch {
-    // File not found or no commits
-    return [];
-  }
+  return getFileHistory(filepath, limit);
 }
 
 /**
@@ -198,15 +123,7 @@ export async function getSkillDiff(
   toCommit = "HEAD"
 ): Promise<string> {
   const filepath = `skills/${slug}.md`;
-
-  try {
-    const { stdout } = await execAsync(
-      `git diff ${fromCommit} ${toCommit} -- "${filepath}"`
-    );
-    return stdout;
-  } catch {
-    return "";
-  }
+  return getFileDiff(filepath, fromCommit, toCommit);
 }
 
 /**
@@ -214,12 +131,7 @@ export async function getSkillDiff(
  * @returns True if no uncommitted changes
  */
 export async function isGitClean(): Promise<boolean> {
-  try {
-    await execAsync("git diff --quiet && git diff --staged --quiet");
-    return true;
-  } catch {
-    return false;
-  }
+  return isRepoClean();
 }
 
 /**
@@ -227,8 +139,7 @@ export async function isGitClean(): Promise<boolean> {
  * @returns Branch name
  */
 export async function getCurrentBranch(): Promise<string> {
-  const { stdout } = await execAsync("git branch --show-current");
-  return stdout.trim();
+  return getGitCurrentBranch();
 }
 
 /**
@@ -240,9 +151,5 @@ export async function pushToRemote(
   remote = "origin",
   branch?: string
 ): Promise<void> {
-  if (!branch) {
-    branch = await getCurrentBranch();
-  }
-
-  await execAsync(`git push ${remote} ${branch}`);
+  await pushToGitRemote(remote, branch);
 }

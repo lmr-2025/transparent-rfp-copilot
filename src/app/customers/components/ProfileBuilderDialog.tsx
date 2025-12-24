@@ -1039,9 +1039,17 @@ export default function ProfileBuilderDialog({
           ]}
           systemPrompt={analyzeTransparency.systemPrompt}
           systemPromptNote="This prompt instructs the AI on how to identify the customer."
-          userPrompt={analyzeTransparency.userPrompt}
-          userPromptLabel="User Prompt (with source content)"
-          userPromptNote="This includes your source URLs/documents."
+          sections={[
+            {
+              id: "user",
+              title: "User Prompt (with source content)",
+              content: analyzeTransparency.userPrompt || "",
+              note: "This includes your source URLs/documents.",
+              copyLabel: "user",
+              showCharCount: true,
+              truncateAt: 5000,
+            },
+          ]}
         />
       )}
 
@@ -1058,9 +1066,17 @@ export default function ProfileBuilderDialog({
           ]}
           systemPrompt={buildTransparency.systemPrompt}
           systemPromptNote="This prompt defines the structure to extract for the customer profile."
-          userPrompt={buildTransparency.userPrompt}
-          userPromptLabel="User Prompt (with source material)"
-          userPromptNote="This includes all the source content."
+          sections={[
+            {
+              id: "user",
+              title: "User Prompt (with source material)",
+              content: buildTransparency.userPrompt || "",
+              note: "This includes all the source content.",
+              copyLabel: "user",
+              showCharCount: true,
+              truncateAt: 5000,
+            },
+          ]}
         />
       )}
 

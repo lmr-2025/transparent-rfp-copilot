@@ -1,6 +1,14 @@
-import fs from "fs/promises";
 import path from "path";
-import matter from "gray-matter";
+import {
+  createSlug,
+  readFrontmatterFile,
+  writeFrontmatterFile,
+  listMarkdownFiles,
+  fileExists,
+  ensureDir,
+  deleteFile,
+  renameFile,
+} from "./frontmatterStore";
 
 /**
  * Placeholder mapping for templates
@@ -45,11 +53,7 @@ const TEMPLATES_DIR = path.join(process.cwd(), "templates");
  * e.g., "Sales Battlecard" -> "sales-battlecard"
  */
 export function getTemplateSlug(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&/g, "and")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return createSlug(name);
 }
 
 /**
@@ -60,33 +64,31 @@ export function getTemplateSlug(name: string): string {
 export async function readTemplateFile(slug: string): Promise<TemplateFile> {
   const filepath = path.join(TEMPLATES_DIR, `${slug}.md`);
 
-  try {
-    const fileContent = await fs.readFile(filepath, "utf-8");
-    const { data: frontmatter, content } = matter(fileContent);
+  const { frontmatter, content } = await readFrontmatterFile(
+    filepath,
+    `Template file not found: ${slug}.md`
+  );
 
-    return {
-      id: frontmatter.id,
-      slug: frontmatter.slug || slug,
-      name: frontmatter.name,
-      description: frontmatter.description,
-      content: content.trim(),
-      category: frontmatter.category,
-      outputFormat: frontmatter.outputFormat || "markdown",
-      placeholderMappings: frontmatter.placeholderMappings || [],
-      instructionPresetId: frontmatter.instructionPresetId,
-      isActive: frontmatter.isActive !== false, // Default to true
-      sortOrder: frontmatter.sortOrder || 0,
-      created: frontmatter.created,
-      updated: frontmatter.updated,
-      createdBy: frontmatter.createdBy,
-      updatedBy: frontmatter.updatedBy,
-    };
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      throw new Error(`Template file not found: ${slug}.md`);
-    }
-    throw error;
-  }
+  return {
+    id: frontmatter.id as string,
+    slug: (frontmatter.slug as string) || slug,
+    name: frontmatter.name as string,
+    description: frontmatter.description as string | undefined,
+    content: content.trim(),
+    category: frontmatter.category as string | undefined,
+    outputFormat:
+      (frontmatter.outputFormat as TemplateFile["outputFormat"]) || "markdown",
+    placeholderMappings:
+      (frontmatter.placeholderMappings as TemplateFile["placeholderMappings"]) ||
+      [],
+    instructionPresetId: frontmatter.instructionPresetId as string | undefined,
+    isActive: frontmatter.isActive !== false,
+    sortOrder: (frontmatter.sortOrder as number) || 0,
+    created: frontmatter.created as string,
+    updated: frontmatter.updated as string,
+    createdBy: frontmatter.createdBy as string | undefined,
+    updatedBy: frontmatter.updatedBy as string | undefined,
+  };
 }
 
 /**
@@ -96,7 +98,7 @@ export async function readTemplateFile(slug: string): Promise<TemplateFile> {
  */
 export async function writeTemplateFile(slug: string, template: TemplateFile): Promise<void> {
   // Ensure templates directory exists
-  await fs.mkdir(TEMPLATES_DIR, { recursive: true });
+  await ensureDir(TEMPLATES_DIR);
 
   const frontmatter: Record<string, unknown> = {
     id: template.id,
@@ -122,10 +124,8 @@ export async function writeTemplateFile(slug: string, template: TemplateFile): P
   }
 
   // Generate markdown with YAML frontmatter
-  const markdown = matter.stringify(template.content, frontmatter);
-
   const filepath = path.join(TEMPLATES_DIR, `${slug}.md`);
-  await fs.writeFile(filepath, markdown, "utf-8");
+  await writeFrontmatterFile(filepath, template.content, frontmatter);
 }
 
 /**
@@ -133,17 +133,7 @@ export async function writeTemplateFile(slug: string, template: TemplateFile): P
  * @returns Array of template slugs (filenames without .md extension)
  */
 export async function listTemplateFiles(): Promise<string[]> {
-  try {
-    const files = await fs.readdir(TEMPLATES_DIR);
-    return files
-      .filter((file) => file.endsWith(".md") && file !== "README.md")
-      .map((file) => file.replace(/\.md$/, ""));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return []; // Directory doesn't exist yet
-    }
-    throw error;
-  }
+  return listMarkdownFiles(TEMPLATES_DIR);
 }
 
 /**
@@ -153,12 +143,7 @@ export async function listTemplateFiles(): Promise<string[]> {
  */
 export async function templateFileExists(slug: string): Promise<boolean> {
   const filepath = path.join(TEMPLATES_DIR, `${slug}.md`);
-  try {
-    await fs.access(filepath);
-    return true;
-  } catch {
-    return false;
-  }
+  return fileExists(filepath);
 }
 
 /**
@@ -167,7 +152,7 @@ export async function templateFileExists(slug: string): Promise<boolean> {
  */
 export async function deleteTemplateFile(slug: string): Promise<void> {
   const filepath = path.join(TEMPLATES_DIR, `${slug}.md`);
-  await fs.unlink(filepath);
+  await deleteFile(filepath);
 }
 
 /**
@@ -181,5 +166,5 @@ export async function renameTemplateFile(oldSlug: string, newSlug: string): Prom
   const oldPath = path.join(TEMPLATES_DIR, `${oldSlug}.md`);
   const newPath = path.join(TEMPLATES_DIR, `${newSlug}.md`);
 
-  await fs.rename(oldPath, newPath);
+  await renameFile(oldPath, newPath);
 }
