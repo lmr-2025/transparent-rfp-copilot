@@ -25,6 +25,8 @@ type SuggestRequestBody = {
     content: string;
   };
   quickMode?: boolean;
+  // User guidance for content generation (e.g., "focus on security aspects")
+  notes?: string;
 };
 
 // Response type for draft updates
@@ -65,6 +67,7 @@ export async function POST(request: NextRequest) {
   const conversationMessages = extractConversationMessages(body?.conversationMessages);
   const existingSkill = body?.existingSkill;
   const quickMode = body?.quickMode;
+  const notes = body?.notes?.trim() ?? "";
 
   // Determine model speed (request override > user preference > system default)
   const speed = getEffectiveSpeed("skills-suggest", quickMode);
@@ -84,7 +87,7 @@ export async function POST(request: NextRequest) {
     if (existingSkill && (sourceText || sourceUrls.length > 0)) {
       const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
       // Use the new simpler draft-based approach
-      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession, model);
+      const draftResult = await generateDraftUpdate(existingSkill, mergedSource, sourceUrls, authSession, model, notes);
       return apiSuccess({
         updateMode: true,
         draftMode: true,
@@ -113,7 +116,7 @@ export async function POST(request: NextRequest) {
     }
 
     const mergedSource = await buildSourceMaterial(sourceText, sourceUrls);
-    const initialMessage = formatInitialMessage(mergedSource);
+    const initialMessage = formatInitialMessage(mergedSource, notes);
     const draft = await generateSkillDraftFromMessages(
       [{ role: "user", content: initialMessage }],
       promptText,
@@ -147,7 +150,8 @@ async function generateDraftUpdate(
   newSourceContent: string,
   sourceUrls: string[],
   authSession: { user?: { id?: string; email?: string | null } } | null,
-  model: string
+  model: string,
+  notes: string = ""
 ): Promise<DraftUpdateResponse> {
   const anthropic = getAnthropicClient();
 
@@ -200,12 +204,14 @@ NEW SOURCE MATERIAL:
 ${newSourceContent}
 
 ${sourceUrls.length > 0 ? `\nSource URLs: ${sourceUrls.join(", ")}` : ""}
+${notes ? `\nUSER GUIDANCE: ${notes}` : ""}
 
 ---
 
 Review the new source material against the existing skill.
 - If there's significant new/changed information, return an updated draft with hasChanges=true
 - If the source is redundant or doesn't add value, return hasChanges=false
+${notes ? `- Pay special attention to the user's guidance above` : ""}
 
 Return ONLY the JSON object.`;
 
@@ -277,13 +283,21 @@ async function buildSourceMaterial(sourceText: string, sourceUrls: string[]): Pr
   return combined.slice(0, 100000);
 }
 
-function formatInitialMessage(sourceText: string): string {
-  return [
+function formatInitialMessage(sourceText: string, notes: string = ""): string {
+  const parts = [
     "Source material:",
     sourceText.trim(),
-    "",
-    "Return a SINGLE JSON object (not an array) with: { \"title\": \"...\", \"content\": \"...\" }",
-  ].join("\n");
+  ];
+
+  if (notes) {
+    parts.push("");
+    parts.push(`USER GUIDANCE: ${notes}`);
+  }
+
+  parts.push("");
+  parts.push("Return a SINGLE JSON object (not an array) with: { \"title\": \"...\", \"content\": \"...\" }");
+
+  return parts.join("\n");
 }
 
 function extractConversationMessages(

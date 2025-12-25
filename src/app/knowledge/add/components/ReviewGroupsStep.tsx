@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, FileText } from "lucide-react";
+import { ChevronDown, ChevronUp, FileText, Lightbulb } from "lucide-react";
 import { type SkillGroup } from "@/stores/bulk-import-store";
 import { Skill } from "@/types/skill";
 import { styles, getGroupStatusStyle } from "./styles";
@@ -8,6 +8,7 @@ import { styles, getGroupStatusStyle } from "./styles";
 type ReviewGroupsStepProps = {
   skillGroups: SkillGroup[];
   setSkillGroups: (groups: SkillGroup[]) => void;
+  updateSkillGroup: (groupId: string, updates: Partial<SkillGroup>) => void;
   expandedGroups: Set<string>;
   toggleGroupExpanded: (id: string) => void;
   toggleGroupApproval: (id: string) => void;
@@ -26,6 +27,7 @@ type ReviewGroupsStepProps = {
 export default function ReviewGroupsStep({
   skillGroups,
   setSkillGroups,
+  updateSkillGroup,
   expandedGroups,
   toggleGroupExpanded,
   toggleGroupApproval,
@@ -93,13 +95,19 @@ export default function ReviewGroupsStep({
                 <div style={{ padding: "4px 8px", borderRadius: "4px", fontSize: "11px", fontWeight: 600, backgroundColor: group.type === "create" ? "#dbeafe" : "#fef3c7", color: group.type === "create" ? "#1e40af" : "#92400e" }}>
                   {group.type === "create" ? "CREATE" : "UPDATE"}
                 </div>
-                <div>
+                <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 600, fontSize: "15px" }}>{group.skillTitle}</div>
                   <div style={{ fontSize: "13px", color: "#64748b" }}>
                     {group.urls.length > 0 && `${group.urls.length} URL${group.urls.length !== 1 ? "s" : ""}`}
                     {group.urls.length > 0 && (group.documents?.length || 0) > 0 && " + "}
                     {(group.documents?.length || 0) > 0 && `${group.documents!.length} doc${group.documents!.length !== 1 ? "s" : ""}`}
                   </div>
+                  {group.reason && (
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginTop: "6px", fontSize: "12px", color: "#6b7280", fontStyle: "italic" }}>
+                      <Lightbulb size={14} style={{ color: "#f59e0b", flexShrink: 0, marginTop: "1px" }} />
+                      <span>{group.reason}</span>
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -193,6 +201,28 @@ export default function ReviewGroupsStep({
                     ))}
                   </>
                 )}
+                {/* Notes/Guidance */}
+                <div style={{ marginTop: "12px" }}>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px", fontWeight: 500 }}>
+                    Notes for AI (optional):
+                  </div>
+                  <textarea
+                    value={group.notes || ""}
+                    onChange={(e) => updateSkillGroup(group.id, { notes: e.target.value })}
+                    onClick={(e) => e.stopPropagation()}
+                    placeholder="Add guidance for content generation, e.g., 'Focus on security aspects' or 'Keep it concise'"
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      fontSize: "13px",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "4px",
+                      resize: "vertical",
+                      minHeight: "60px",
+                      fontFamily: "inherit",
+                    }}
+                  />
+                </div>
               </div>
             )}
           </div>

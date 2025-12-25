@@ -287,7 +287,7 @@ Be direct and helpful. If something was inferred rather than directly stated in 
                 )}
               </div>
 
-              <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                 {(group.status === "ready_for_review" || group.status === "reviewed") && (
                   <>
                     <button onClick={() => setPreviewGroup(previewGroup?.id === group.id ? null : group)} style={{ padding: "8px 12px", backgroundColor: "#fff", color: "#475569", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -309,7 +309,13 @@ Be direct and helpful. If something was inferred rather than directly stated in 
                   </>
                 )}
                 {group.status === "error" && (
-                  <span style={{ color: "#dc2626", fontSize: "13px" }}>{group.error}</span>
+                  <span style={{ color: "#dc2626", fontSize: "13px" }}>
+                    {group.error === "terminated" ? "Request timed out - try fewer URLs" : (group.error || "Generation failed")}
+                  </span>
+                )}
+                {/* Handle unknown/unexpected status values (e.g., from API timeout) */}
+                {!["ready_for_review", "reviewed", "error", "generating", "pending", "approved", "rejected", "saving", "done"].includes(group.status) && (
+                  <span style={{ color: "#dc2626", fontSize: "13px" }}>Error: {group.status || "Unknown error"}</span>
                 )}
               </div>
             </div>

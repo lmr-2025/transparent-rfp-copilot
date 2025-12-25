@@ -7,16 +7,15 @@ type ProgressStepsProps = {
   workflowStep: WorkflowStep;
 };
 
-const STEPS = ["Add Sources", "Plan", "Group Sources", "Generate Content", "Review & Approve", "Done"];
+const STEPS = ["Add Sources", "Group Sources", "Generate Content", "Review & Approve", "Done"];
 const STEP_MAP: Record<WorkflowStep, number> = {
   input: 0,
-  planning: 1,
-  analyzing: 2,
-  review_groups: 2,
-  generating: 3,
-  review_drafts: 4,
-  saving: 4,
-  done: 5,
+  analyzing: 1,
+  review_groups: 1,
+  generating: 2,
+  review_drafts: 3,
+  saving: 3,
+  done: 4,
 };
 
 export default function ProgressSteps({ workflowStep }: ProgressStepsProps) {

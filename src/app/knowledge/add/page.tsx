@@ -14,7 +14,6 @@ import {
   useBulkImportCounts,
   type SkillGroup,
   type DocumentSource,
-  type PlanningMode,
 } from "@/stores/bulk-import-store";
 import {
   ProgressSteps,
@@ -28,17 +27,10 @@ import {
   ProcessingIndicator,
   styles,
 } from "./components";
-import PlanSkillsStep from "./components/PlanSkillsStep";
 
 function AddKnowledgeContent() {
   const searchParams = useSearchParams();
   const docIdParam = searchParams.get("docId");
-
-  // Mode params from library analysis recommendations
-  const modeParam = searchParams.get("mode");
-  const skillsParam = searchParams.get("skills"); // comma-separated skill IDs for merge
-  const skillParam = searchParams.get("skill"); // single skill ID for split
-  const topicParam = searchParams.get("topic"); // topic for gap
 
   // Local state for skills (fetched from API)
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
@@ -76,8 +68,6 @@ function AddKnowledgeContent() {
     moveUrl,
     createNewGroupFromUrl,
     reset,
-    setPlanningMode,
-    clearPlanningMessages,
   } = useBulkImportStore();
 
   const { pendingCount, approvedCount, readyForReviewCount, reviewedCount } =
@@ -100,6 +90,7 @@ function AddKnowledgeContent() {
   });
 
   const isProcessingRef = useRef(false);
+  const isAnalyzingRef = useRef(false); // Prevent duplicate analyze calls
 
   useEffect(() => {
     isProcessingRef.current = ["analyzing", "generating", "saving"].includes(workflowStep);
@@ -120,37 +111,6 @@ function AddKnowledgeContent() {
   useEffect(() => {
     loadSkillsFromApi().then(setSkills).catch(() => toast.error("Failed to load skills"));
   }, []);
-
-  // Handle mode from URL params (from library analysis recommendations)
-  const modeInitializedRef = useRef(false);
-  useEffect(() => {
-    if (modeInitializedRef.current) return;
-    if (!modeParam) return;
-    if (skills.length === 0) return; // Wait for skills to load
-
-    modeInitializedRef.current = true;
-
-    let mode: PlanningMode = { type: "normal" };
-
-    if (modeParam === "merge" && skillsParam) {
-      const skillIds = skillsParam.split(",").filter(Boolean);
-      if (skillIds.length >= 2) {
-        mode = { type: "merge", skillIds };
-      }
-    } else if (modeParam === "split" && skillParam) {
-      mode = { type: "split", skillId: skillParam };
-    } else if (modeParam === "gap" && topicParam) {
-      mode = { type: "gap", topic: topicParam };
-    }
-
-    if (mode.type !== "normal") {
-      // Reset any previous state and set the mode
-      clearPlanningMessages();
-      setPlanningMode(mode);
-      // Skip directly to planning step
-      setWorkflowStep("planning");
-    }
-  }, [modeParam, skillsParam, skillParam, topicParam, skills.length, setPlanningMode, setWorkflowStep, clearPlanningMessages]);
 
   // Load document if docId is provided (coming from document action dialog)
   useEffect(() => {
@@ -301,15 +261,16 @@ function AddKnowledgeContent() {
       return;
     }
 
-    // Go to planning step - don't clear inputs yet since PlanSkillsStep needs them
-    setWorkflowStep("planning");
+    // Go straight to auto-analyze
+    setWorkflowStep("analyzing");
   };
 
-  // Called when planning is done (either approved or skipped)
-  // The store handles the workflow transition and we watch for it
+  // Trigger analysis when workflow step changes to analyzing
   useEffect(() => {
-    if (workflowStep === "analyzing" && skillGroups.length === 0) {
-      // Transitioning from planning to analyzing
+    if (workflowStep === "analyzing" && skillGroups.length === 0 && !isAnalyzingRef.current) {
+      // Prevent duplicate calls
+      isAnalyzingRef.current = true;
+
       const urls = parseUrls(urlInput);
       const documents = uploadedDocuments;
 
@@ -317,7 +278,9 @@ function AddKnowledgeContent() {
       setUrlInput("");
       clearUploadedDocuments();
 
-      analyzeAndGroupSources(urls, documents);
+      analyzeAndGroupSources(urls, documents).finally(() => {
+        isAnalyzingRef.current = false;
+      });
     }
   }, [
     analyzeAndGroupSources,
@@ -330,9 +293,34 @@ function AddKnowledgeContent() {
   ]);
 
   // Step 2: Generate drafts for approved groups
+  // Helper to call the suggest API with proper error handling
+  const callSuggestApi = async (body: Record<string, unknown>) => {
+    const response = await fetch("/api/skills/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      let errorMessage = "Generation failed";
+      try {
+        const errorData = await response.json();
+        errorMessage = getApiErrorMessage(errorData, "Generation failed");
+      } catch {
+        errorMessage = response.status === 504 ? "Request timed out" : `Server error (${response.status})`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    return response.json();
+  };
+
   const generateDrafts = async () => {
     setWorkflowStep("generating");
     const approvedGroups = skillGroups.filter(g => g.status === "approved");
+
+    // Max URLs to process in a single API call (to avoid timeouts)
+    const MAX_URLS_PER_BATCH = 2;
 
     for (const group of approvedGroups) {
       updateSkillGroup(group.id, { status: "generating" });
@@ -346,101 +334,215 @@ function AddKnowledgeContent() {
           const existingSkill = skills.find(s => s.id === group.existingSkillId);
           if (!existingSkill) throw new Error("Existing skill not found");
 
-          const response = await fetch("/api/skills/suggest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sourceUrls: group.urls.length > 0 ? group.urls : undefined,
-              sourceText: documentContent,
-              existingSkill: {
-                title: existingSkill.title,
-                content: existingSkill.content,
-              },
-            }),
-          });
+          // For updates with many URLs, process iteratively to avoid timeouts
+          if (group.urls.length > MAX_URLS_PER_BATCH) {
+            let currentContent = existingSkill.content;
+            let currentTitle = existingSkill.title;
+            const allHighlights: string[] = [];
+            const allSources: string[] = [];
+            let hasAnyChanges = false;
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(getApiErrorMessage(errorData, "Generation failed"));
-          }
+            // Process URLs in batches
+            for (let i = 0; i < group.urls.length; i += MAX_URLS_PER_BATCH) {
+              const batchUrls = group.urls.slice(i, i + MAX_URLS_PER_BATCH);
+              const isFirstBatch = i === 0;
 
-          const json = await response.json();
-          const data = parseApiData<{ draftMode?: boolean; draft?: {
-            title?: string;
-            content: string;
-            hasChanges?: boolean;
-            changeHighlights?: string[];
-            reasoning?: string;
-            inference?: string;
-            sources?: string;
-          } }>(json);
+              const json = await callSuggestApi({
+                sourceUrls: batchUrls,
+                sourceText: isFirstBatch ? documentContent : undefined,
+                notes: group.notes,
+                existingSkill: {
+                  title: currentTitle,
+                  content: currentContent,
+                },
+              });
 
-          if (data.draftMode && data.draft) {
+              const data = parseApiData<{ draftMode?: boolean; draft?: {
+                title?: string;
+                content: string;
+                hasChanges?: boolean;
+                changeHighlights?: string[];
+                reasoning?: string;
+                inference?: string;
+                sources?: string;
+              } }>(json);
+
+              if (data.draftMode && data.draft) {
+                if (data.draft.hasChanges) {
+                  hasAnyChanges = true;
+                  currentContent = data.draft.content;
+                  if (data.draft.title) currentTitle = data.draft.title;
+                  if (data.draft.changeHighlights) allHighlights.push(...data.draft.changeHighlights);
+                }
+                if (data.draft.sources) allSources.push(data.draft.sources);
+              }
+
+              // Small delay between batches
+              if (i + MAX_URLS_PER_BATCH < group.urls.length) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
+            }
+
             updateSkillGroup(group.id, {
               status: "ready_for_review",
               draft: {
-                title: data.draft.title || existingSkill.title,
-                content: data.draft.content,
-                hasChanges: data.draft.hasChanges,
-                changeHighlights: data.draft.changeHighlights,
-                reasoning: data.draft.reasoning,
-                inference: data.draft.inference,
-                sources: data.draft.sources,
+                title: currentTitle,
+                content: currentContent,
+                hasChanges: hasAnyChanges,
+                changeHighlights: allHighlights.length > 0 ? allHighlights : undefined,
+                sources: allSources.length > 0 ? allSources.join("\n") : undefined,
               },
               originalContent: existingSkill.content,
               originalTitle: existingSkill.title,
             });
           } else {
+            // Small number of URLs - process in single request
+            const json = await callSuggestApi({
+              sourceUrls: group.urls.length > 0 ? group.urls : undefined,
+              sourceText: documentContent,
+              notes: group.notes,
+              existingSkill: {
+                title: existingSkill.title,
+                content: existingSkill.content,
+              },
+            });
+
+            const data = parseApiData<{ draftMode?: boolean; draft?: {
+              title?: string;
+              content: string;
+              hasChanges?: boolean;
+              changeHighlights?: string[];
+              reasoning?: string;
+              inference?: string;
+              sources?: string;
+            } }>(json);
+
+            if (data.draftMode && data.draft) {
+              updateSkillGroup(group.id, {
+                status: "ready_for_review",
+                draft: {
+                  title: data.draft.title || existingSkill.title,
+                  content: data.draft.content,
+                  hasChanges: data.draft.hasChanges,
+                  changeHighlights: data.draft.changeHighlights,
+                  reasoning: data.draft.reasoning,
+                  inference: data.draft.inference,
+                  sources: data.draft.sources,
+                },
+                originalContent: existingSkill.content,
+                originalTitle: existingSkill.title,
+              });
+            } else {
+              updateSkillGroup(group.id, {
+                status: "ready_for_review",
+                draft: {
+                  title: existingSkill.title,
+                  content: existingSkill.content,
+                  hasChanges: false,
+                },
+              });
+            }
+          }
+        } else {
+          // CREATE mode - for many URLs, process iteratively
+          if (group.urls.length > MAX_URLS_PER_BATCH) {
+            // First batch: create initial draft
+            const firstBatchUrls = group.urls.slice(0, MAX_URLS_PER_BATCH);
+            const json = await callSuggestApi({
+              sourceUrls: firstBatchUrls,
+              sourceText: documentContent,
+              notes: group.notes,
+            });
+
+            const data = parseApiData<{ draft: {
+              title?: string;
+              content: string;
+              reasoning?: string;
+              inference?: string;
+              sources?: string;
+            } }>(json);
+
+            let currentContent = data.draft.content;
+            let currentTitle = data.draft.title || group.skillTitle;
+            const allSources: string[] = data.draft.sources ? [data.draft.sources] : [];
+
+            // Process remaining URLs as updates to the draft
+            for (let i = MAX_URLS_PER_BATCH; i < group.urls.length; i += MAX_URLS_PER_BATCH) {
+              const batchUrls = group.urls.slice(i, i + MAX_URLS_PER_BATCH);
+
+              await new Promise(resolve => setTimeout(resolve, 200));
+
+              const updateJson = await callSuggestApi({
+                sourceUrls: batchUrls,
+                notes: group.notes,
+                existingSkill: {
+                  title: currentTitle,
+                  content: currentContent,
+                },
+              });
+
+              const updateData = parseApiData<{ draftMode?: boolean; draft?: {
+                title?: string;
+                content: string;
+                hasChanges?: boolean;
+                sources?: string;
+              } }>(updateJson);
+
+              if (updateData.draftMode && updateData.draft?.hasChanges) {
+                currentContent = updateData.draft.content;
+                if (updateData.draft.title) currentTitle = updateData.draft.title;
+                if (updateData.draft.sources) allSources.push(updateData.draft.sources);
+              }
+            }
+
             updateSkillGroup(group.id, {
               status: "ready_for_review",
               draft: {
-                title: existingSkill.title,
-                content: existingSkill.content,
-                hasChanges: false,
+                title: currentTitle,
+                content: currentContent,
+                hasChanges: true,
+                sources: allSources.length > 0 ? allSources.join("\n") : undefined,
+              },
+            });
+          } else {
+            // Small number of URLs - process in single request
+            const json = await callSuggestApi({
+              sourceUrls: group.urls.length > 0 ? group.urls : undefined,
+              sourceText: documentContent,
+              notes: group.notes,
+            });
+
+            const data = parseApiData<{ draft: {
+              title?: string;
+              content: string;
+              reasoning?: string;
+              inference?: string;
+              sources?: string;
+            } }>(json);
+            const draft = data.draft;
+
+            updateSkillGroup(group.id, {
+              status: "ready_for_review",
+              draft: {
+                title: draft.title || group.skillTitle,
+                content: draft.content,
+                hasChanges: true,
+                reasoning: draft.reasoning,
+                inference: draft.inference,
+                sources: draft.sources,
               },
             });
           }
-        } else {
-          const response = await fetch("/api/skills/suggest", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              sourceUrls: group.urls.length > 0 ? group.urls : undefined,
-              sourceText: documentContent,
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(getApiErrorMessage(errorData, "Generation failed"));
-          }
-
-          const json2 = await response.json();
-          const data2 = parseApiData<{ draft: {
-            title?: string;
-            content: string;
-            reasoning?: string;
-            inference?: string;
-            sources?: string;
-          } }>(json2);
-          const draft = data2.draft;
-
-          updateSkillGroup(group.id, {
-            status: "ready_for_review",
-            draft: {
-              title: draft.title || group.skillTitle,
-              content: draft.content,
-              hasChanges: true,
-              reasoning: draft.reasoning,
-              inference: draft.inference,
-              sources: draft.sources,
-            },
-          });
         }
       } catch (error) {
+        let errorMessage = error instanceof Error ? error.message : "Unknown error";
+        // Handle Vercel serverless function termination
+        if (errorMessage === "terminated" || errorMessage.includes("FUNCTION_INVOCATION_TIMEOUT")) {
+          errorMessage = "Request timed out - try again";
+        }
         updateSkillGroup(group.id, {
           status: "error",
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: errorMessage,
         });
       }
 
@@ -625,6 +727,7 @@ function AddKnowledgeContent() {
   };
 
   const handleReset = () => {
+    isAnalyzingRef.current = false;
     reset();
   };
 
@@ -668,20 +771,6 @@ function AddKnowledgeContent() {
         />
       )}
 
-      {/* Step 2: Plan Skills (conversational planning) */}
-      {workflowStep === "planning" && (
-        <div style={{ ...styles.card, padding: 0, overflow: "hidden", height: "calc(100vh - 280px)", minHeight: "500px" }}>
-          <PlanSkillsStep
-            existingSkills={skills.map(s => ({
-              id: s.id,
-              title: s.title,
-              content: s.content,
-              sourceUrls: s.sourceUrls?.map(u => u.url) || [],
-            }))}
-          />
-        </div>
-      )}
-
       {/* Analyzing */}
       {workflowStep === "analyzing" && (
         <div style={styles.card}>
@@ -694,6 +783,7 @@ function AddKnowledgeContent() {
         <ReviewGroupsStep
           skillGroups={skillGroups}
           setSkillGroups={setSkillGroups}
+          updateSkillGroup={updateSkillGroup}
           expandedGroups={expandedGroups}
           toggleGroupExpanded={toggleGroupExpanded}
           toggleGroupApproval={toggleGroupApproval}
