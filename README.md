@@ -1,6 +1,13 @@
 # Transparent Trust
 
-A comprehensive, AI-powered RFP response platform with full transparency. Built for teams who need to answer security questionnaires, vendor assessments, and compliance requests at scale—while maintaining complete visibility into how answers are generated.
+A comprehensive, AI-powered knowledge platform with full transparency. Built for teams who need to answer security questionnaires, vendor assessments, and compliance requests at scale—while maintaining complete visibility into how answers are generated.
+
+## Purpose
+
+This project was built to explore **tangible AI governance** — turning abstract
+governance principles into concrete, inspectable system behavior.
+
+It is intended as a learning tool and reference framework, not a production system. The code is designed to be run locally and adapted as a starting point for building production-grade implementations with appropriate security, compliance, and review.
 
 ## Quick Start
 
