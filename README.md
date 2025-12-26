@@ -1,20 +1,21 @@
 # Transparent Trust
 
-A comprehensive, AI-powered knowledge platform with full transparency. Built for teams who need to answer security questionnaires, vendor assessments, and compliance requests at scale—while maintaining complete visibility into how answers are generated.
+A reference implementation of an AI-powered knowledge platform focused on transparency. Designed to explore how teams might answer security questionnaires, vendor assessments, and compliance requests with clear visibility into how answers are generated.
 
 ## Purpose
 
-This project was built to explore **tangible AI governance** — turning abstract
-governance principles into concrete, inspectable system behavior.
+This project was built to explore **tangible AI governance** — turning abstract governance principles into concrete, inspectable system behavior.
 
 It is intended as a learning tool and reference framework, not a production system. The code is designed to be run locally and adapted as a starting point for building production-grade implementations with appropriate security, compliance, and review.
+
+This project does not provide compliance guarantees and should not be used as-is to satisfy regulatory or contractual requirements.
 
 ## Quick Start
 
 ```bash
 # Clone and install
-git clone https://github.com/lmr-2025/transparent-rfp-copilot.git
-cd transparent-rfp-copilot
+git clone https://github.com/lmr-2025/transparent-trust.git
+cd transparent-trust
 npm install
 
 # Configure environment
@@ -31,7 +32,7 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
-## Platform Architecture
+## Reference Architecture
 
 The platform is built as a modern Next.js application with specialized modules:
 
