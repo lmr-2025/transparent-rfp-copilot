@@ -71,5 +71,5 @@ This repository uses automated security scanning:
 
 ## Contact
 
-Security issues: @liseross (via GitHub)
-Maintainer: @liseross
+Security issues: @lmr-2025 (via GitHub)
+Maintainer: @lmr-2025
