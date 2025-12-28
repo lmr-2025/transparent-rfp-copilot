@@ -31,7 +31,6 @@ export async function GET(request: NextRequest) {
         name: true,
         filename: true,
         fileType: true,
-        customerName: true,
         customerId: true,
         customer: {
           select: {
@@ -45,7 +44,13 @@ export async function GET(request: NextRequest) {
         createdAt: true,
         analyzedAt: true,
         ownerId: true,
-        ownerName: true,
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
         findings: {
           select: {
             id: true,
@@ -63,7 +68,7 @@ export async function GET(request: NextRequest) {
         id: r.id,
         name: r.name,
         filename: r.filename,
-        customerName: r.customer?.name || r.customerName, // Prefer linked customer name
+        customerName: r.customer?.name,
         customerId: r.customerId,
         customer: r.customer,
         contractType: r.contractType,
@@ -72,7 +77,7 @@ export async function GET(request: NextRequest) {
         createdAt: r.createdAt.toISOString(),
         analyzedAt: r.analyzedAt?.toISOString(),
         ownerId: r.ownerId,
-        ownerName: r.ownerName,
+        ownerName: r.owner?.name || r.owner?.email,
         findingsCount: findings.length,
         riskCount: findings.filter((f) => f.rating === "risk").length,
         gapCount: findings.filter((f) => f.rating === "gap").length,
@@ -138,11 +143,11 @@ export async function POST(request: NextRequest) {
         name: name || filename.replace(/\.[^.]+$/, ""),
         filename,
         fileType,
-        customerName: customerName || undefined,
         customerId: customerId || undefined,
         contractType: contractType || undefined,
         extractedText,
         status: "PENDING",
+        ownerId: auth.session.user.id,
       },
     });
 
@@ -161,7 +166,7 @@ export async function POST(request: NextRequest) {
         id: review.id,
         name: review.name,
         filename: review.filename,
-        customerName: review.customerName,
+        customerName: customerName,
         contractType: review.contractType,
         status: review.status,
         createdAt: review.createdAt.toISOString(),

@@ -113,7 +113,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         // Read file buffer
-        const buffer = Buffer.from(await file.arrayBuffer());
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
 
         // Extract text content - use Claude for PDFs if processing for content, otherwise use pdf-parse
         let content: string;
@@ -266,7 +267,8 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
     case "xlsx": {
       const ExcelJS = (await import("exceljs")).default;
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+      // TypeScript has issues with Buffer types between Node.js and ExcelJS - use any to bypass
+      await workbook.xlsx.load(buffer as any);
       const sheets = workbook.worksheets.map((worksheet) => {
         const csvRows: string[] = [];
         worksheet.eachRow((row) => {

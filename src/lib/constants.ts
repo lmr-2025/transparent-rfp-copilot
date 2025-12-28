@@ -29,6 +29,12 @@ export const CONTEXT_LIMITS = {
   WARNING_THRESHOLD: 100000,
   /** Maximum context size for API requests */
   MAX_CONTEXT: 100000,
+  /** Character budget for skills in knowledge chat */
+  skills: 40000,
+  /** Character budget for documents in knowledge chat */
+  documents: 30000,
+  /** Character budget for URLs in knowledge chat */
+  urls: 20000,
 } as const;
 
 // =============================================================================

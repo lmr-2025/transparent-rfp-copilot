@@ -186,7 +186,7 @@ async function createResponsesSheet(workbook: ExcelJS.Workbook, rows: BulkRow[])
       // For single URL, make the cell itself a hyperlink
       if (urls.length === 1) {
         cell.value = {
-          text: formattedSources,
+          text: formatSourcesForExcel(row.sources || ""),
           hyperlink: urls[0],
           tooltip: "Click to open source",
         };

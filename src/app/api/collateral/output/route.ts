@@ -115,9 +115,7 @@ export async function POST(request: NextRequest) {
       data: {
         name: data.name,
         templateId: data.templateId,
-        templateName: data.templateName,
         customerId: data.customerId,
-        customerName: data.customerName,
         filledContent: data.filledContent as Prisma.InputJsonValue | undefined,
         generatedMarkdown: data.generatedMarkdown,
         googleSlidesId: data.googleSlidesId,

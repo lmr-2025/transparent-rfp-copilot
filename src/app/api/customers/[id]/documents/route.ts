@@ -212,7 +212,8 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
     case "xlsx": {
       const ExcelJS = (await import("exceljs")).default;
       const workbook = new ExcelJS.Workbook();
-      await workbook.xlsx.load(buffer);
+      // TypeScript has issues with Buffer types between Node.js and ExcelJS - use any to bypass
+      await workbook.xlsx.load(buffer as any);
       const sheets = workbook.worksheets.map((worksheet) => {
         const csvRows: string[] = [];
         worksheet.eachRow((row) => {
