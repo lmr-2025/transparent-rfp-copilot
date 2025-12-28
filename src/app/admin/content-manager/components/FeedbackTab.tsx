@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { MessageSquare, FileText, ThumbsUp, ThumbsDown, Flag, HelpCircle, Calendar, User } from "lucide-react";
+import { MessageSquare, FileText, ThumbsUp, ThumbsDown, Flag, HelpCircle, Calendar, User, ExternalLink } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
+import Link from "next/link";
 
 // Simple relative time formatter
 function formatRelativeTime(date: Date): string {
@@ -324,6 +325,16 @@ export default function FeedbackTab() {
                         <Calendar size={12} />
                         {formatRelativeTime(new Date(fb.createdAt))}
                       </span>
+                      {fb.sessionId && fb.sessionId !== "no-session" && (
+                        <Link
+                          href={`/chat-v2?session=${fb.sessionId}`}
+                          target="_blank"
+                          className="flex items-center gap-1 text-primary hover:underline"
+                        >
+                          <ExternalLink size={12} />
+                          View Chat
+                        </Link>
+                      )}
                     </div>
                   </div>
                 </div>

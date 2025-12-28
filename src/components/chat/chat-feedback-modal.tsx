@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ThumbsUp, ThumbsDown, Flag, HelpCircle, Loader2, X } from "lucide-react";
+import { ThumbsUp, ThumbsDown, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import FlagReviewModal, { type FlagReviewData } from "@/components/FlagReviewModal";
 
 type FeedbackRating = "THUMBS_UP" | "THUMBS_DOWN" | null;
 
@@ -26,8 +25,6 @@ export function ChatFeedbackModal({
   const [rating, setRating] = useState<FeedbackRating>(null);
   const [comment, setComment] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [showFlagModal, setShowFlagModal] = useState(false);
-  const [initialFlagAction, setInitialFlagAction] = useState<"flag" | "need-help">("flag");
 
   if (!isOpen) return null;
 
@@ -72,38 +69,6 @@ export function ChatFeedbackModal({
 
   const handleSkip = () => {
     onSubmitAndNewChat();
-  };
-
-  const handleOpenFlag = () => {
-    setInitialFlagAction("flag");
-    setShowFlagModal(true);
-  };
-
-  const handleOpenHelp = () => {
-    setInitialFlagAction("need-help");
-    setShowFlagModal(true);
-  };
-
-  const handleFlagSubmit = async (flagData: FlagReviewData) => {
-    setShowFlagModal(false);
-
-    const additionalData: Record<string, unknown> = {};
-
-    if (flagData.action === "flag") {
-      additionalData.flaggedForReview = true;
-      additionalData.flagNote = flagData.note;
-    } else {
-      additionalData.reviewRequested = true;
-      additionalData.reviewerId = flagData.reviewerId;
-      additionalData.reviewerName = flagData.reviewerName;
-      additionalData.reviewNote = flagData.note;
-      additionalData.sendNow = flagData.sendTiming === "now";
-    }
-
-    const success = await saveFeedback(additionalData);
-    if (success) {
-      toast.success(flagData.action === "flag" ? "Flagged for attention" : "Review requested");
-    }
   };
 
   return (
@@ -172,26 +137,6 @@ export function ChatFeedbackModal({
                 rows={3}
               />
             </div>
-
-            {/* Flag / Help buttons */}
-            <div className="flex gap-2">
-              <button
-                onClick={handleOpenFlag}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition-colors dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-700"
-              >
-                <Flag className="h-4 w-4" />
-                Flag
-              </button>
-              <button
-                onClick={handleOpenHelp}
-                disabled={isSaving}
-                className="flex items-center gap-2 px-3 py-2 text-sm rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors dark:bg-blue-900/20 dark:text-blue-400 dark:border-blue-700"
-              >
-                <HelpCircle className="h-4 w-4" />
-                Need Help
-              </button>
-            </div>
           </div>
 
           {/* Footer */}
@@ -219,15 +164,6 @@ export function ChatFeedbackModal({
           </div>
         </div>
       </div>
-
-      {/* Flag/Review Modal */}
-      <FlagReviewModal
-        isOpen={showFlagModal}
-        initialAction={initialFlagAction}
-        onSubmit={handleFlagSubmit}
-        onCancel={() => setShowFlagModal(false)}
-        allowQueueing={true}
-      />
     </>
   );
 }

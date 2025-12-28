@@ -57,6 +57,7 @@ export default function ChatV2Page() {
   const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null);
   const [focusedCustomerId, setFocusedCustomerId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
 
   // Detected URLs staging area
   type DetectedUrl = { url: string; title: string; detectedInMessageId: string; timestamp: Date };
@@ -137,6 +138,22 @@ export default function ChatV2Page() {
     const stored = localStorage.getItem(STORAGE_KEYS.USER_INSTRUCTIONS);
     setUserInstructions(stored || DEFAULTS.USER_INSTRUCTIONS);
   }, [setUserInstructions]);
+
+  // Load session from query parameter if provided (client-side only)
+  useEffect(() => {
+    if (typeof window === "undefined") return; // Skip during SSR
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionIdParam = urlParams.get("session");
+    if (sessionIdParam && chatSessions.length > 0) {
+      const sessionToLoad = chatSessions.find(s => s.id === sessionIdParam);
+      if (sessionToLoad) {
+        handleLoadSession(sessionToLoad);
+        // Clean up URL after loading
+        window.history.replaceState({}, "", "/chat-v2");
+      }
+    }
+  }, [chatSessions]); // Only run when sessions change
 
   // Handle customer focus change - auto-select/deselect in knowledge context
   const handleCustomerFocusChange = useCallback((customerId: string | null) => {
@@ -452,6 +469,7 @@ ${keyFactsText}`;
     setCurrentSessionId(null);
     setShowHistory(false);
     setLastTransparency(null);
+    setFeedbackSubmitted(false);
     // Optionally clear detected URLs when starting new chat
     // setDetectedUrls([]);
   };
@@ -511,7 +529,7 @@ ${keyFactsText}`;
     }
   }, []);
 
-  const handleLoadSession = (sessionItem: ChatSessionItem) => {
+  const handleLoadSession = async (sessionItem: ChatSessionItem) => {
     const loadedMessages: ChatMessage[] = (sessionItem.messages || []).map((m, idx) => ({
       id: `loaded-${idx}`,
       role: m.role as "user" | "assistant",
@@ -523,6 +541,19 @@ ${keyFactsText}`;
     setMessages(loadedMessages);
     setCurrentSessionId(sessionItem.id);
     setShowHistory(false);
+
+    // Check if feedback already exists for this session
+    try {
+      const res = await fetch(`/api/chat/feedback?sessionId=${sessionItem.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const hasFeedback = data.data?.feedbacks?.length > 0;
+        setFeedbackSubmitted(hasFeedback);
+      }
+    } catch (err) {
+      console.warn("Failed to check feedback status:", err);
+      setFeedbackSubmitted(false);
+    }
   };
 
   const handleDeleteSession = async (id: string) => {
@@ -636,7 +667,7 @@ ${keyFactsText}`;
                 History ({chatSessions.length})
               </Button>
             )}
-            {messages.length > 0 && (
+            {messages.length > 0 && !feedbackSubmitted && (
               <Button
                 variant="outline"
                 size="sm"
@@ -821,6 +852,7 @@ ${keyFactsText}`;
         onClose={() => setShowFeedback(false)}
         onSubmitAndNewChat={() => {
           setShowFeedback(false);
+          setFeedbackSubmitted(true);
           handleNewChat();
         }}
       />
