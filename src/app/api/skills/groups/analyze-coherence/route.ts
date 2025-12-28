@@ -40,10 +40,13 @@ type CoherenceAnalysisResult = {
 /**
  * POST /api/skills/groups/analyze-coherence
  *
- * Analyzes whether multiple sources (URLs/documents) are coherent and should be grouped together.
- * Used in bulk import flow to validate AI-suggested groupings.
+ * Finds contradictions and conflicts within topically-aligned sources.
+ * Used when building/updating skills to flag contradictory information in source materials.
  *
- * Filters applied (per Option 1):
+ * Note: Sources are already grouped by topic (Feature 1).
+ * This analyzes for contradictions WITHIN the group (Feature 2).
+ *
+ * Filters applied:
  * - Only analyze groups with 2-5 sources
  * - Use Haiku model for speed/cost
  * - Non-blocking (runs in background)
@@ -160,7 +163,7 @@ async function analyzeGroupCoherence(
   // Load system prompt
   const systemPrompt = await loadSystemPrompt(
     "group_coherence_analysis",
-    "You are a content analysis specialist who evaluates whether multiple sources should be grouped together."
+    "You are a content analysis specialist who finds contradictions and conflicts within topically-aligned source materials."
   );
 
   // Build sources section
@@ -168,22 +171,30 @@ async function analyzeGroupCoherence(
     .map((s, idx) => `SOURCE ${idx + 1}: ${s.label}\n\n${s.content}\n\n${"=".repeat(80)}`)
     .join("\n\n");
 
-  const userPrompt = `PROPOSED SKILL GROUP: "${groupTitle}"
+  const userPrompt = `SKILL GROUP: "${groupTitle}"
 
-SOURCES TO ANALYZE:
+SOURCES TO ANALYZE FOR CONTRADICTIONS:
 
 ${sourcesSection}
 
 ---
 
-Analyze whether these ${sources.length} sources are COHERENT and should be grouped into a single skill titled "${groupTitle}".
+These ${sources.length} sources have been grouped together under "${groupTitle}" because they cover the same topic.
+
+Your task: FIND CONTRADICTIONS within these topically-aligned sources.
 
 Look for:
-1. TECHNICAL CONTRADICTIONS: Do sources recommend conflicting approaches?
-2. VERSION MISMATCHES: Do sources cover different versions (v1 vs v2)?
-3. SCOPE MISMATCHES: Do sources cover fundamentally different topics?
-4. OUTDATED VS CURRENT: Are some sources outdated while others are current?
-5. DIFFERENT PERSPECTIVES: Do sources take incompatible stances?
+1. TECHNICAL CONTRADICTIONS: Do sources recommend conflicting approaches or incompatible solutions?
+2. VERSION MISMATCHES: Do sources cover different versions with breaking changes?
+3. CONFLICTING GUIDANCE: Do sources give contradictory advice about the same topic?
+4. OUTDATED VS CURRENT: Are some sources outdated with deprecated information while others are current?
+5. DIFFERENT PERSPECTIVES: Do sources take incompatible stances on the same issue?
+
+IMPORTANT:
+- These sources are ALREADY grouped by topic - don't flag "scope mismatch" unless they truly contradict
+- If you find conflicts, you MUST provide specific descriptions with details from the sources
+- Empty conflicts array is ONLY acceptable if sources truly have no contradictions
+- coherent = false REQUIRES conflicts.length > 0 with detailed descriptions
 
 Return a JSON object:
 {
@@ -193,22 +204,22 @@ Return a JSON object:
   "conflicts": [
     {
       "type": "technical_contradiction" | "version_mismatch" | "scope_mismatch" | "outdated_vs_current" | "different_perspectives",
-      "description": "<specific conflict description>",
+      "description": "<REQUIRED: specific conflict with examples from sources>",
       "affectedSources": [<source indices starting from 0>],
       "severity": "low" | "medium" | "high"
     }
   ],
-  "recommendation": "<actionable advice: keep grouped, split, or remove specific sources>",
-  "summary": "<brief 1-2 sentence summary of coherence status>"
+  "recommendation": "<actionable advice: which source to trust, need manual review, or safe to proceed>",
+  "summary": "<brief 1-2 sentence summary focusing on conflicts found or alignment confirmed>"
 }
 
 Guidelines:
-- coherent = true if sources complement each other despite minor differences
-- coherent = false if sources fundamentally conflict or cover different topics
-- coherenceLevel: "high" if >80% aligned, "medium" if 50-80%, "low" if <50%
-- List ALL significant conflicts found
-- Be specific in descriptions (mention actual differences, not just "sources differ")
-- Recommend splits with suggested new group titles if needed
+- coherent = true if sources align and complement each other
+- coherent = false ONLY if you found actual contradictions (and conflicts array is populated)
+- coherenceLevel: "high" if >90% aligned, "medium" if 70-90%, "low" if <70%
+- List ALL contradictions found with specific details
+- Be specific: quote or reference actual conflicting statements
+- If coherent = false, conflicts array MUST have at least one detailed entry
 
 Return ONLY the JSON object.`;
 
