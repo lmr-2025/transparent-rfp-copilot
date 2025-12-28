@@ -323,6 +323,97 @@ npx prisma migrate deploy
 - `BulkRow.projectId` - For efficient project row lookups
 - `BulkRow.status` - For filtering rows by status
 
+---
+
+## Database Hardening
+
+The database schema includes several hardening measures to ensure data integrity:
+
+### Unique Constraints
+- `Skill.title` - Prevents duplicate skill titles (case-insensitive)
+- `CustomerProfile.name` - Prevents duplicate customer names (case-insensitive)
+
+### GIN Indexes on Array Fields
+For efficient filtering on array columns:
+- `Skill.categories`
+- `KnowledgeDocument.categories`
+- `ReferenceUrl.categories`
+- `KnowledgeRequest.categories`
+- `InstructionPreset.defaultCategories`
+
+### Preflight Checks
+
+Before applying migrations, run the preflight script to detect issues:
+
+```bash
+npm run db:preflight
+```
+
+The preflight script fails (exit code 1) if it detects:
+- Duplicate skill titles (case-insensitive)
+- Duplicate customer names (case-insensitive)
+- Null `ownerId` on: Skill, CustomerProfile, KnowledgeDocument, BulkProject, Template, CollateralOutput, ContractReview
+
+### Migration Best Practices
+
+**For fresh database setup:**
+```bash
+# 1. Drop and recreate schema (dev-safe only)
+psql "$DATABASE_URL" -c 'DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;'
+
+# 2. Apply baseline migration
+psql "$DATABASE_URL" -f prisma/migrations/20251228010000_baseline/migration.sql
+
+# 3. Regenerate Prisma client
+npx prisma generate
+
+# 4. Run preflight check
+npm run db:preflight
+```
+
+**Before deploying migrations:**
+1. Resolve any duplicates reported by preflight (rename/merge as appropriate)
+2. Backfill missing owners (assign real owner or "system" owner)
+3. Re-run `npm run db:preflight` until clean
+4. Apply migrations with `npx prisma migrate deploy`
+
+**Important Notes:**
+- The baseline migration (`20251228010000_baseline`) is the source of truth
+- Legacy migrations were removed to avoid drift
+- For production RDS, never drop the schema - use migrations instead
+
+---
+
+## Docker Compose Database Configuration
+
+The Docker Compose setup uses specific configurations to avoid conflicts:
+
+### Port Mapping
+- Container uses standard PostgreSQL port: `5432`
+- Host binds to port: `55432` (to avoid conflicts with system PostgreSQL)
+- Connection string for Docker database: `postgresql://grcminion:grcminion_dev_password@127.0.0.1:55432/grcminion?schema=public`
+
+### Environment Variables
+
+To avoid repeating the DATABASE_URL, add it to `.env.local`:
+```bash
+DATABASE_URL=postgresql://grcminion:grcminion_dev_password@127.0.0.1:55432/grcminion?schema=public
+```
+
+Then source it before running commands:
+```bash
+source .env.local
+```
+
+Or add it to your shell profile (`~/.zshrc` or `~/.bashrc`) to load automatically.
+
+### Data Persistence
+- Docker volume: `postgres_data`
+- Data persists across container restarts
+- To reset: `docker-compose down -v` (removes volume)
+
+---
+
 ## Next Steps
 
 Once the database is set up and running:
