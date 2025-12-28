@@ -163,6 +163,16 @@ export async function PUT(request: NextRequest) {
       return upserted;
     });
 
+    // Audit log for bulk import (single entry to avoid spam)
+    await logReferenceUrlChange(
+      "CREATED",
+      "bulk-import",
+      "Bulk URL Import",
+      getUserFromSession(auth.session),
+      undefined,
+      { importedCount: results.length, urls: results.map(r => r.url) }
+    );
+
     return apiSuccess({ imported: results.length, urls: results });
   } catch (error) {
     logger.error("Failed to import reference URLs", error, { route: "/api/reference-urls" });

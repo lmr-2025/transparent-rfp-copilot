@@ -7,6 +7,7 @@ import { invalidatePromptCache } from "@/lib/cache";
 import { updateBlockAndCommit, updateModifierAndCommit } from "@/lib/promptGitSync";
 import { withBlockSyncLogging, withModifierSyncLogging } from "@/lib/promptSyncLog";
 import type { PromptBlockFile, PromptModifierFile } from "@/lib/promptFiles";
+import { logPromptBlockChange, logPromptModifierChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 
 type BlockInput = {
   id: string;
@@ -195,6 +196,20 @@ export async function PUT(request: Request) {
           name: block.name,
         });
       }
+
+      // Audit log
+      try {
+        await logPromptBlockChange(
+          "UPDATED",
+          block.id,
+          block.name,
+          getUserFromSession(auth.session),
+          undefined,
+          { tier: block.tier }
+        );
+      } catch (auditError) {
+        logger.error("Failed to create audit log for block", auditError, { blockId: block.id });
+      }
     }
 
     for (const { input: mod, db: dbModifier } of savedModifiers) {
@@ -236,6 +251,20 @@ export async function PUT(request: Request) {
           modifierId: mod.id,
           name: mod.name,
         });
+      }
+
+      // Audit log
+      try {
+        await logPromptModifierChange(
+          "UPDATED",
+          mod.id,
+          mod.name,
+          getUserFromSession(auth.session),
+          undefined,
+          { type: mod.type, tier: mod.tier }
+        );
+      } catch (auditError) {
+        logger.error("Failed to create audit log for modifier", auditError, { modifierId: mod.id });
       }
     }
 

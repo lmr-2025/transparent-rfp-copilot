@@ -10,6 +10,7 @@ import { getTemplateSlug } from "@/lib/templateFiles";
 import { updateTemplateAndCommit, deleteTemplateAndCommit } from "@/lib/templateGitSync";
 import { withTemplateSyncLogging } from "@/lib/templateSyncLog";
 import type { TemplateFile, PlaceholderMapping } from "@/lib/templateFiles";
+import { logTemplateChange, getUserFromSession, computeChanges, getRequestContext } from "@/lib/auditLog";
 
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -144,6 +145,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       });
     }
 
+    // Audit log
+    const changes = computeChanges(
+      existing as unknown as Record<string, unknown>,
+      template as unknown as Record<string, unknown>,
+      ["name", "description", "content", "category", "outputFormat", "isActive", "sortOrder"]
+    );
+
+    await logTemplateChange(
+      "UPDATED",
+      template.id,
+      template.name,
+      getUserFromSession(session),
+      Object.keys(changes).length > 0 ? changes : undefined,
+      undefined,
+      getRequestContext(request)
+    );
+
     return apiSuccess(template);
   } catch (error) {
     logger.error("Failed to update template", error);
@@ -204,6 +222,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         name: existing.name,
       });
     }
+
+    // Audit log
+    await logTemplateChange(
+      "DELETED",
+      existing.id,
+      existing.name,
+      getUserFromSession(session),
+      undefined,
+      { deletedTemplate: { name: existing.name, category: existing.category } },
+      getRequestContext(request)
+    );
 
     return apiSuccess({ deleted: true });
   } catch (error) {
