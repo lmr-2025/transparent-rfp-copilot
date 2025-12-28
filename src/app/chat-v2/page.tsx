@@ -27,6 +27,7 @@ import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 // Lazy load heavy components to reduce initial bundle size
 const TransparencyModal = lazy(() => import("@/components/chat/transparency-modal").then(m => ({ default: m.TransparencyModal })));
 const CollapsibleKnowledgeSidebar = lazy(() => import("./components/collapsible-knowledge-sidebar").then(m => ({ default: m.CollapsibleKnowledgeSidebar })));
+const DetectedUrlsPanel = lazy(() => import("@/components/chat/detected-urls-panel").then(m => ({ default: m.DetectedUrlsPanel })));
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseAnswerSections } from "@/lib/questionHelpers";
@@ -56,6 +57,10 @@ export default function ChatV2Page() {
   const [selectedPresetName, setSelectedPresetName] = useState<string | null>(null);
   const [focusedCustomerId, setFocusedCustomerId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  // Detected URLs staging area
+  type DetectedUrl = { url: string; title: string; detectedInMessageId: string; timestamp: Date };
+  const [detectedUrls, setDetectedUrls] = useState<DetectedUrl[]>([]);
 
   // Zustand stores
   const {
@@ -253,12 +258,12 @@ ${keyFactsText}`;
 
     try {
       // Detect URLs in the message for ephemeral fetching
-      const detectedUrls = detectUrls(messageContent);
+      const detectedUrlStrings = detectUrls(messageContent);
       let ephemeralUrls: { url: string; title: string; content: string }[] = [];
 
       // Fetch content from detected URLs
-      if (detectedUrls.length > 0) {
-        const fetchPromises = detectedUrls.map(async (url) => {
+      if (detectedUrlStrings.length > 0) {
+        const fetchPromises = detectedUrlStrings.map(async (url) => {
           try {
             const res = await fetch("/api/fetch-url", {
               method: "POST",
@@ -281,6 +286,19 @@ ${keyFactsText}`;
 
         const results = await Promise.all(fetchPromises);
         ephemeralUrls = results.filter((r) => r !== null) as { url: string; title: string; content: string }[];
+
+        // Add successfully fetched URLs to the staging area (if not already there)
+        const newDetectedUrls = ephemeralUrls
+          .filter(eu => !detectedUrls.some(du => du.url === eu.url))
+          .map(eu => ({
+            url: eu.url,
+            title: eu.title,
+            detectedInMessageId: userMessage.id,
+            timestamp: new Date(),
+          }));
+        if (newDetectedUrls.length > 0) {
+          setDetectedUrls(prev => [...prev, ...newDetectedUrls]);
+        }
       }
 
       // Get selected items
@@ -434,7 +452,64 @@ ${keyFactsText}`;
     setCurrentSessionId(null);
     setShowHistory(false);
     setLastTransparency(null);
+    // Optionally clear detected URLs when starting new chat
+    // setDetectedUrls([]);
   };
+
+  // Handle adding detected URLs to knowledge base
+  const handleAddUrlsToKnowledge = useCallback(async (urlsToAdd: string[]) => {
+    try {
+      // Call API to add URLs as reference URLs in knowledge base
+      const promises = urlsToAdd.map(async (url) => {
+        const res = await fetch("/api/reference-urls", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        if (!res.ok) throw new Error(`Failed to add ${url}`);
+      });
+      await Promise.all(promises);
+      toast.success(`Added ${urlsToAdd.length} URL(s) to knowledge base`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add URLs");
+      throw err;
+    }
+  }, []);
+
+  // Handle adding detected URLs to customer profile
+  const handleAddUrlsToCustomer = useCallback(async (urlsToAdd: string[], customerId: string) => {
+    try {
+      // Call API to add URLs as documents to customer profile
+      const promises = urlsToAdd.map(async (url) => {
+        // First fetch the URL content
+        const fetchRes = await fetch("/api/fetch-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url }),
+        });
+        if (!fetchRes.ok) throw new Error(`Failed to fetch ${url}`);
+        const fetchData = await fetchRes.json();
+
+        // Then create a customer document
+        const docRes = await fetch(`/api/customers/${customerId}/documents`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: fetchData.data?.title || url,
+            content: fetchData.data?.content || "",
+            docType: "url",
+            url,
+          }),
+        });
+        if (!docRes.ok) throw new Error(`Failed to add ${url} to customer`);
+      });
+      await Promise.all(promises);
+      toast.success(`Added ${urlsToAdd.length} URL(s) to customer profile`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add URLs to customer");
+      throw err;
+    }
+  }, []);
 
   const handleLoadSession = (sessionItem: ChatSessionItem) => {
     const loadedMessages: ChatMessage[] = (sessionItem.messages || []).map((m, idx) => ({
@@ -692,8 +767,25 @@ ${keyFactsText}`;
           minWidth: sidebarCollapsed ? '48px' : `${sidebarMinWidth}px`,
           maxWidth: sidebarCollapsed ? '48px' : `${sidebarMaxWidth}px`,
         }}
-        className="flex-shrink-0 flex flex-col h-full transition-all duration-200"
+        className="flex-shrink-0 flex flex-col h-full transition-all duration-200 overflow-y-auto"
       >
+        {/* Detected URLs Staging Area */}
+        {!sidebarCollapsed && detectedUrls.length > 0 && (
+          <div className="p-4 border-b">
+            <Suspense fallback={null}>
+              <DetectedUrlsPanel
+                urls={detectedUrls}
+                focusedCustomerId={focusedCustomerId}
+                focusedCustomerName={focusedCustomer?.name || null}
+                onAddToKnowledge={handleAddUrlsToKnowledge}
+                onAddToCustomer={handleAddUrlsToCustomer}
+                onRemove={(url) => setDetectedUrls(prev => prev.filter(u => u.url !== url))}
+                onClear={() => setDetectedUrls([])}
+              />
+            </Suspense>
+          </div>
+        )}
+
         <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400">Loading...</div>}>
           <CollapsibleKnowledgeSidebar
             skills={skills}
