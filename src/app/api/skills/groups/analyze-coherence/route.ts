@@ -40,14 +40,14 @@ type CoherenceAnalysisResult = {
 /**
  * POST /api/skills/groups/analyze-coherence
  *
- * Finds contradictions and conflicts within topically-aligned sources.
- * Used when building/updating skills to flag contradictory information in source materials.
+ * Finds contradictions within source groups BEFORE skill creation.
+ * Used during bulk import to validate that grouped sources don't conflict with each other.
  *
- * Note: Sources are already grouped by topic (Feature 1).
- * This analyzes for contradictions WITHIN the group (Feature 2).
+ * Note: This is for NEW skill creation where no finalized content exists yet.
+ * For EXISTING skills, use the refresh endpoint which compares sources against finalized skill content.
  *
  * Filters applied:
- * - Only analyze groups with 2-5 sources
+ * - Only analyze groups with 2-5 sources (prevents token limits)
  * - Use Haiku model for speed/cost
  * - Non-blocking (runs in background)
  */

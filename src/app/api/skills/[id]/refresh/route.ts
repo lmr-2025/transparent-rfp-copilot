@@ -65,9 +65,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const urlStrings = sourceUrls.map((s) => s.url);
     const sourceContent = await buildSourceMaterial(urlStrings);
 
-    // Check for contradictions in sources (if 2-5 sources)
+    // Check for contradictions in sources (scales to any number of sources)
     let coherenceResult = null;
-    if (urlStrings.length >= 2 && urlStrings.length <= 5) {
+    if (urlStrings.length >= 1) {
       try {
         coherenceResult = await analyzeSourceCoherence(urlStrings, skill.title, auth.session);
       } catch (error) {
@@ -369,132 +369,178 @@ Return ONLY the JSON object.`;
   return parsed;
 }
 
-// Analyze source coherence for contradictions
+// Analyze source coherence for contradictions (source-vs-skill comparison)
 async function analyzeSourceCoherence(
   sourceUrls: string[],
   skillTitle: string,
   authSession: { user?: { id?: string; email?: string | null } } | null
 ) {
+  const skill = await prisma.skill.findFirst({
+    where: { title: skillTitle },
+    select: { content: true },
+  });
+
+  if (!skill) {
+    throw new Error("Skill not found for coherence analysis");
+  }
+
   const anthropic = getAnthropicClient();
 
-  // Fetch source contents
+  // Fetch all source contents in parallel
   const sourceContents = await Promise.all(
     sourceUrls.map(async (url, idx) => {
       const content = await fetchUrlContent(url, { maxLength: 15000 });
       return {
         index: idx,
-        label: `URL: ${url}`,
+        url,
         content: content || "[Could not fetch content]",
       };
     })
   );
 
-  // Load system prompt
-  const systemPrompt = await loadSystemPrompt(
-    "group_coherence_analysis",
-    "You are a content analysis specialist who finds contradictions and conflicts within topically-aligned source materials."
-  );
+  // Analyze each source against the skill content in parallel
+  const analyses = await Promise.all(
+    sourceContents.map(async (source) => {
+      const systemPrompt = await loadSystemPrompt(
+        "source_skill_coherence",
+        "You are a content analysis specialist who identifies contradictions between source materials and finalized content."
+      );
 
-  // Build sources section
-  const sourcesSection = sourceContents
-    .map((s) => `SOURCE ${s.index + 1}: ${s.label}\n\n${s.content}\n\n${"=".repeat(80)}`)
-    .join("\n\n");
+      const userPrompt = `FINALIZED SKILL: "${skillTitle}"
 
-  const userPrompt = `SKILL: "${skillTitle}"
-
-SOURCES TO ANALYZE FOR CONTRADICTIONS:
-
-${sourcesSection}
+Skill Content (established truth):
+${skill.content}
 
 ---
 
-These ${sourceUrls.length} sources are used for the skill "${skillTitle}".
+SOURCE TO ANALYZE:
+URL: ${source.url}
 
-Your task: FIND CONTRADICTIONS within these topically-aligned sources.
+${source.content}
 
-Look for:
-1. TECHNICAL CONTRADICTIONS: Do sources recommend conflicting approaches or incompatible solutions?
-2. VERSION MISMATCHES: Do sources cover different versions with breaking changes?
-3. CONFLICTING GUIDANCE: Do sources give contradictory advice about the same topic?
-4. OUTDATED VS CURRENT: Are some sources outdated with deprecated information while others are current?
-5. DIFFERENT PERSPECTIVES: Do sources take incompatible stances on the same issue?
+---
 
-IMPORTANT:
-- These sources are ALREADY grouped by topic - don't flag "scope mismatch" unless they truly contradict
-- If you find conflicts, you MUST provide specific descriptions with details from the sources
-- Empty conflicts array is ONLY acceptable if sources truly have no contradictions
-- coherent = false REQUIRES conflicts.length > 0 with detailed descriptions
+Your task: Determine if this source CONTRADICTS the finalized skill content.
+
+The skill content represents the agreed-upon information. Check if the source:
+1. Contradicts technical details in the skill
+2. Provides outdated information that conflicts with the skill
+3. Recommends different approaches than the skill establishes
+4. Contains version mismatches or deprecated information
+5. Takes an incompatible stance on topics covered by the skill
 
 Return a JSON object:
 {
-  "coherent": boolean,
-  "coherenceLevel": "high" | "medium" | "low",
-  "coherencePercentage": <number 0-100>,
-  "conflicts": [
+  "contradicts": boolean,
+  "alignment": <number 0-100, where 100 = perfect alignment>,
+  "issues": [
     {
-      "type": "technical_contradiction" | "version_mismatch" | "scope_mismatch" | "outdated_vs_current" | "different_perspectives",
-      "description": "<REQUIRED: specific conflict with examples from sources>",
-      "affectedSources": [<source indices starting from 0>],
+      "type": "technical_contradiction" | "outdated_information" | "different_approach" | "version_mismatch" | "incompatible_stance",
+      "description": "<specific contradiction with examples>",
       "severity": "low" | "medium" | "high"
     }
   ],
-  "recommendation": "<actionable advice: which source to trust, need manual review, or safe to proceed>",
-  "summary": "<brief 1-2 sentence summary focusing on conflicts found or alignment confirmed>"
+  "recommendation": "<should this source be updated, removed, or is it acceptable?>",
+  "summary": "<brief summary of alignment or conflicts>"
 }
 
 Guidelines:
-- coherent = true if sources align and complement each other
-- coherent = false ONLY if you found actual contradictions (and conflicts array is populated)
-- coherenceLevel: "high" if >90% aligned, "medium" if 70-90%, "low" if <70%
-- List ALL contradictions found with specific details
-- Be specific: quote or reference actual conflicting statements
-- If coherent = false, conflicts array MUST have at least one detailed entry
+- contradicts = false if source aligns with or complements the skill
+- contradicts = true ONLY if actual contradictions exist (and issues array is populated)
+- Be specific about what contradicts and provide examples
+- If contradicts = true, issues array MUST have at least one detailed entry
 
 Return ONLY the JSON object.`;
 
-  // Use Haiku for speed/cost
-  const speed = getEffectiveSpeed("skills-refresh");
-  const model = speed === "fast" ? "claude-3-5-haiku-20241022" : getModel(speed);
+      const speed = getEffectiveSpeed("skills-refresh");
+      const model = speed === "fast" ? "claude-3-5-haiku-20241022" : getModel(speed);
 
-  const stream = anthropic.messages.stream({
-    model,
-    max_tokens: 4000,
-    temperature: 0.1,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
-  });
+      const stream = anthropic.messages.stream({
+        model,
+        max_tokens: 2000,
+        temperature: 0.1,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
 
-  const response = await stream.finalMessage();
+      const response = await stream.finalMessage();
+      const content = response.content[0];
 
-  const content = response.content[0];
-  if (content.type !== "text") {
-    throw new Error("Unexpected response format");
-  }
+      if (content.type !== "text") {
+        throw new Error("Unexpected response format");
+      }
 
-  const parsed = parseJsonResponse<{
-    coherent: boolean;
-    coherenceLevel: "high" | "medium" | "low";
-    coherencePercentage: number;
-    conflicts: Array<{
-      type: string;
-      description: string;
-      affectedSources: number[];
-      severity: "low" | "medium" | "high";
-    }>;
-    recommendation: string;
-    summary: string;
-  }>(content.text);
+      const parsed = parseJsonResponse<{
+        contradicts: boolean;
+        alignment: number;
+        issues: Array<{
+          type: string;
+          description: string;
+          severity: "low" | "medium" | "high";
+        }>;
+        recommendation: string;
+        summary: string;
+      }>(content.text);
 
-  // Log usage
-  logUsage({
-    userId: authSession?.user?.id,
-    userEmail: authSession?.user?.email,
-    feature: "skill-refresh-coherence",
-    model,
-    inputTokens: response.usage?.input_tokens || 0,
-    outputTokens: response.usage?.output_tokens || 0,
-    metadata: { skillTitle, sourceCount: sourceUrls.length },
-  });
+      // Log usage for this source
+      logUsage({
+        userId: authSession?.user?.id,
+        userEmail: authSession?.user?.email,
+        feature: "skill-refresh-coherence",
+        model,
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        metadata: { skillTitle, sourceUrl: source.url },
+      });
 
-  return parsed;
+      return {
+        sourceIndex: source.index,
+        sourceUrl: source.url,
+        ...parsed,
+      };
+    })
+  );
+
+  // Aggregate results
+  const conflictingSources = analyses.filter((a) => a.contradicts);
+  const avgAlignment = Math.round(
+    analyses.reduce((sum, a) => sum + a.alignment, 0) / analyses.length
+  );
+
+  // Flatten all issues with source attribution
+  const allConflicts = conflictingSources.flatMap((source) =>
+    source.issues.map((issue) => ({
+      type: issue.type,
+      description: `Source ${source.sourceIndex + 1} (${source.sourceUrl}): ${issue.description}`,
+      affectedSources: [source.sourceIndex],
+      severity: issue.severity,
+    }))
+  );
+
+  return {
+    coherent: conflictingSources.length === 0,
+    coherenceLevel: (avgAlignment > 90 ? "high" : avgAlignment > 70 ? "medium" : "low") as
+      | "high"
+      | "medium"
+      | "low",
+    coherencePercentage: avgAlignment,
+    conflicts: allConflicts,
+    recommendation:
+      conflictingSources.length === 0
+        ? "All sources align with the skill content"
+        : `${conflictingSources.length} of ${sourceUrls.length} sources contain contradictions - review recommended`,
+    summary:
+      conflictingSources.length === 0
+        ? `All ${sourceUrls.length} sources align with the finalized skill content`
+        : `${conflictingSources.length} source(s) contradict the skill content`,
+    sourceAnalyses: analyses.map((a) => ({
+      sourceIndex: a.sourceIndex,
+      sourceUrl: a.sourceUrl,
+      contradicts: a.contradicts,
+      alignment: a.alignment,
+      issues: a.issues,
+      recommendation: a.recommendation,
+      summary: a.summary,
+    })),
+  };
 }
