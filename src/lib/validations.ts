@@ -339,6 +339,7 @@ const referenceUrlContextSchema = z.object({
   id: z.string(),
   url: z.string(),
   title: z.string(),
+  content: z.string().optional(), // Optional content for ephemeral URLs (pre-fetched)
 });
 
 const chatMessageItemSchema = z.object({

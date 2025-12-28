@@ -56,7 +56,7 @@ type SendMessageParams = {
     keyFacts?: { label: string; value: string }[];
   }[];
   documentIds: string[];
-  referenceUrls: { id: string; url: string; title: string | null }[];
+  referenceUrls: { id: string; url: string; title: string | null; content?: string }[];
   conversationHistory: { role: string; content: string }[];
   userInstructions: string;
   quickMode?: boolean; // Use Haiku for faster responses

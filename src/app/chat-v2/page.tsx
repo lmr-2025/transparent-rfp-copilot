@@ -228,6 +228,13 @@ ${keyFactsText}`;
     };
   }, [skills, documents, urls, customers, userInstructions, callMode, getSelectedSkillIds, getSelectedDocumentIds, getSelectedUrlIds, getSelectedCustomerIds]);
 
+  // Detect URLs in a message
+  const detectUrls = (text: string): string[] => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const matches = text.match(urlRegex);
+    return matches || [];
+  };
+
   // Handle sending a message
   const handleSend = useCallback(async () => {
     const messageContent = inputValue.trim();
@@ -245,6 +252,37 @@ ${keyFactsText}`;
     setIsLoading(true);
 
     try {
+      // Detect URLs in the message for ephemeral fetching
+      const detectedUrls = detectUrls(messageContent);
+      let ephemeralUrls: { url: string; title: string; content: string }[] = [];
+
+      // Fetch content from detected URLs
+      if (detectedUrls.length > 0) {
+        const fetchPromises = detectedUrls.map(async (url) => {
+          try {
+            const res = await fetch("/api/fetch-url", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              return {
+                url,
+                title: data.data?.title || url,
+                content: data.data?.content || "",
+              };
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch URL ${url}:`, err);
+          }
+          return null;
+        });
+
+        const results = await Promise.all(fetchPromises);
+        ephemeralUrls = results.filter((r) => r !== null) as { url: string; title: string; content: string }[];
+      }
+
       // Get selected items
       const selectedSkillIds = getSelectedSkillIds();
       const selectedDocIds = getSelectedDocumentIds();
@@ -280,6 +318,17 @@ ${keyFactsText}`;
           title: u.title,
         }));
 
+      // Combine selected URLs with ephemeral URLs (include content for ephemeral ones)
+      const allUrls = [
+        ...selectedUrls,
+        ...ephemeralUrls.map((eu) => ({
+          id: `ephemeral-${crypto.randomUUID()}`,
+          url: eu.url,
+          title: eu.title,
+          content: eu.content, // Include fetched content for ephemeral URLs
+        })),
+      ];
+
       const conversationHistory = messages.map((m) => ({
         role: m.role,
         content: m.content,
@@ -290,7 +339,7 @@ ${keyFactsText}`;
         skills: selectedSkills,
         customerProfiles: selectedCustomers,
         documentIds: selectedDocIds,
-        referenceUrls: selectedUrls,
+        referenceUrls: allUrls,
         conversationHistory,
         userInstructions,
         quickMode,

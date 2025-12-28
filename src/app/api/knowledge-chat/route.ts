@@ -137,11 +137,14 @@ export async function POST(request: NextRequest) {
       type: "document" as const,
     }));
 
-    // Convert URLs to ContextItems (include URL in content)
+    // Convert URLs to ContextItems
+    // If content is provided (ephemeral URLs), use it; otherwise just include URL reference
     const urlItems: ContextItem[] = referenceUrls.map((url) => ({
       id: url.id,
       title: url.title || url.url,
-      content: `URL: ${url.url}`,
+      content: url.content
+        ? `URL: ${url.url}\n\n${url.content}`
+        : `URL: ${url.url}`,
       type: "url" as const,
     }));
 
