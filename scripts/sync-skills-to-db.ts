@@ -21,6 +21,7 @@
 import { prisma } from "../src/lib/prisma";
 import { listSkillFiles, readSkillFile } from "../src/lib/skillFiles";
 import { withSyncLogging } from "../src/lib/skillSyncLog";
+import { invalidateSkillCache } from "../src/lib/cache";
 import { exec } from "child_process";
 import { promisify } from "util";
 
@@ -28,6 +29,21 @@ const execAsync = promisify(exec);
 
 async function syncSkills() {
   console.log("🔄 Starting skill sync from git to database...\n");
+
+  // Get or create a system user for skills without an owner
+  let systemUser = await prisma.user.findFirst({
+    where: { email: "system@transparent-trust.internal" },
+  });
+
+  if (!systemUser) {
+    systemUser = await prisma.user.create({
+      data: {
+        email: "system@transparent-trust.internal",
+        name: "System",
+      },
+    });
+    console.log("✨ Created system user for skill ownership\n");
+  }
 
   // Get all skill files from git
   const skillSlugs = await listSkillFiles();
@@ -98,6 +114,29 @@ async function syncSkills() {
         const commitSha = stdout.trim();
 
         // Create new skill with sync logging
+        // Extract ownerId from skill file owners or use system user
+        let ownerId = systemUser.id;
+        if (skillFile.owners && skillFile.owners.length > 0) {
+          const firstOwner = skillFile.owners[0];
+          if (firstOwner.userId) {
+            // Check if user exists
+            const user = await prisma.user.findUnique({
+              where: { id: firstOwner.userId },
+            });
+            if (user) {
+              ownerId = firstOwner.userId;
+            }
+          } else if (firstOwner.email) {
+            // Try to find user by email
+            const user = await prisma.user.findFirst({
+              where: { email: firstOwner.email },
+            });
+            if (user) {
+              ownerId = user.id;
+            }
+          }
+        }
+
         await withSyncLogging(
           {
             skillId: skillFile.id,
@@ -116,6 +155,7 @@ async function syncSkills() {
                 sourceUrls: skillFile.sources,
                 owners: skillFile.owners,
                 edgeCases: [], // Empty array for deprecated field
+                ownerId, // Add required ownerId field
                 createdAt: new Date(skillFile.created),
                 updatedAt: new Date(skillFile.updated),
               },
@@ -153,12 +193,35 @@ async function syncSkills() {
   const orphanedSkills = dbSkills.filter((skill) => !gitSkillIds.has(skill.id));
 
   if (orphanedSkills.length > 0) {
-    console.log("\n⚠️  Found skills in database that don't exist in git:");
+    console.log("\n🗑️  Found skills in database that don't exist in git:");
     orphanedSkills.forEach((skill) => {
       console.log(`    - ${skill.title} (${skill.id})`);
     });
-    console.log("\nThese skills may have been deleted from git.");
-    console.log("Consider archiving them in the database.\n");
+    console.log("\nDeleting orphaned skills from database...");
+
+    let deletedCount = 0;
+    for (const skill of orphanedSkills) {
+      try {
+        await prisma.skill.delete({ where: { id: skill.id } });
+        deletedCount++;
+      } catch (error) {
+        console.error(`    ❌ Failed to delete ${skill.title}: ${error}`);
+      }
+    }
+
+    console.log(`✅ Deleted ${deletedCount} orphaned skills\n`);
+
+    // Invalidate cache after deletions
+    if (deletedCount > 0) {
+      await invalidateSkillCache();
+    }
+  }
+
+  // Invalidate all skill caches (Redis + any HTTP caches)
+  if (createdCount > 0 || updatedCount > 0) {
+    console.log("🗑️  Invalidating skill caches...");
+    await invalidateSkillCache();
+    console.log("✅ Cache invalidated\n");
   }
 
   console.log("\n" + "=".repeat(50));
