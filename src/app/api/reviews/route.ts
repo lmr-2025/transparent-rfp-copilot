@@ -99,7 +99,13 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                customerName: true,
+                customerId: true,
+                customer: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
               },
             },
           },
@@ -234,9 +240,10 @@ export async function GET(request: NextRequest) {
       flagResolvedAt: c.flagResolvedAt?.toISOString(),
       flagResolvedBy: c.flagResolvedBy,
       flagResolutionNote: c.flagResolutionNote,
-      // Additional context
-      templateName: c.templateName,
-      customerName: c.customerName,
+      // Additional context (use relations instead of removed snapshot columns)
+      templateId: c.templateId,
+      customerId: c.customerId,
+      customerName: c.customer?.name || null,
       owner: c.owner,
       customer: c.customer,
       project: null,

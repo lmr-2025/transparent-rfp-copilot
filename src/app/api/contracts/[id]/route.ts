@@ -22,6 +22,19 @@ export async function GET(
             { createdAt: "asc" },
           ],
         },
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -166,7 +179,17 @@ export async function DELETE(
     const { id } = await params;
 
     // Get contract before deleting for audit log
-    const contract = await prisma.contractReview.findUnique({ where: { id } });
+    const contract = await prisma.contractReview.findUnique({
+      where: { id },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
     if (!contract) {
       return errors.notFound("Contract review");
     }
@@ -182,7 +205,7 @@ export async function DELETE(
       contract.name,
       getUserFromSession(auth.session),
       undefined,
-      { deletedContract: { name: contract.name, customerName: contract.customerName } }
+      { deletedContract: { name: contract.name, customerName: contract.customer?.name || null } }
     );
 
     return apiSuccess({ success: true });

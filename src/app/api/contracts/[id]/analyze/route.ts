@@ -48,6 +48,14 @@ export async function POST(
     // Get the contract
     const contract = await prisma.contractReview.findUnique({
       where: { id },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
 
     if (!contract) {
@@ -116,7 +124,7 @@ export async function POST(
 YOUR CAPABILITIES (use these to assess compliance):
 ${skillsContext}`;
 
-    const userPrompt = `Analyze this ${contract.contractType || "contract"} from ${contract.customerName || "the customer"}:
+    const userPrompt = `Analyze this ${contract.contractType || "contract"} from ${contract.customer?.name || "the customer"}:
 
 ---CONTRACT TEXT---
 ${contractText}

@@ -305,7 +305,17 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const { id } = params;
 
     // Get project before deleting for audit log
-    const project = await prisma.bulkProject.findUnique({ where: { id } });
+    const project = await prisma.bulkProject.findUnique({
+      where: { id },
+      include: {
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
     if (!project) {
       return errors.notFound("Project");
     }
@@ -321,7 +331,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       project.name,
       getUserFromSession(auth.session),
       undefined,
-      { deletedProject: { name: project.name, customerName: project.customerName } }
+      { deletedProject: { name: project.name, customerName: project.customer?.name || null } }
     );
 
     return apiSuccess({ message: "Project deleted successfully" });

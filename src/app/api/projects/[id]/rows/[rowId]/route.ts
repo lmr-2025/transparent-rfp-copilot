@@ -31,7 +31,18 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     // Verify row exists and belongs to project
     const row = await prisma.bulkRow.findFirst({
       where: { id: rowId, projectId },
-      include: { project: true },
+      include: {
+        project: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!row) {
@@ -227,7 +238,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // Verify row exists and belongs to project
     const row = await prisma.bulkRow.findFirst({
       where: { id: rowId, projectId },
-      include: { project: true },
+      include: {
+        project: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     if (!row) {
@@ -292,7 +314,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
               type: "question",
               projectName: row.project.name,
               projectUrl,
-              customerName: row.project.customerName,
+              customerName: row.project.customer?.name || null,
               requesterName,
               question: row.question,
               answer: row.response,
