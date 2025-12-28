@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { Skill } from "@/types/skill";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { parseApiData } from "@/lib/apiClient";
@@ -51,21 +51,33 @@ export default function ImportRFPPage() {
     setFileName(file.name);
 
     try {
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
-      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      const data = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { header: 1 });
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(arrayBuffer);
 
-      if (data.length < 2) {
+      const firstSheet = workbook.worksheets[0];
+      if (!firstSheet) {
+        setErrorMessage("File appears to be empty or has no worksheets.");
+        return;
+      }
+
+      const rows: unknown[][] = [];
+      firstSheet.eachRow((row) => {
+        const values = row.values as unknown[];
+        // slice(1) to remove empty first element from ExcelJS
+        rows.push(values.slice(1));
+      });
+
+      if (rows.length < 2) {
         setErrorMessage("File appears to be empty or has no data rows.");
         return;
       }
 
-      const firstRow = data[0];
+      const firstRow = rows[0];
       const headers = (Array.isArray(firstRow) ? firstRow : []).map((h) => String(h || "").trim());
       setColumns(headers.filter(Boolean));
 
-      const rawRows = data.slice(1).map((row) => {
+      const rawRows = rows.slice(1).map((row) => {
         const rowData: Record<string, string> = {};
         const rowArray = Array.isArray(row) ? row : [];
         headers.forEach((header, idx) => {

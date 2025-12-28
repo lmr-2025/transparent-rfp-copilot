@@ -264,12 +264,17 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
       return buffer.toString("utf-8");
     }
     case "xlsx": {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheets = workbook.SheetNames.map((name) => {
-        const sheet = workbook.Sheets[name];
-        const csv = XLSX.utils.sheet_to_csv(sheet);
-        return `--- Sheet: ${name} ---\n${csv}`;
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.load(buffer);
+      const sheets = workbook.worksheets.map((worksheet) => {
+        const csvRows: string[] = [];
+        worksheet.eachRow((row) => {
+          const values = row.values as unknown[];
+          csvRows.push(values.slice(1).map((v) => String(v ?? "")).join(","));
+        });
+        const csv = csvRows.join("\n");
+        return `--- Sheet: ${worksheet.name} ---\n${csv}`;
       });
       return sheets.join("\n\n");
     }

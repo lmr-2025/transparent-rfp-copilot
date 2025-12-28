@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import Papa from "papaparse";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { BulkProject } from "@/types/bulkProject";
 import { createProject } from "@/lib/projectApi";
 import { InlineError, InlineSuccess } from "@/components/ui/status-display";
@@ -124,7 +124,7 @@ export default function BulkUploadPage() {
     return { name, columns: headerRow, rows: bodyRows };
   };
 
-  const handleFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -175,33 +175,35 @@ export default function BulkUploadPage() {
       reader.onerror = () => { setErrorMessage("Unable to read CSV file."); setIsParsing(false); };
       reader.readAsText(file);
     } else if (isExcel) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        try {
-          const workbook = XLSX.read(reader.result, { type: "array" });
-          const parsedSheets: SheetData[] = [];
-          workbook.SheetNames.forEach((sheetName) => {
-            const sheet = workbook.Sheets[sheetName];
-            const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false, defval: "" }) as (string | number | boolean | null)[][];
-            const normalized = rows.map((row) => row.map((cell) => (cell === null ? "" : cell.toString())));
-            const sheetData = buildSheetData(normalized, sheetName);
-            if (sheetData) parsedSheets.push(sheetData);
+      const arrayBuffer = await file.arrayBuffer();
+      try {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(arrayBuffer);
+        const parsedSheets: SheetData[] = [];
+
+        workbook.worksheets.forEach((worksheet) => {
+          const rows: string[][] = [];
+          worksheet.eachRow((row) => {
+            const values = row.values as unknown[];
+            // slice(1) to remove empty first element from ExcelJS
+            rows.push(values.slice(1).map((cell) => (cell === null || cell === undefined ? "" : String(cell))));
           });
-          if (parsedSheets.length === 0) {
-            setErrorMessage("No populated worksheets detected in this file.");
-          } else {
-            setSheets(parsedSheets);
-            setSelectedSheet(parsedSheets[0].name);
-            setErrorMessage(null);
-          }
-        } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : "Failed to parse Excel workbook.");
-        } finally {
-          setIsParsing(false);
+          const sheetData = buildSheetData(rows, worksheet.name);
+          if (sheetData) parsedSheets.push(sheetData);
+        });
+
+        if (parsedSheets.length === 0) {
+          setErrorMessage("No populated worksheets detected in this file.");
+        } else {
+          setSheets(parsedSheets);
+          setSelectedSheet(parsedSheets[0].name);
+          setErrorMessage(null);
         }
-      };
-      reader.onerror = () => { setErrorMessage("Unable to read Excel file."); setIsParsing(false); };
-      reader.readAsArrayBuffer(file);
+        setIsParsing(false);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : "Failed to parse Excel workbook.");
+        setIsParsing(false);
+      }
     }
     event.target.value = "";
   };
