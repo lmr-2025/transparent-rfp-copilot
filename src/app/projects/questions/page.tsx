@@ -170,6 +170,7 @@ function QuestionsPageContent() {
         quickFacts: [],
         edgeCases: [],
         sourceUrls: [],
+        tier: "library" as const,
       }))
     );
     setShowHistory(false);
@@ -208,6 +209,7 @@ function QuestionsPageContent() {
               quickFacts: [],
               edgeCases: [],
               sourceUrls: [],
+              tier: "library" as const,
             }))
           );
           if (startEditing) {
@@ -272,12 +274,23 @@ function QuestionsPageContent() {
     setDetailsExpanded(false);
 
     try {
-      // Select relevant skills for this question
-      const relevantSkills = selectRelevantSkills(question, availableSkills);
-      const skillsPayload = relevantSkills.map((skill) => ({
+      // Get core (tier 1) skills for progressive loading
+      const coreSkills = availableSkills.filter((skill) => skill.tier === "core");
+      const tier1Payload = coreSkills.map((skill) => ({
+        id: skill.id,
         title: skill.title,
         content: skill.content,
       }));
+
+      // Extract categories from the question to help tier 2/3 search
+      const questionCategories = availableSkills
+        .filter((skill) =>
+          skill.categories?.some((cat) =>
+            question.toLowerCase().includes(cat.toLowerCase())
+          )
+        )
+        .flatMap((skill) => skill.categories || []);
+      const uniqueCategories = [...new Set(questionCategories)];
 
       const response = await fetch("/api/questions/answer", {
         method: "POST",
@@ -285,14 +298,16 @@ function QuestionsPageContent() {
         body: JSON.stringify({
           question,
           prompt: promptText,
-          skills: skillsPayload,
+          tier1Skills: tier1Payload,
+          categories: uniqueCategories.length > 0 ? uniqueCategories : undefined,
+          useProgressive: true,
           mode: "single",
           domains: selectedDomains.length > 0 ? selectedDomains : undefined,
           quickMode,
         }),
       });
       const json = await response.json().catch(() => null);
-      const data = json ? parseApiData<{ answer: string; error?: string }>(json) : null;
+      const data = json ? parseApiData<{ answer: string; tier?: number; tier2SkillsFound?: number; tier3SkillsFound?: number; error?: string }>(json) : null;
       if (!response.ok || !data?.answer) {
         throw new Error(json?.error || data?.error || "Failed to generate response.");
       }
@@ -304,8 +319,16 @@ function QuestionsPageContent() {
       setQuestionReasoning(parsed.reasoning);
       setQuestionInference(parsed.inference);
 
-      // Track which skills were used and show recommendation
-      setCurrentUsedSkills(relevantSkills);
+      // Log tier information for debugging
+      if (data.tier) {
+        console.log(`[Progressive Loading] Answer used Tier ${data.tier} skills`, {
+          tier2Found: data.tier2SkillsFound,
+          tier3Found: data.tier3SkillsFound,
+        });
+      }
+
+      // Track which skills were used (core skills for now)
+      setCurrentUsedSkills(coreSkills);
       setShowRecommendation(true);
 
       // Save to history and capture ID
@@ -317,7 +340,7 @@ function QuestionsPageContent() {
         parsed.reasoning,
         parsed.inference,
         parsed.remarks,
-        relevantSkills.map((s) => ({ id: s.id, title: s.title }))
+        coreSkills.map((s) => ({ id: s.id, title: s.title }))
       );
       setCurrentHistoryId(historyId);
       setCurrentFlagged(false);

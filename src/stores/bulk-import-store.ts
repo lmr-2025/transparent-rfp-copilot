@@ -21,6 +21,35 @@ export type DocumentSource = {
   content: string;
 };
 
+// Discrepancy analysis for UPDATE groups (new URL vs existing skill content)
+export type DiscrepancyAnalysis = {
+  changeLevel: "minimal" | "moderate" | "significant";
+  changePercentage: number;
+  changeSummary: {
+    newTopics: string[];
+    updatedContent: string[];
+    removedContent: string[];
+  };
+  recommendation: string;
+};
+
+// Coherence analysis for all groups (sources within the group)
+export type CoherenceConflict = {
+  type: "technical_contradiction" | "version_mismatch" | "scope_mismatch" | "outdated_vs_current" | "different_perspectives";
+  description: string;
+  affectedSources: number[];
+  severity: "low" | "medium" | "high";
+};
+
+export type CoherenceAnalysis = {
+  coherent: boolean;
+  coherenceLevel: "high" | "medium" | "low";
+  coherencePercentage: number;
+  conflicts: CoherenceConflict[];
+  recommendation: string;
+  summary: string;
+};
+
 export type SkillGroup = {
   id: string;
   type: "create" | "update";
@@ -47,6 +76,8 @@ export type SkillGroup = {
   originalContent?: string;
   originalTitle?: string;
   originalTags?: string[];
+  discrepancyAnalysis?: DiscrepancyAnalysis; // For UPDATE groups - shows content differences vs existing skill
+  coherenceAnalysis?: CoherenceAnalysis; // For all groups with 2+ sources - shows internal conflicts
 };
 
 export type WorkflowStep =

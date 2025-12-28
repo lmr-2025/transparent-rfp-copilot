@@ -11,10 +11,13 @@ import { UnifiedLibraryItem, LibraryItemType, SkillOwner, RefreshResult } from "
 import { OwnerManagementDialog } from "./owner-management-dialog";
 import { SkillRefreshDialog } from "./skill-refresh-dialog";
 import { CategoryManagementDialog } from "./category-management-dialog";
+import { TierManagementDialog } from "./tier-management-dialog";
 import { SkillSourcesDialog } from "./skill-sources-dialog";
 import { SkillHistoryDialog } from "./skill-history-dialog";
 import { SkillSyncLogsDialog } from "@/components/knowledge/skill-sync-logs-dialog";
 import { SyncStatusBadge } from "@/components/ui/sync-status-badge";
+import { getTierForCategory } from "@/lib/skillTiers";
+import type { Skill, SkillTier } from "@/types/skill";
 
 interface KnowledgeItemCardProps {
   item: UnifiedLibraryItem;
@@ -32,6 +35,7 @@ interface KnowledgeItemCardProps {
   onToggleSelection?: () => void;
   linkedSkillName?: string; // Name of linked skill (for sources)
   onClose?: () => void; // Close handler for modal/overlay usage
+  selectedCategory?: string; // Category filter context for showing effective tier
 }
 
 export function KnowledgeItemCard({
@@ -48,6 +52,7 @@ export function KnowledgeItemCard({
   selectionMode,
   isSelected,
   onToggleSelection,
+  selectedCategory,
   linkedSkillName,
   onClose,
 }: KnowledgeItemCardProps) {
@@ -57,6 +62,7 @@ export function KnowledgeItemCard({
   const [showOwnerDialog, setShowOwnerDialog] = useState(false);
   const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [showTierDialog, setShowTierDialog] = useState(false);
   const [showSourcesDialog, setShowSourcesDialog] = useState(false);
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [showSyncLogsDialog, setShowSyncLogsDialog] = useState(false);
@@ -199,6 +205,29 @@ export function KnowledgeItemCard({
     }
   };
 
+  const handleSaveTier = async (tier: SkillTier, tierOverrides?: Record<string, SkillTier>) => {
+    if (!onUpdateContent) return;
+
+    try {
+      // Update via API
+      const response = await fetch(`/api/skills/${item.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier, tierOverrides }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update tier");
+      }
+
+      // Refresh the page to show updated tier
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to update tier:", error);
+      throw error;
+    }
+  };
+
   return (
     <Card
       className={cn(
@@ -292,6 +321,30 @@ export function KnowledgeItemCard({
               variant="icon-only"
             />
           )}
+
+          {/* Tier badge (skills only) */}
+          {item.type === "skill" && item.tier && (() => {
+            // Show effective tier based on selected category (if any)
+            const categoryContext = selectedCategory && selectedCategory !== "all" ? selectedCategory : undefined;
+            const effectiveTier = getTierForCategory(item as unknown as Skill, categoryContext);
+            const isOverridden = categoryContext && item.tierOverrides && item.tierOverrides[categoryContext];
+
+            return (
+              <span
+                className={cn(
+                  "text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0",
+                  effectiveTier === "core" && "bg-blue-100 text-blue-700",
+                  effectiveTier === "extended" && "bg-green-100 text-green-700",
+                  effectiveTier === "library" && "bg-gray-100 text-gray-700",
+                  isOverridden && "ring-1 ring-purple-400"
+                )}
+                title={isOverridden ? `Tier for ${categoryContext}: ${effectiveTier} (overridden from ${item.tier})` : `Tier: ${effectiveTier}`}
+              >
+                {effectiveTier === "core" ? "Core" : effectiveTier === "extended" ? "Extended" : "Library"}
+                {isOverridden && "*"}
+              </span>
+            );
+          })()}
 
           {/* Categories (first 2 only in collapsed view) */}
           {item.categories && item.categories.length > 0 && (
@@ -659,6 +712,17 @@ export function KnowledgeItemCard({
                   Categories
                 </Button>
               )}
+              {item.type === "skill" && canManageCategories && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowTierDialog(true)}
+                  className="h-7 text-xs"
+                >
+                  <Tag className="h-3 w-3 mr-1" />
+                  Tier
+                </Button>
+              )}
               {canManageOwners && (
                 <Button
                   variant="outline"
@@ -747,6 +811,19 @@ export function KnowledgeItemCard({
           currentCategories={item.categories || []}
           onSave={handleSaveCategories}
           itemTitle={item.title}
+        />
+      )}
+
+      {/* Tier Management Dialog */}
+      {item.type === "skill" && canManageCategories && (
+        <TierManagementDialog
+          isOpen={showTierDialog}
+          onClose={() => setShowTierDialog(false)}
+          skillTitle={item.title}
+          currentTier={item.tier || "library"}
+          currentTierOverrides={item.tierOverrides}
+          categories={item.categories}
+          onSave={handleSaveTier}
         />
       )}
 

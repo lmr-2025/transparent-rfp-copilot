@@ -639,4 +639,244 @@ function sanitizeConversationMessages(
     })
     .filter((message) => message.content.length > 0);
 }
+
+// ============================================
+// PROGRESSIVE SKILL LOADING (Tier 2/3)
+// ============================================
+
+/**
+ * Options for progressive skill loading
+ */
+export type ProgressiveAnswerOptions = {
+  question: string;
+  promptText?: string;
+  tier1Skills: { title: string; content: string; id?: string }[];
+  selectedCategories?: string[];
+  enableTier2?: boolean;
+  enableTier3?: boolean;
+  modelSpeed?: ModelSpeed;
+  tracingOptions?: TracingOptions;
+};
+
+/**
+ * Result from progressive answer with tier information
+ */
+export type ProgressiveAnswerResult = AnswerResult & {
+  tier: 1 | 2 | 3;
+  tier2SkillsFound?: number;
+  tier3SkillsFound?: number;
+};
+
+/**
+ * Answer a question with progressive skill loading.
+ * Tries Tier 1 (core) skills first, then searches Tier 2 (extended) and Tier 3 (library) if needed.
+ */
+export async function answerQuestionProgressive(
+  options: ProgressiveAnswerOptions
+): Promise<ProgressiveAnswerResult> {
+  const {
+    question,
+    promptText,
+    tier1Skills,
+    selectedCategories,
+    enableTier2 = true,
+    enableTier3 = true,
+    modelSpeed,
+    tracingOptions,
+  } = options;
+
+  // Try with Tier 1 skills first
+  const tier1Result = await answerQuestionWithPrompt(
+    question,
+    promptText,
+    tier1Skills,
+    undefined,
+    modelSpeed,
+    tracingOptions
+  );
+
+  // Check if answer is confident
+  if (isConfidentAnswer(tier1Result.answer)) {
+    return {
+      ...tier1Result,
+      tier: 1,
+    };
+  }
+
+  // Try Tier 2: Search extended skills in selected categories
+  if (enableTier2) {
+    const tier2Skills = await searchSkills({
+      query: question,
+      categories: selectedCategories || [],
+      tiers: ["extended"],
+      limit: 5,
+      excludeIds: tier1Skills.map((s) => s.id).filter((id): id is string => !!id),
+    });
+
+    if (tier2Skills.length > 0) {
+      const tier2Result = await answerQuestionWithPrompt(
+        question,
+        promptText,
+        [...tier1Skills, ...tier2Skills],
+        undefined,
+        modelSpeed,
+        tracingOptions
+      );
+
+      if (isConfidentAnswer(tier2Result.answer)) {
+        return {
+          ...tier2Result,
+          tier: 2,
+          tier2SkillsFound: tier2Skills.length,
+        };
+      }
+
+      // Try Tier 3: Search entire library (all categories)
+      if (enableTier3) {
+        const tier3Skills = await searchSkills({
+          query: question,
+          categories: [], // search ALL categories
+          tiers: ["library"],
+          limit: 5,
+          excludeIds: [
+            ...tier1Skills.map((s) => s.id).filter((id): id is string => !!id),
+            ...tier2Skills.map((s) => s.id!),
+          ],
+        });
+
+        if (tier3Skills.length > 0) {
+          const allSkills = [...tier1Skills, ...tier2Skills, ...tier3Skills];
+
+          const tier3Result = await answerQuestionWithPrompt(
+            question,
+            promptText,
+            allSkills,
+            undefined,
+            modelSpeed,
+            tracingOptions
+          );
+
+          return {
+            ...tier3Result,
+            tier: 3,
+            tier2SkillsFound: tier2Skills.length,
+            tier3SkillsFound: tier3Skills.length,
+          };
+        }
+      }
+
+      // No Tier 3 skills found, return Tier 2 result
+      return {
+        ...tier2Result,
+        tier: 2,
+        tier2SkillsFound: tier2Skills.length,
+      };
+    }
+  }
+
+  // No additional skills found, return Tier 1 result
+  return {
+    ...tier1Result,
+    tier: 1,
+  };
+}
+
+/**
+ * Check if an answer appears confident (not expressing uncertainty)
+ */
+function isConfidentAnswer(answer: string): boolean {
+  const lowConfidencePhrases = [
+    "i don't know",
+    "i'm not sure",
+    "i don't have enough information",
+    "i don't have information",
+    "i cannot answer",
+    "unable to determine",
+    "insufficient information",
+    "no information available",
+    "not enough context",
+    "cannot find",
+  ];
+
+  const normalized = answer.toLowerCase();
+  const hasLowConfidence = lowConfidencePhrases.some((phrase) =>
+    normalized.includes(phrase)
+  );
+
+  // Consider confident if: (1) no low-confidence phrases, AND (2) reasonable length
+  return !hasLowConfidence && answer.length > 50;
+}
+
+/**
+ * Search for relevant skills directly from database
+ * (Server-side only - uses Prisma)
+ */
+async function searchSkills(params: {
+  query: string;
+  categories: string[];
+  tiers: ("core" | "extended" | "library")[];
+  limit: number;
+  excludeIds: string[];
+}): Promise<{ title: string; content: string; id: string }[]> {
+  try {
+    // Import dependencies dynamically (only available server-side)
+    const { prisma } = await import("@/lib/prisma");
+    const { selectRelevantSkills } = await import("@/lib/questionHelpers");
+    const { getTierForCategory } = await import("@/lib/skillTiers");
+
+    // Fetch candidate skills from database
+    // Note: We fetch more broadly and filter by effective tier in-memory
+    // because tierOverrides are stored in JSON and can't be efficiently queried
+    const where: {
+      isActive: boolean;
+      categories?: { hasSome: string[] };
+      id?: { notIn: string[] };
+    } = {
+      isActive: true,
+    };
+
+    // Filter by categories if provided and not empty
+    if (params.categories && params.categories.length > 0) {
+      where.categories = { hasSome: params.categories };
+    }
+
+    // Exclude already-loaded skills
+    if (params.excludeIds && params.excludeIds.length > 0) {
+      where.id = { notIn: params.excludeIds };
+    }
+
+    // Fetch candidate skills from database
+    const allSkills = await prisma.skill.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      take: Math.min(params.limit * 10, 200), // Fetch more to allow for tier filtering
+    });
+
+    // Filter by effective tier based on category context
+    // Use the first selected category as context, or undefined for global filtering
+    const categoryContext = params.categories.length > 0 ? params.categories[0] : undefined;
+    const candidateSkills = allSkills.filter((skill) => {
+      const effectiveTier = getTierForCategory(skill as any, categoryContext);
+      return params.tiers.includes(effectiveTier);
+    });
+
+    // Score and rank using keyword matching
+    const scoredSkills = selectRelevantSkills(
+      params.query,
+      candidateSkills as any // Prisma Skill type is compatible with our Skill type
+    );
+
+    // Return top N skills
+    return scoredSkills.slice(0, params.limit).map((s) => ({
+      id: s.id,
+      title: s.title,
+      content: s.content,
+    }));
+  } catch (error) {
+    // Log but don't fail - just return empty array
+    console.error("Failed to search skills:", error);
+    return [];
+  }
+}
+
 // Updated to use Claude (Anthropic) instead of OpenAI

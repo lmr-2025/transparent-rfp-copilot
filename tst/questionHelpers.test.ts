@@ -13,6 +13,7 @@ const makeSkill = (overrides: Partial<Skill>): Skill => ({
   sourceUrls: [],
   isActive: true,
   createdAt: new Date().toISOString(),
+  tier: "library",
   ...overrides,
 });
 

@@ -38,6 +38,8 @@ const keyToContext: Record<string, PromptContext> = {
   customer_profile: "customer_profile",
   prompt_optimize: "prompt_optimize",
   instruction_builder: "instruction_builder",
+  source_url_analysis: "source_url_analysis",
+  group_coherence_analysis: "group_coherence_analysis",
 };
 
 // Type for cached DB data

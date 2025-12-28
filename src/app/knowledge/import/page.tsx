@@ -196,6 +196,7 @@ export default function ImportRFPPage() {
             edgeCases: [] as string[],
             sourceUrls: [] as { url: string; addedAt: string; lastFetchedAt?: string }[],
             isActive: true,
+            tier: "library" as const,
           };
           const newSkill = await createSkillViaApi(skillData);
           newSkillsList.push(newSkill);

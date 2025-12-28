@@ -97,6 +97,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     if (data.title !== undefined) updateData.title = data.title;
     if (data.content !== undefined) updateData.content = data.content;
     if (data.categories !== undefined) updateData.categories = data.categories;
+    if (data.tier !== undefined) updateData.tier = data.tier;
+    if (data.tierOverrides !== undefined) updateData.tierOverrides = data.tierOverrides;
     if (data.quickFacts !== undefined) updateData.quickFacts = data.quickFacts;
     if (data.edgeCases !== undefined) updateData.edgeCases = data.edgeCases;
     if (data.sourceUrls !== undefined) updateData.sourceUrls = data.sourceUrls;

@@ -442,12 +442,23 @@ model Skill {
   gitCommitSha        String?    // Latest git commit SHA for this skill
   syncLogs            SkillSyncLog[]
 
+  // Tier system for progressive loading
+  tier                String     @default("library") // "core" | "extended" | "library"
+  tierOverrides       Json?      // Category-specific tier overrides: { "Security & Compliance": "core" }
+
+  // Usage tracking
+  usageCount          Int        @default(0) // How many times this skill has been used in answers
+  lastUsedAt          DateTime?  // Last time this skill was used in an answer
+
   @@index([isActive, updatedAt])
   @@index([ownerId])
   @@index([status])
   @@index([reviewRequestedAt])
   @@index([syncStatus])
   @@index([lastSyncedAt])
+  @@index([tier, isActive])
+  @@index([tier, categories])
+  @@index([usageCount]) // For sorting by most-used skills
 
   // Relation to source registry (many-to-many via join table)
   skillSources    SkillSource[]

@@ -134,6 +134,27 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
   const rawLastSyncedAt = (item as Record<string, unknown>).lastSyncedAt;
   const lastSyncedAt = typeof rawLastSyncedAt === "string" ? rawLastSyncedAt : undefined;
 
+  // Parse tier (default to "library" for backward compatibility)
+  const rawTier = (item as Record<string, unknown>).tier;
+  const tier = (rawTier === "core" || rawTier === "extended" || rawTier === "library")
+    ? rawTier
+    : "library";
+
+  // Parse tierOverrides
+  const rawTierOverrides = (item as Record<string, unknown>).tierOverrides;
+  let tierOverrides: Record<string, "core" | "extended" | "library"> | undefined;
+  if (rawTierOverrides && typeof rawTierOverrides === "object" && !Array.isArray(rawTierOverrides)) {
+    const overrides: Record<string, "core" | "extended" | "library"> = {};
+    for (const [category, tierValue] of Object.entries(rawTierOverrides)) {
+      if (tierValue === "core" || tierValue === "extended" || tierValue === "library") {
+        overrides[category] = tierValue;
+      }
+    }
+    if (Object.keys(overrides).length > 0) {
+      tierOverrides = overrides;
+    }
+  }
+
   return {
     id: item.id ?? crypto.randomUUID(),
     title: item.title ?? "",
@@ -152,6 +173,8 @@ function normalizeSkill(item: Partial<Skill> & LegacySkillFields): Skill {
     history: history && history.length > 0 ? history : undefined,
     syncStatus,
     lastSyncedAt,
+    tier,
+    tierOverrides,
   };
 }
 

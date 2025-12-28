@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, FileText, Lightbulb } from "lucide-react";
+import { ChevronDown, ChevronUp, FileText, Lightbulb, AlertTriangle } from "lucide-react";
 import { type SkillGroup } from "@/stores/bulk-import-store";
 import { Skill } from "@/types/skill";
 import { styles, getGroupStatusStyle } from "./styles";
@@ -200,6 +200,74 @@ export default function ReviewGroupsStep({
                       </div>
                     ))}
                   </>
+                )}
+                {/* Discrepancy Warning for UPDATE groups */}
+                {group.type === "update" && group.discrepancyAnalysis && (
+                  <div style={{ marginTop: "12px", padding: "12px", backgroundColor: group.discrepancyAnalysis.changeLevel === "significant" ? "#fef3c7" : group.discrepancyAnalysis.changeLevel === "moderate" ? "#fef9c3" : "#f0fdf4", border: `1px solid ${group.discrepancyAnalysis.changeLevel === "significant" ? "#fbbf24" : group.discrepancyAnalysis.changeLevel === "moderate" ? "#fde047" : "#86efac"}`, borderRadius: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      <AlertTriangle size={16} style={{ color: group.discrepancyAnalysis.changeLevel === "significant" ? "#f59e0b" : group.discrepancyAnalysis.changeLevel === "moderate" ? "#eab308" : "#22c55e", flexShrink: 0 }} />
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: group.discrepancyAnalysis.changeLevel === "significant" ? "#92400e" : group.discrepancyAnalysis.changeLevel === "moderate" ? "#713f12" : "#166534" }}>
+                        Content Discrepancy Detected
+                      </div>
+                      <div style={{ marginLeft: "auto", fontSize: "11px", padding: "2px 6px", borderRadius: "4px", backgroundColor: group.discrepancyAnalysis.changeLevel === "significant" ? "#fbbf24" : group.discrepancyAnalysis.changeLevel === "moderate" ? "#fde047" : "#86efac", color: "#000", fontWeight: 600 }}>
+                        {group.discrepancyAnalysis.changePercentage}% different
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#374151", marginBottom: "8px" }}>
+                      {group.discrepancyAnalysis.recommendation}
+                    </div>
+                    {(group.discrepancyAnalysis.changeSummary.newTopics.length > 0 ||
+                      group.discrepancyAnalysis.changeSummary.updatedContent.length > 0 ||
+                      group.discrepancyAnalysis.changeSummary.removedContent.length > 0) && (
+                      <div style={{ fontSize: "11px", color: "#6b7280" }}>
+                        {group.discrepancyAnalysis.changeSummary.newTopics.length > 0 && (
+                          <div style={{ marginBottom: "4px" }}>
+                            <strong>New:</strong> {group.discrepancyAnalysis.changeSummary.newTopics.join(", ")}
+                          </div>
+                        )}
+                        {group.discrepancyAnalysis.changeSummary.updatedContent.length > 0 && (
+                          <div style={{ marginBottom: "4px" }}>
+                            <strong>Updated:</strong> {group.discrepancyAnalysis.changeSummary.updatedContent.join(", ")}
+                          </div>
+                        )}
+                        {group.discrepancyAnalysis.changeSummary.removedContent.length > 0 && (
+                          <div>
+                            <strong>Removed:</strong> {group.discrepancyAnalysis.changeSummary.removedContent.join(", ")}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* Coherence Warning for groups with multiple sources */}
+                {group.coherenceAnalysis && !group.coherenceAnalysis.coherent && (
+                  <div style={{ marginTop: "12px", padding: "12px", backgroundColor: group.coherenceAnalysis.coherenceLevel === "low" ? "#fee2e2" : "#fef3c7", border: `1px solid ${group.coherenceAnalysis.coherenceLevel === "low" ? "#fca5a5" : "#fbbf24"}`, borderRadius: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      <AlertTriangle size={16} style={{ color: group.coherenceAnalysis.coherenceLevel === "low" ? "#dc2626" : "#f59e0b", flexShrink: 0 }} />
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: group.coherenceAnalysis.coherenceLevel === "low" ? "#7f1d1d" : "#92400e" }}>
+                        Source Conflicts Detected
+                      </div>
+                      <div style={{ marginLeft: "auto", fontSize: "11px", padding: "2px 6px", borderRadius: "4px", backgroundColor: group.coherenceAnalysis.coherenceLevel === "low" ? "#fca5a5" : "#fbbf24", color: "#000", fontWeight: 600 }}>
+                        {group.coherenceAnalysis.coherencePercentage}% coherent
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#374151", marginBottom: "8px" }}>
+                      {group.coherenceAnalysis.summary}
+                    </div>
+                    {group.coherenceAnalysis.conflicts.length > 0 && (
+                      <div style={{ fontSize: "11px", color: "#6b7280", marginBottom: "8px" }}>
+                        <strong style={{ display: "block", marginBottom: "4px" }}>Conflicts:</strong>
+                        {group.coherenceAnalysis.conflicts.map((conflict, idx) => (
+                          <div key={idx} style={{ marginBottom: "4px", paddingLeft: "8px", borderLeft: `2px solid ${conflict.severity === "high" ? "#dc2626" : conflict.severity === "medium" ? "#f59e0b" : "#10b981"}` }}>
+                            <span style={{ fontWeight: 600, textTransform: "capitalize" }}>{conflict.type.replace(/_/g, " ")}:</span> {conflict.description}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div style={{ fontSize: "12px", color: "#374151", fontWeight: 500 }}>
+                      💡 {group.coherenceAnalysis.recommendation}
+                    </div>
+                  </div>
                 )}
                 {/* Notes/Guidance */}
                 <div style={{ marginTop: "12px" }}>

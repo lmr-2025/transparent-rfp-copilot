@@ -241,6 +241,8 @@ export interface UnifiedLibraryItem {
   subtitle?: string;
   content?: string;
   categories?: string[];
+  tier?: "core" | "extended" | "library"; // Default skill tier for progressive loading
+  tierOverrides?: Record<string, "core" | "extended" | "library">; // Category-specific tier overrides
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
@@ -274,6 +276,8 @@ export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
     subtitle: skill.categories?.join(", "),
     content: skill.content,
     categories: skill.categories,
+    tier: skill.tier,
+    tierOverrides: skill.tierOverrides,
     isActive: skill.isActive,
     createdAt: skill.createdAt,
     updatedAt: skill.lastRefreshedAt || skill.createdAt,

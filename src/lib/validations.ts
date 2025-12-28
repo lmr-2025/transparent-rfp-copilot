@@ -59,6 +59,8 @@ export const createSkillSchema = z.object({
   title: z.string().min(1, "Title is required").max(500),
   content: z.string().min(1, "Content is required").max(100000),
   categories: z.array(z.string()).default([]),
+  tier: z.enum(["core", "extended", "library"]).default("library"),
+  tierOverrides: z.record(z.string(), z.enum(["core", "extended", "library"])).optional(),
   quickFacts: z.array(quickFactSchema).default([]),
   edgeCases: z.array(z.string()).default([]),
   sourceUrls: z.array(sourceUrlSchema).default([]),
@@ -74,6 +76,8 @@ export const updateSkillSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   content: z.string().min(1).max(100000).optional(),
   categories: z.array(z.string()).optional(),
+  tier: z.enum(["core", "extended", "library"]).optional(),
+  tierOverrides: z.record(z.string(), z.enum(["core", "extended", "library"])).optional(),
   quickFacts: z.array(quickFactSchema).optional(),
   edgeCases: z.array(z.string()).optional(),
   sourceUrls: z.array(sourceUrlSchema).optional(),
@@ -411,10 +415,20 @@ export const chatMessageSchema = z.object({
 export const questionAnswerSchema = z.object({
   question: z.string().min(1, "Question is required").max(10000),
   prompt: z.string().max(50000).optional(),
+  // Legacy mode: pre-selected skills
   skills: z.array(z.object({
     title: z.string(),
     content: z.string(),
+    id: z.string().optional(),
   })).optional(),
+  // Progressive mode: tier 1 (core) skills + categories for tier 2/3 search
+  tier1Skills: z.array(z.object({
+    title: z.string(),
+    content: z.string(),
+    id: z.string().optional(),
+  })).optional(),
+  categories: z.array(z.string()).optional(),
+  useProgressive: z.boolean().optional(), // Default true if tier1Skills provided
   fallbackContent: z.array(z.object({
     title: z.string(),
     url: z.string(),

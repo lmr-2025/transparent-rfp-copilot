@@ -22,6 +22,7 @@ import type { SkillFile } from "@/lib/skillFiles";
  *
  * @query {string} [active="true"] - Filter by active status ("true" or "false")
  * @query {string} [category] - Filter by category name (use "all" for no filter)
+ * @query {string} [tier] - Filter by tier ("core", "extended", or "library")
  * @query {number} [limit=100] - Maximum skills to return (max 500)
  * @query {number} [offset=0] - Number of skills to skip (for pagination)
  *
@@ -30,8 +31,8 @@ import type { SkillFile } from "@/lib/skillFiles";
  * @returns {{ error: string }} 500 - Server error
  *
  * @example
- * // Get active skills in Security category
- * GET /api/skills?active=true&category=Security&limit=50
+ * // Get active core skills in Security category
+ * GET /api/skills?active=true&category=Security&tier=core&limit=50
  */
 export async function GET(request: NextRequest) {
   const auth = await requireAuth();
@@ -43,12 +44,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const activeOnly = searchParams.get("active") !== "false";
     const category = searchParams.get("category");
+    const tier = searchParams.get("tier");
     const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
 
     const where: {
       isActive?: boolean;
       categories?: { has: string };
+      tier?: string;
     } = {};
 
     if (activeOnly) {
@@ -57,6 +60,10 @@ export async function GET(request: NextRequest) {
 
     if (category && category !== "all") {
       where.categories = { has: category };
+    }
+
+    if (tier && (tier === "core" || tier === "extended" || tier === "library")) {
+      where.tier = tier;
     }
 
     const skills = await prisma.skill.findMany({
@@ -158,6 +165,8 @@ export async function POST(request: NextRequest) {
         title: data.title,
         content: data.content,
         categories: data.categories,
+        tier: data.tier,
+        tierOverrides: data.tierOverrides,
         quickFacts: data.quickFacts,
         edgeCases: data.edgeCases,
         sourceUrls: data.sourceUrls,
@@ -202,6 +211,7 @@ export async function POST(request: NextRequest) {
           title: skill.title,
           content: skill.content,
           categories: skill.categories,
+          tier: skill.tier as "core" | "extended" | "library",
           owners,
           sources: (skill.sourceUrls as SkillFile["sources"]) || [],
           created: skill.createdAt.toISOString(),

@@ -20,6 +20,7 @@ export interface SkillFile {
   title: string;
   content: string; // Pure markdown content (no hardcoded Q&A)
   categories: string[];
+  tier?: "core" | "extended" | "library"; // Progressive loading tier
   owners: Array<{
     name: string;
     email?: string;
@@ -59,12 +60,19 @@ export async function readSkillFile(slug: string): Promise<SkillFile> {
     `Skill file not found: ${slug}.md`
   );
 
+  // Parse tier (default to "library" for backward compatibility)
+  const rawTier = frontmatter.tier as string | undefined;
+  const tier = (rawTier === "core" || rawTier === "extended" || rawTier === "library")
+    ? rawTier
+    : "library";
+
   return {
     id: frontmatter.id as string,
     slug,
     title: frontmatter.title as string,
     content: content.trim(),
     categories: (frontmatter.categories as SkillFile["categories"]) || [],
+    tier,
     owners: (frontmatter.owners as SkillFile["owners"]) || [],
     sources: (frontmatter.sources as SkillFile["sources"]) || [],
     created: frontmatter.created as string,
@@ -86,6 +94,7 @@ export async function writeSkillFile(slug: string, skill: SkillFile): Promise<vo
     id: skill.id,
     title: skill.title,
     categories: skill.categories,
+    tier: skill.tier || "library",
     created: skill.created,
     updated: new Date().toISOString(),
     owners: skill.owners,

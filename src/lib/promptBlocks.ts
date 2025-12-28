@@ -28,7 +28,9 @@ export type PromptContext =
   | "customer_profile"     // Extracting customer profiles
   | "prompt_optimize"      // Optimizing prompt sections
   | "instruction_builder"  // Building instruction presets for chat
-  | "collateral_planning"; // Conversational planning for collateral generation
+  | "collateral_planning"  // Conversational planning for collateral generation
+  | "source_url_analysis"  // Analyzing URL content vs existing skill for discrepancies
+  | "group_coherence_analysis"; // Analyzing coherence of multiple sources within a group
 
 // Editability tiers for blocks and modifiers
 export type PromptTier = 1 | 2 | 3;
@@ -342,6 +344,52 @@ export const defaultBlocks: PromptBlock[] = [
         "2. STRONGLY PREFER updating existing skills over creating new ones",
         "3. Only create a new skill if the content is genuinely unrelated to ALL existing skills",
         "4. Think of skills like chapters in a book, not individual pages",
+      ].join("\n"),
+      source_url_analysis: [
+        "You are a content analysis specialist who compares documents to identify key differences.",
+        "",
+        "Your task is to analyze whether a new source URL differs meaningfully from an existing skill's content.",
+        "",
+        "WHAT TO LOOK FOR:",
+        "- Technical contradictions: Different recommendations, approaches, or specifications",
+        "- Version mismatches: Content describes different versions of the same thing (v1 vs v2, old vs new)",
+        "- New topics: Sections or capabilities not mentioned in the existing skill",
+        "- Updated content: Same topics but with changed details, numbers, or procedures",
+        "- Removed content: Topics in the existing skill that are deprecated or missing from the new source",
+        "",
+        "CHANGE LEVELS:",
+        "- Minimal (<15%): Minor updates, clarifications, or additions that don't change the core information",
+        "- Moderate (15-50%): Significant additions or changes to specific sections",
+        "- Significant (>50%): Major differences in approach, multiple new topics, or conflicting information",
+        "",
+        "BE SPECIFIC: Don't just say 'sources differ' - identify WHAT differs and WHY it matters.",
+      ].join("\n"),
+      group_coherence_analysis: [
+        "You are a content analysis specialist who evaluates whether multiple sources should be grouped together.",
+        "",
+        "Your task is to determine if sources within a proposed skill group are coherent or if they conflict.",
+        "",
+        "CONFLICT TYPES TO DETECT:",
+        "1. Technical Contradiction: Sources recommend different approaches or technologies",
+        "   - Example: Source 1 says 'use JWT tokens', Source 2 says 'use session cookies'",
+        "2. Version Mismatch: Sources describe different versions of the same thing",
+        "   - Example: Source 1 documents API v1, Source 2 documents API v2",
+        "3. Scope Mismatch: Sources cover fundamentally different topics",
+        "   - Example: Source 1 is about product features, Source 2 is about internal processes",
+        "4. Outdated vs Current: Some sources are deprecated while others are current",
+        "   - Example: Source 1 says 'we use X', Source 2 says 'we migrated from X to Y'",
+        "5. Different Perspectives: Sources take incompatible stances on the same topic",
+        "   - Example: Source 1 emphasizes security, Source 2 emphasizes convenience",
+        "",
+        "COHERENCE LEVELS:",
+        "- High (>80%): Sources complement each other well, minor differences are acceptable",
+        "- Medium (50-80%): Some conflicts but sources can be synthesized with care",
+        "- Low (<50%): Significant conflicts that make grouping problematic",
+        "",
+        "RECOMMENDATIONS:",
+        "- If coherent: Explain how sources complement each other",
+        "- If conflicts exist: Suggest specific actions (split into separate skills, remove conflicting source, etc.)",
+        "- Be specific about WHICH sources conflict and WHAT the conflict is",
         "5. When updating skills, add NEW information only - don't duplicate what's already there",
         "",
         "CONSOLIDATION BIAS:",
@@ -1045,6 +1093,18 @@ export const defaultCompositions: PromptComposition[] = [
   },
   {
     context: "collateral_planning",
+    blockIds: ["role_mission", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "source_url_analysis",
+    blockIds: ["role_mission", "output_format"],
+    supportsModes: false,
+    supportsDomains: false,
+  },
+  {
+    context: "group_coherence_analysis",
     blockIds: ["role_mission", "output_format"],
     supportsModes: false,
     supportsDomains: false,

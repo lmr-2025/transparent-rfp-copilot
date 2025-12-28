@@ -23,7 +23,6 @@ import {
   GeneratingStep,
   SavingStep,
   DoneStep,
-  SkillLibraryInfo,
   ProcessingIndicator,
   styles,
 } from "./components";
@@ -240,6 +239,12 @@ function AddKnowledgeContent() {
           };
         });
         setSkillGroups(groups);
+
+        // Fetch both types of analysis in parallel (runs in background)
+        Promise.all([
+          fetchDiscrepancyAnalysis(groups),
+          fetchCoherenceAnalysis(groups),
+        ]);
       }
 
       setWorkflowStep("review_groups");
@@ -247,7 +252,118 @@ function AddKnowledgeContent() {
       setErrorMessage(error instanceof Error ? error.message : "Analysis failed");
       setWorkflowStep("input");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setErrorMessage, setSkillGroups, setWorkflowStep, skills]);
+
+  // Fetch discrepancy analysis for UPDATE groups (runs in background)
+  const fetchDiscrepancyAnalysis = useCallback(async (groups: SkillGroup[]) => {
+    const updateGroups = groups.filter(g => g.type === "update" && g.existingSkillId && g.urls.length > 0);
+
+    for (const group of updateGroups) {
+      try {
+        // Analyze the first URL in the group (representative)
+        const response = await fetch(`/api/skills/${group.existingSkillId}/sources/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: group.urls[0] }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.accessible) {
+            // Update the group with discrepancy analysis
+            const currentGroups = useBulkImportStore.getState().skillGroups;
+            const updatedGroups = currentGroups.map(g =>
+              g.id === group.id
+                ? {
+                    ...g,
+                    discrepancyAnalysis: {
+                      changeLevel: data.changeLevel,
+                      changePercentage: data.changePercentage,
+                      changeSummary: data.changeSummary,
+                      recommendation: data.recommendation,
+                    },
+                  }
+                : g
+            );
+            setSkillGroups(updatedGroups);
+          }
+        }
+      } catch (error) {
+        // Silently fail - discrepancy analysis is optional
+        console.warn(`Failed to analyze discrepancy for group ${group.id}:`, error);
+      }
+    }
+  }, [setSkillGroups]);
+
+  // Fetch coherence analysis for groups with multiple sources (runs in background)
+  const fetchCoherenceAnalysis = useCallback(async (groups: SkillGroup[]) => {
+    // Filter: Only analyze groups with 2-5 sources (Option 1)
+    const eligibleGroups = groups.filter(g => {
+      const sourceCount = (g.urls?.length || 0) + (g.documentIds?.length || 0);
+      return sourceCount >= 2 && sourceCount <= 5;
+    });
+
+    // Run analyses in parallel with max concurrency of 3
+    const runAnalysis = async (group: SkillGroup) => {
+      try {
+        // Build sources array
+        const sources = [
+          ...(group.urls || []).map(url => ({ type: "url" as const, url })),
+          ...(group.documents || []).map(doc => ({
+            type: "document" as const,
+            id: doc.id,
+            content: doc.content,
+            filename: doc.filename,
+          })),
+        ];
+
+        const response = await fetch("/api/skills/groups/analyze-coherence", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sources,
+            groupTitle: group.skillTitle,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          // Update the group with coherence analysis
+          const currentGroups = useBulkImportStore.getState().skillGroups;
+          const updatedGroups = currentGroups.map(g =>
+            g.id === group.id
+              ? {
+                  ...g,
+                  coherenceAnalysis: {
+                    coherent: data.coherent,
+                    coherenceLevel: data.coherenceLevel,
+                    coherencePercentage: data.coherencePercentage,
+                    conflicts: data.conflicts || [],
+                    recommendation: data.recommendation,
+                    summary: data.summary,
+                  },
+                }
+              : g
+          );
+          setSkillGroups(updatedGroups);
+        }
+      } catch (error) {
+        // Silently fail - coherence analysis is optional
+        console.warn(`Failed to analyze coherence for group ${group.id}:`, error);
+      }
+    };
+
+    // Run with max concurrency of 3
+    const chunks: SkillGroup[][] = [];
+    for (let i = 0; i < eligibleGroups.length; i += 3) {
+      chunks.push(eligibleGroups.slice(i, i + 3));
+    }
+
+    for (const chunk of chunks) {
+      await Promise.all(chunk.map(runAnalysis));
+    }
+  }, [setSkillGroups]);
 
   const handleStartAnalysis = () => {
     setErrorMessage(null);
@@ -674,6 +790,7 @@ function AddKnowledgeContent() {
             sourceUrls,
             sourceDocuments: sourceDocuments.length > 0 ? sourceDocuments : undefined,
             isActive: true,
+            tier: "library" as const,
             history,
           };
 
@@ -836,9 +953,6 @@ function AddKnowledgeContent() {
       {workflowStep === "done" && (
         <DoneStep skillGroups={skillGroups} onReset={handleReset} />
       )}
-
-      {/* Current Skills Info */}
-      <SkillLibraryInfo skills={skills} />
 
       {/* Processing indicator */}
       <ProcessingIndicator workflowStep={workflowStep} />

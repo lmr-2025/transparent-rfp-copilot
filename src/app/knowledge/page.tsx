@@ -44,6 +44,7 @@ import { KnowledgeItemCard } from "./components/knowledge-item-card";
 import { KnowledgeGridTile } from "./components/knowledge-grid-tile";
 import { CollapsibleCategorySection } from "./components/collapsible-category-section";
 import { RequestKnowledgeDialog } from "./components/request-knowledge-dialog";
+import { KnowledgeDashboard } from "./components/knowledge-dashboard";
 import { cn } from "@/lib/utils";
 import {
   Dialog,
@@ -77,9 +78,10 @@ function KnowledgeLibraryContent() {
     : canManageKnowledge(session?.user as UserSession | undefined);
 
   // State
-  const [activeTab, setActiveTab] = useState<TabType>(tabParam || "skills");
+  const [activeTab, setActiveTab] = useState<TabType>(tabParam || "dashboard");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [selectedTier, setSelectedTier] = useState<string>("all");
   const [sourceTypeFilter, setSourceTypeFilter] = useState<SourceTypeFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("updated-desc");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -214,6 +216,11 @@ function KnowledgeLibraryContent() {
       );
     }
 
+    // Filter by tier (skills only)
+    if (selectedTier && selectedTier !== "all" && activeTab === "skills") {
+      items = items.filter((item) => item.tier === selectedTier);
+    }
+
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -226,7 +233,7 @@ function KnowledgeLibraryContent() {
     }
 
     return items;
-  }, [allItems, searchQuery, selectedCategory]);
+  }, [allItems, searchQuery, selectedCategory, selectedTier, activeTab]);
 
   // Sort items based on selected sort option
   const sortedItems = useMemo(() => {
@@ -742,6 +749,14 @@ function KnowledgeLibraryContent() {
         <LibraryTabs activeTab={activeTab} onTabChange={handleTabChange} counts={counts} />
       </div>
 
+      {/* Dashboard Tab Content */}
+      {activeTab === "dashboard" && (
+        <KnowledgeDashboard skills={skills} categories={categories} />
+      )}
+
+      {/* Skills and Sources Tab Content */}
+      {activeTab !== "dashboard" && (
+        <>
       {/* Search and Filter */}
       <div className="flex gap-3 mb-6">
         <div className="relative flex-1">
@@ -792,6 +807,21 @@ function KnowledgeLibraryContent() {
             ))}
           </SelectContent>
         </Select>
+        {/* Tier filter (skills only) */}
+        {activeTab === "skills" && (
+          <Select value={selectedTier} onValueChange={setSelectedTier}>
+            <SelectTrigger className="w-[150px]">
+              <Tag className="h-4 w-4 mr-2 text-muted-foreground" />
+              <SelectValue placeholder="All Tiers" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Tiers</SelectItem>
+              <SelectItem value="core">Core</SelectItem>
+              <SelectItem value="extended">Extended</SelectItem>
+              <SelectItem value="library">Library</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         {/* Sort dropdown */}
         <Select value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
           <SelectTrigger className="w-[180px]">
@@ -930,6 +960,7 @@ function KnowledgeLibraryContent() {
                     onUpdateTitle={expandedItem.type === "url" && expandedItem.linkedSkillId ? handleUpdateSourceUrlTitle : undefined}
                     isRefreshing={refreshSkillMutation.isPending}
                     linkedSkillName={expandedItem.linkedSkillId ? skillIdToTitle.get(expandedItem.linkedSkillId) : undefined}
+                    selectedCategory={selectedCategory}
                     onClose={() => setExpandedGridItemId(null)}
                   />
                 </div>
@@ -963,6 +994,7 @@ function KnowledgeLibraryContent() {
                   isSelected={selectedIds.has(item.id)}
                   onToggleSelection={() => toggleSelection(item.id)}
                   linkedSkillName={item.linkedSkillId ? skillIdToTitle.get(item.linkedSkillId) : undefined}
+                  selectedCategory={selectedCategory}
                 />
               ))}
             </CollapsibleCategorySection>
@@ -988,6 +1020,7 @@ function KnowledgeLibraryContent() {
               isSelected={selectedIds.has(item.id)}
               onToggleSelection={() => toggleSelection(item.id)}
               linkedSkillName={item.linkedSkillId ? skillIdToTitle.get(item.linkedSkillId) : undefined}
+              selectedCategory={selectedCategory}
             />
           ))}
         </div>
@@ -1000,6 +1033,8 @@ function KnowledgeLibraryContent() {
           {searchQuery && ` matching "${searchQuery}"`}
           {selectedCategory !== "all" && ` in "${selectedCategory}"`}
         </div>
+      )}
+        </>
       )}
 
       {/* Library Analysis Modal */}

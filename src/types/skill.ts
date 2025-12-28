@@ -70,11 +70,17 @@ export type SkillHistoryEntry = {
 
 export type SyncStatus = "synced" | "pending" | "failed" | null;
 
+export type SkillTier = "core" | "extended" | "library";
+
 export type Skill = {
   id: string;
   title: string;
   /** Broad capability areas this skill belongs to (can be multiple) */
   categories?: string[];
+  /** Default tier for progressive loading: core (always), extended (search in category), library (search all) */
+  tier: SkillTier;
+  /** Category-specific tier overrides: e.g., { "Security & Compliance": "core" } */
+  tierOverrides?: Record<string, SkillTier>;
   /**
    * @deprecated Since 2024-12 - Use categories[] instead.
    * Kept for backwards compatibility migration. Will be removed after 2025-03-01.
@@ -109,4 +115,9 @@ export type Skill = {
   syncStatus?: SyncStatus;
   /** Last successful sync to/from git */
   lastSyncedAt?: string;
+  // Usage tracking
+  /** Number of times this skill has been used in answers */
+  usageCount?: number;
+  /** Last time this skill was used in an answer */
+  lastUsedAt?: string;
 };

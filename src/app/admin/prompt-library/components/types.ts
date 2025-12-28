@@ -46,6 +46,8 @@ export const contextNames: Record<PromptContext, string> = {
   prompt_optimize: "Prompt Optimize",
   instruction_builder: "Instructions",
   collateral_planning: "Collateral",
+  source_url_analysis: "Source Analysis",
+  group_coherence_analysis: "Coherence Check",
 };
 
 // Descriptions for where each prompt is used
@@ -64,6 +66,8 @@ export const contextDescriptions: Record<PromptContext, string> = {
   prompt_optimize: "Analyzing prompts for token efficiency and clarity",
   instruction_builder: "Helping users create custom instruction presets",
   collateral_planning: "Planning sales collateral and content strategy",
+  source_url_analysis: "Comparing new source URLs against existing skill content for discrepancies",
+  group_coherence_analysis: "Analyzing whether multiple sources within a group are coherent or conflicting",
 };
 
 // Color assignments for each context
@@ -82,6 +86,8 @@ export const contextColors: Record<PromptContext, string> = {
   prompt_optimize: "orange",
   instruction_builder: "rose",
   collateral_planning: "slate",
+  source_url_analysis: "yellow",
+  group_coherence_analysis: "lime",
 };
 
 // Prompt categories for grouped navigation

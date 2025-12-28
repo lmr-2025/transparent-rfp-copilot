@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine, MessageSquare, Send } from "lucide-react";
+import { FileText, Link as LinkIcon, Loader2, Upload, X, PenLine, MessageSquare, Send, HelpCircle, ChevronDown, ChevronUp, CheckCircle, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { createSkillViaApi } from "@/lib/skillStorage";
@@ -53,6 +53,9 @@ export default function SourceInputStep({
   const [clarifyInput, setClarifyInput] = useState("");
   const [isClarifying, setIsClarifying] = useState(false);
   const clarifyEndRef = useRef<HTMLDivElement>(null);
+
+  // Help/guide state
+  const [showGuide, setShowGuide] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -115,6 +118,7 @@ export default function SourceInputStep({
         edgeCases: [] as string[],
         sourceUrls: [],
         isActive: true,
+        tier: "library" as const,
         history: [
           {
             date: now,
@@ -202,6 +206,127 @@ When suggesting updated content, format it clearly so they can copy it.`;
 
   return (
     <div style={styles.card}>
+      {/* Help Guide Section */}
+      <div style={{ marginBottom: "20px", border: "1px solid #e0e7ff", borderRadius: "8px", backgroundColor: "#f0f9ff" }}>
+        <button
+          onClick={() => setShowGuide(!showGuide)}
+          style={{
+            width: "100%",
+            padding: "12px 16px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            backgroundColor: "transparent",
+            border: "none",
+            cursor: "pointer",
+            color: "#1e40af",
+            fontWeight: 500,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <HelpCircle size={18} />
+            <span>How to Add Knowledge Sources</span>
+          </div>
+          {showGuide ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+        </button>
+
+        {showGuide && (
+          <div style={{ padding: "0 16px 16px", fontSize: "14px", color: "#1e293b", lineHeight: "1.6" }}>
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontSize: "13px", fontWeight: 600, color: "#1e40af", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Overview
+              </h4>
+              <p style={{ margin: 0, color: "#475569" }}>
+                The AI-powered bulk import system analyzes your sources, automatically groups related content,
+                and suggests whether to create new skills or update existing ones. It includes smart conflict
+                detection to ensure source quality.
+              </p>
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontSize: "13px", fontWeight: 600, color: "#1e40af", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                The Process
+              </h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ flexShrink: 0, width: "24px", height: "24px", borderRadius: "50%", backgroundColor: "#dbeafe", color: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 600 }}>1</div>
+                  <div>
+                    <strong style={{ color: "#0f172a" }}>Add Sources:</strong> Paste URLs or upload documents (PDFs, Word, etc.)
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ flexShrink: 0, width: "24px", height: "24px", borderRadius: "50%", backgroundColor: "#dbeafe", color: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 600 }}>2</div>
+                  <div>
+                    <strong style={{ color: "#0f172a" }}>AI Grouping:</strong> The system analyzes content and groups by topic similarity
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ flexShrink: 0, width: "24px", height: "24px", borderRadius: "50%", backgroundColor: "#dbeafe", color: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 600 }}>3</div>
+                  <div>
+                    <strong style={{ color: "#0f172a" }}>Conflict Detection:</strong> Automatic checks for content discrepancies and source conflicts
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ flexShrink: 0, width: "24px", height: "24px", borderRadius: "50%", backgroundColor: "#dbeafe", color: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 600 }}>4</div>
+                  <div>
+                    <strong style={{ color: "#0f172a" }}>Review & Adjust:</strong> Approve groups, split conflicts, or move sources between groups
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "10px" }}>
+                  <div style={{ flexShrink: 0, width: "24px", height: "24px", borderRadius: "50%", backgroundColor: "#dbeafe", color: "#1e40af", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "12px", fontWeight: 600 }}>5</div>
+                  <div>
+                    <strong style={{ color: "#0f172a" }}>Generate & Review:</strong> AI creates skill drafts from approved groups
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontSize: "13px", fontWeight: 600, color: "#1e40af", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Conflict Detection Explained
+              </h4>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "13px" }}>
+                <div style={{ display: "flex", gap: "8px", alignItems: "start" }}>
+                  <AlertCircle size={16} style={{ color: "#f59e0b", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <strong style={{ color: "#92400e" }}>Content Discrepancy (UPDATE groups):</strong>
+                    <span style={{ color: "#475569" }}> Compares new source URL against existing skill content to show what changed</span>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "start" }}>
+                  <AlertCircle size={16} style={{ color: "#dc2626", flexShrink: 0, marginTop: "2px" }} />
+                  <div>
+                    <strong style={{ color: "#7f1d1d" }}>Source Conflicts (all groups):</strong>
+                    <span style={{ color: "#475569" }}> Detects when sources within a group contradict each other (technical conflicts, version mismatches, scope differences)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: "16px" }}>
+              <h4 style={{ fontSize: "13px", fontWeight: 600, color: "#10b981", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "6px" }}>
+                <CheckCircle size={16} />
+                Best Practices
+              </h4>
+              <ul style={{ margin: 0, paddingLeft: "20px", color: "#475569", fontSize: "13px", lineHeight: "1.8" }}>
+                <li><strong>Group related content:</strong> Add URLs/docs that cover the same topic or feature together</li>
+                <li><strong>Use descriptive URLs:</strong> Documentation URLs work better than marketing pages</li>
+                <li><strong>Mix sources strategically:</strong> Combine official docs, tutorials, and guides for comprehensive coverage</li>
+                <li><strong>Review conflict warnings:</strong> Pay attention to version mismatches (v1 vs v2) and technical contradictions</li>
+                <li><strong>Split when needed:</strong> If sources conflict significantly, split them into separate skills</li>
+                <li><strong>Add guidance notes:</strong> Use the "Notes for AI" field to specify focus areas (e.g., "focus on security aspects")</li>
+                <li><strong>Start small:</strong> Try 3-5 URLs first to understand the flow, then scale up</li>
+              </ul>
+            </div>
+
+            <div style={{ padding: "12px", backgroundColor: "#fef3c7", border: "1px solid #fde047", borderRadius: "6px", fontSize: "13px" }}>
+              <strong style={{ color: "#92400e" }}>💡 Pro Tip:</strong>
+              <span style={{ color: "#713f12" }}> Groups with 2-5 sources get automatic coherence analysis. Single sources and large groups (6+) skip this check for performance.</span>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Input Mode Tabs */}
       <div style={{ display: "flex", gap: "0", marginBottom: "16px", borderBottom: "1px solid #e2e8f0" }}>
         <button
