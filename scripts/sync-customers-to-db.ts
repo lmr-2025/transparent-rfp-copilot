@@ -29,6 +29,21 @@ const execAsync = promisify(exec);
 async function syncCustomers() {
   console.log("🔄 Starting customer profile sync from git to database...\n");
 
+  // Get or create a system user for customers without an owner
+  let systemUser = await prisma.user.findFirst({
+    where: { email: "system@transparent-trust.internal" },
+  });
+
+  if (!systemUser) {
+    systemUser = await prisma.user.create({
+      data: {
+        email: "system@transparent-trust.internal",
+        name: "System",
+      },
+    });
+    console.log("✨ Created system user for customer ownership\n");
+  }
+
   // Get all customer files from git
   const customerSlugs = await listCustomerFiles();
   console.log(`📂 Found ${customerSlugs.length} customer files in customers/ directory\n`);
@@ -108,6 +123,29 @@ async function syncCustomers() {
         const commitSha = stdout.trim();
 
         // Create new customer with sync logging
+        // Extract ownerId from customer file owners or use system user
+        let ownerId = systemUser.id;
+        if (customerFile.owners && customerFile.owners.length > 0) {
+          const firstOwner = customerFile.owners[0];
+          if (firstOwner.userId) {
+            // Check if user exists
+            const user = await prisma.user.findUnique({
+              where: { id: firstOwner.userId },
+            });
+            if (user) {
+              ownerId = firstOwner.userId;
+            }
+          } else if (firstOwner.email) {
+            // Try to find user by email
+            const user = await prisma.user.findFirst({
+              where: { email: firstOwner.email },
+            });
+            if (user) {
+              ownerId = user.id;
+            }
+          }
+        }
+
         await withCustomerSyncLogging(
           {
             customerId: customerFile.id,
@@ -136,6 +174,7 @@ async function syncCustomers() {
                 sourceUrls: customerFile.sources,
                 sourceDocuments: customerFile.documents,
                 owners: customerFile.owners,
+                ownerId, // Add required ownerId field
                 createdAt: new Date(customerFile.created),
                 updatedAt: new Date(customerFile.updated),
               },

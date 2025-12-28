@@ -29,6 +29,21 @@ const execAsync = promisify(exec);
 async function syncTemplates() {
   console.log("🔄 Starting template sync from git to database...\n");
 
+  // Get or create a system user for templates without an owner
+  let systemUser = await prisma.user.findFirst({
+    where: { email: "system@transparent-trust.internal" },
+  });
+
+  if (!systemUser) {
+    systemUser = await prisma.user.create({
+      data: {
+        email: "system@transparent-trust.internal",
+        name: "System",
+      },
+    });
+    console.log("✨ Created system user for template ownership\n");
+  }
+
   // Get all template files from git
   const templateSlugs = await listTemplateFiles();
   console.log(`📂 Found ${templateSlugs.length} template files in templates/ directory\n`);
@@ -102,6 +117,9 @@ async function syncTemplates() {
         const commitSha = stdout.trim();
 
         // Create new template with sync logging
+        // Use system user as owner (templates don't have owners in git files)
+        const ownerId = systemUser.id;
+
         await withTemplateSyncLogging(
           {
             templateId: templateFile.id,
@@ -122,6 +140,7 @@ async function syncTemplates() {
                 instructionPresetId: templateFile.instructionPresetId,
                 isActive: templateFile.isActive,
                 sortOrder: templateFile.sortOrder,
+                ownerId, // Add required ownerId field
                 createdAt: new Date(templateFile.created),
                 updatedAt: new Date(templateFile.updated),
                 createdBy: templateFile.createdBy,
