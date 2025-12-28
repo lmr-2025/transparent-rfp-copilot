@@ -1,37 +1,19 @@
 /**
- * Customer Profile Git Sync
+ * Customer Git Sync (Compatibility Layer)
  *
- * Handles bidirectional sync between customers/ markdown files and database.
- * Pattern copied from skillGitSync.ts for consistency.
+ * Maintains the old function-based API while delegating to the new class-based service.
+ * This allows existing code to continue working without changes.
+ *
+ * DEPRECATED: New code should use customerGitSync service directly from git-sync/customer-git-sync.service.ts
  */
 
-import { exec } from "child_process";
-import { promisify } from "util";
-import {
-  writeCustomerFile,
-  getCustomerSlug,
-  renameCustomerFile,
-  deleteCustomerFile
-} from "./customerFiles";
+import { customerGitSync } from "./git-sync/customer-git-sync.service";
 import type { CustomerFile } from "./customerFiles";
-
-const execAsync = promisify(exec);
-
-/**
- * Git author information for commits
- */
-export interface GitAuthor {
-  name: string;
-  email: string;
-}
+import type { GitAuthor } from "./gitCommitHelpers";
 
 /**
  * Save a customer to the customers/ directory and commit to git
- * @param slug - The customer slug (filename)
- * @param customer - The customer data
- * @param commitMessage - Git commit message
- * @param author - Git author info
- * @returns Git commit SHA if a commit was created, null if no changes
+ * @deprecated Use customerGitSync.saveAndCommit() instead
  */
 export async function saveCustomerAndCommit(
   slug: string,
@@ -39,43 +21,12 @@ export async function saveCustomerAndCommit(
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  // 1. Write customer file
-  await writeCustomerFile(slug, customer);
-
-  // 2. Git add
-  const filepath = `customers/${slug}.md`;
-  await execAsync(`git add "${filepath}"`);
-
-  // 3. Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    // No changes, skip commit
-    return null;
-  } catch {
-    // Has changes, proceed with commit
-  }
-
-  // 4. Git commit with author
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // 5. Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return customerGitSync.saveAndCommit(slug, customer, commitMessage, author);
 }
 
 /**
  * Update a customer file and commit the changes
- * Handles slug changes (renames) automatically
- * @param oldSlug - Current customer slug (may be different if name changed)
- * @param customer - Updated customer data
- * @param commitMessage - Git commit message
- * @param author - Git author info
- * @returns Git commit SHA if a commit was created, null if no changes
+ * @deprecated Use customerGitSync.updateAndCommit() instead
  */
 export async function updateCustomerAndCommit(
   oldSlug: string,
@@ -83,140 +34,81 @@ export async function updateCustomerAndCommit(
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  const newSlug = getCustomerSlug(customer.name);
-
-  // If slug changed (name changed), rename the file
-  if (oldSlug !== newSlug) {
-    await renameCustomerFile(oldSlug, newSlug);
-    await execAsync(`git add "customers/${oldSlug}.md" "customers/${newSlug}.md"`);
-  }
-
-  // Write updated content
-  await writeCustomerFile(newSlug, customer);
-  await execAsync(`git add "customers/${newSlug}.md"`);
-
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return customerGitSync.updateAndCommit(oldSlug, customer, commitMessage, author);
 }
 
 /**
  * Delete a customer file and commit the deletion
- * @param slug - The customer slug to delete
- * @param commitMessage - Git commit message
- * @param author - Git author info
- * @returns Git commit SHA if a commit was created, null if no changes
+ * @deprecated Use customerGitSync.deleteAndCommit() instead
  */
 export async function deleteCustomerAndCommit(
   slug: string,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  const filepath = `customers/${slug}.md`;
-
-  // Delete file
-  await deleteCustomerFile(slug);
-
-  // Git remove
-  await execAsync(`git rm "${filepath}"`);
-
-  // Check if there are changes to commit
-  try {
-    await execAsync("git diff --staged --quiet");
-    return null; // No changes
-  } catch {
-    // Has changes, proceed
-  }
-
-  // Commit
-  const escapedMessage = commitMessage.replace(/"/g, '\\"').replace(/\$/g, '\\$');
-  const authorString = `${author.name} <${author.email}>`;
-
-  await execAsync(
-    `git commit -m "${escapedMessage}" --author="${authorString}"`
-  );
-
-  // Get the commit SHA
-  const { stdout } = await execAsync("git rev-parse HEAD");
-  return stdout.trim();
+  return customerGitSync.deleteAndCommit(slug, commitMessage, author);
 }
 
 /**
  * Get git log for a customer file
- * @param slug - The customer slug
- * @param limit - Maximum number of commits to return
- * @returns Array of commit info
+ * @deprecated Use customerGitSync.getHistory() instead
  */
 export async function getCustomerHistory(
   slug: string,
   limit = 10
-): Promise<Array<{
-  sha: string;
-  author: string;
-  email: string;
-  date: string;
-  message: string;
-}>> {
-  const filepath = `customers/${slug}.md`;
-
-  try {
-    const { stdout } = await execAsync(
-      `git log -n ${limit} --format='%H|%an|%ae|%aI|%s' -- "${filepath}"`
-    );
-
-    if (!stdout.trim()) {
-      return [];
-    }
-
-    return stdout
-      .trim()
-      .split("\n")
-      .map((line) => {
-        const [sha, author, email, date, message] = line.split("|");
-        return { sha, author, email, date, message };
-      });
-  } catch {
-    // File not found or no commits
-    return [];
-  }
+): Promise<
+  Array<{
+    sha: string;
+    author: string;
+    email: string;
+    date: string;
+    message: string;
+  }>
+> {
+  return customerGitSync.getHistory(slug, limit);
 }
 
 /**
  * Get diff between two commits for a customer file
- * @param slug - The customer slug
- * @param fromCommit - Starting commit SHA (or 'HEAD~1' for previous)
- * @param toCommit - Ending commit SHA (default: 'HEAD')
- * @returns Diff output
+ * @deprecated Use customerGitSync.getDiff() instead
  */
 export async function getCustomerDiff(
   slug: string,
   fromCommit: string,
   toCommit = "HEAD"
 ): Promise<string> {
-  const filepath = `customers/${slug}.md`;
-
-  try {
-    const { stdout } = await execAsync(
-      `git diff ${fromCommit} ${toCommit} -- "${filepath}"`
-    );
-    return stdout;
-  } catch {
-    return "";
-  }
+  return customerGitSync.getDiff(slug, fromCommit, toCommit);
 }
+
+/**
+ * Check if git working directory is clean
+ * @deprecated Use customerGitSync.isClean() instead
+ */
+export async function isGitClean(): Promise<boolean> {
+  return customerGitSync.isClean();
+}
+
+/**
+ * Get current git branch name
+ * @deprecated Use customerGitSync.getCurrentBranch() instead
+ */
+export async function getCurrentBranch(): Promise<string> {
+  return customerGitSync.getCurrentBranch();
+}
+
+/**
+ * Push commits to remote
+ * @deprecated Use customerGitSync.pushToRemote() instead
+ */
+export async function pushToRemote(
+  remote = "origin",
+  branch?: string
+): Promise<void> {
+  await customerGitSync.pushToRemote(remote, branch);
+}
+
+// Re-export the service for new code
+export { customerGitSync };
+
+// Re-export GitAuthor interface for backwards compatibility
+export type { GitAuthor };
