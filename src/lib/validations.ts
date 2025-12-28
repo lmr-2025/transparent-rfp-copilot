@@ -316,6 +316,7 @@ const skillContextSchema = z.object({
   id: z.string(),
   title: z.string(),
   content: z.string(),
+  sourceUrls: z.array(sourceUrlSchema).optional(),
 });
 
 const customerProfileContextSchema = z.object({

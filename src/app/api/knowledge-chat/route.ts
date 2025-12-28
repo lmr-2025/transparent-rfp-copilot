@@ -122,12 +122,36 @@ export async function POST(request: NextRequest) {
 
     // Use smart truncation to prioritize most relevant items
     // Convert skills to ContextItems
-    const skillItems: ContextItem[] = skills.map((skill) => ({
-      id: skill.id,
-      title: skill.title,
-      content: skill.content,
-      type: "skill" as const,
-    }));
+    const skillItems: ContextItem[] = skills.map((skill) => {
+      // Append source URLs to skill content if they exist
+      let content = skill.content;
+      if (skill.sourceUrls && skill.sourceUrls.length > 0) {
+        const sourcesSection = [
+          "",
+          "---",
+          "Sources:",
+          ...skill.sourceUrls.map((source) => {
+            // Handle both string URLs and object format
+            if (typeof source === "string") {
+              return `- ${source}`;
+            }
+            const title = (source as { url: string; title?: string; lastFetchedAt?: string }).title || source.url;
+            const lastFetched = (source as { lastFetchedAt?: string }).lastFetchedAt
+              ? ` (Last updated: ${new Date((source as { lastFetchedAt: string }).lastFetchedAt).toLocaleDateString()})`
+              : "";
+            return `- ${title}: ${source.url}${lastFetched}`;
+          }),
+        ].join("\n");
+        content = content + sourcesSection;
+      }
+
+      return {
+        id: skill.id,
+        title: skill.title,
+        content,
+        type: "skill" as const,
+      };
+    });
 
     // Convert documents to ContextItems
     const documentItems: ContextItem[] = textDocuments.map((doc) => ({

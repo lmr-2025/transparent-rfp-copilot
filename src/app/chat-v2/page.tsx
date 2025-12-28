@@ -331,6 +331,7 @@ ${keyFactsText}`;
           id: s.id,
           title: s.title,
           content: s.content,
+          sourceUrls: s.sourceUrls || [],
         }));
 
       const selectedCustomers = customers
