@@ -5,7 +5,7 @@ categories:
   - Security & Compliance
 tier: library
 created: '2025-12-28T19:50:46.392Z'
-updated: '2025-12-28T19:50:46.407Z'
+updated: '2025-12-28T20:18:40.152Z'
 owners:
   - name: lross
     email: lross@montecarlodata.com
@@ -13,19 +13,19 @@ owners:
 sources:
   - url: 'https://docs.getmontecarlo.com/docs/external-ai-use-at-monte-carlo.md'
     addedAt: '2025-12-28T19:50:46.364Z'
-    lastFetchedAt: '2025-12-28T19:50:46.364Z'
+    lastFetchedAt: '2025-12-28T20:06:02.190Z'
   - url: 'https://docs.getmontecarlo.com/docs/privacy.md'
     addedAt: '2025-12-28T19:50:46.364Z'
-    lastFetchedAt: '2025-12-28T19:50:46.364Z'
+    lastFetchedAt: '2025-12-28T20:06:02.190Z'
   - url: 'https://docs.getmontecarlo.com/docs/data-sampling.md'
     addedAt: '2025-12-28T19:50:46.364Z'
-    lastFetchedAt: '2025-12-28T19:50:46.364Z'
+    lastFetchedAt: '2025-12-28T20:06:02.190Z'
   - url: 'https://docs.getmontecarlo.com/docs/info-monte-carlo-collects.md'
     addedAt: '2025-12-28T19:50:46.364Z'
-    lastFetchedAt: '2025-12-28T19:50:46.364Z'
+    lastFetchedAt: '2025-12-28T20:06:02.190Z'
   - url: 'https://docs.getmontecarlo.com/docs/subprocessors-vendors.md'
     addedAt: '2025-12-28T19:50:46.364Z'
-    lastFetchedAt: '2025-12-28T19:50:46.364Z'
+    lastFetchedAt: '2025-12-28T20:06:02.190Z'
 active: true
 ---
 ## AI Support Systems
