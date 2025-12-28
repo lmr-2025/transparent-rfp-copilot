@@ -7,8 +7,12 @@ import { getAnthropicClient } from "@/lib/apiHelpers";
 import { CLAUDE_MODEL } from "@/lib/config";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { cacheGetOrSet, cacheDeletePattern } from "@/lib/cache";
 
 export const maxDuration = 60;
+
+const DOCUMENTS_CACHE_KEY_PREFIX = "cache:documents";
+const DOCUMENTS_TTL = 1800; // 30 minutes
 
 // GET - List all documents with skill usage counts
 // Categories are derived dynamically from linked skills via SkillSource
@@ -24,7 +28,15 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get("offset") || "0", 10);
     const category = searchParams.get("category");
 
-    const documents = await prisma.knowledgeDocument.findMany({
+    // Create cache key based on query parameters
+    const cacheKey = `${DOCUMENTS_CACHE_KEY_PREFIX}:${JSON.stringify({ limit, offset, category })}`;
+
+    // Use Redis caching with 30 min TTL
+    const documentsWithData = await cacheGetOrSet(
+      cacheKey,
+      DOCUMENTS_TTL,
+      async () => {
+        const documents = await prisma.knowledgeDocument.findMany({
       orderBy: { uploadedAt: "desc" },
       take: limit,
       skip: offset,
@@ -79,20 +91,24 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Add skillCount and derived categories to each document
-    let documentsWithData = documents.map((doc) => ({
-      ...doc,
-      skillCount: countMap.get(doc.id) || 0,
-      // Derived categories from linked skills (falls back to stored categories if none linked)
-      categories: categoryMap.has(doc.id)
-        ? Array.from(categoryMap.get(doc.id)!)
-        : doc.categories,
-    }));
+        // Add skillCount and derived categories to each document
+        let docsWithData = documents.map((doc) => ({
+          ...doc,
+          skillCount: countMap.get(doc.id) || 0,
+          // Derived categories from linked skills (falls back to stored categories if none linked)
+          categories: categoryMap.has(doc.id)
+            ? Array.from(categoryMap.get(doc.id)!)
+            : doc.categories,
+        }));
 
-    // Filter by category if provided (now filtering on derived categories)
-    if (category) {
-      documentsWithData = documentsWithData.filter((doc) => doc.categories.includes(category));
-    }
+        // Filter by category if provided (now filtering on derived categories)
+        if (category) {
+          docsWithData = docsWithData.filter((doc) => doc.categories.includes(category));
+        }
+
+        return docsWithData;
+      }
+    );
 
     // Add HTTP caching - documents are fairly stable
     const response = apiSuccess({ documents: documentsWithData });
@@ -221,6 +237,9 @@ export async function POST(request: NextRequest) {
       undefined,
       { filename: file.name, fileType, fileSize: file.size, categories }
     );
+
+    // Invalidate cache
+    await cacheDeletePattern(`${DOCUMENTS_CACHE_KEY_PREFIX}:*`);
 
     return apiSuccess({
       document: {

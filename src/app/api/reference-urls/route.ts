@@ -5,6 +5,10 @@ import { createReferenceUrlSchema, bulkImportUrlsSchema, validateBody } from "@/
 import { logReferenceUrlChange, getUserFromSession } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { cacheGetOrSet, cacheDeletePattern } from "@/lib/cache";
+
+const URLS_CACHE_KEY_PREFIX = "cache:reference-urls";
+const URLS_TTL = 1800; // 30 minutes
 
 // GET /api/reference-urls - List all reference URLs with skill usage counts
 // Categories are derived dynamically from linked skills via SkillSource
@@ -13,62 +17,74 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const category = searchParams.get("category");
 
-    // Fetch all URLs first (we'll filter after computing derived categories)
-    const urls = await prisma.referenceUrl.findMany({
-      orderBy: { addedAt: "desc" },
-      include: {
-        owner: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+    // Create cache key based on query parameters
+    const cacheKey = `${URLS_CACHE_KEY_PREFIX}:${JSON.stringify({ category })}`;
 
-    // Get all SkillSource links for these URLs with their skill categories
-    const urlIds = urls.map((u) => u.id);
-    const skillSources = await prisma.skillSource.findMany({
-      where: {
-        sourceId: { in: urlIds },
-        sourceType: "url",
-      },
-      include: {
-        skill: {
-          select: { id: true, categories: true },
-        },
-      },
-    });
+    // Use Redis caching with 30 min TTL
+    const urlsWithData = await cacheGetOrSet(
+      cacheKey,
+      URLS_TTL,
+      async () => {
+        // Fetch all URLs first (we'll filter after computing derived categories)
+        const urls = await prisma.referenceUrl.findMany({
+          orderBy: { addedAt: "desc" },
+          include: {
+            owner: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        });
 
-    // Build a map of URL ID -> derived categories (union of all linked skills' categories)
-    const categoryMap = new Map<string, Set<string>>();
-    const countMap = new Map<string, number>();
+        // Get all SkillSource links for these URLs with their skill categories
+        const urlIds = urls.map((u) => u.id);
+        const skillSources = await prisma.skillSource.findMany({
+          where: {
+            sourceId: { in: urlIds },
+            sourceType: "url",
+          },
+          include: {
+            skill: {
+              select: { id: true, categories: true },
+            },
+          },
+        });
 
-    for (const ss of skillSources) {
-      // Count skills per URL
-      countMap.set(ss.sourceId, (countMap.get(ss.sourceId) || 0) + 1);
+        // Build a map of URL ID -> derived categories (union of all linked skills' categories)
+        const categoryMap = new Map<string, Set<string>>();
+        const countMap = new Map<string, number>();
 
-      // Aggregate categories from linked skills
-      if (!categoryMap.has(ss.sourceId)) {
-        categoryMap.set(ss.sourceId, new Set());
+        for (const ss of skillSources) {
+          // Count skills per URL
+          countMap.set(ss.sourceId, (countMap.get(ss.sourceId) || 0) + 1);
+
+          // Aggregate categories from linked skills
+          if (!categoryMap.has(ss.sourceId)) {
+            categoryMap.set(ss.sourceId, new Set());
+          }
+          const catSet = categoryMap.get(ss.sourceId)!;
+          for (const cat of ss.skill.categories) {
+            catSet.add(cat);
+          }
+        }
+
+        // Add skillCount and derived categories to each URL
+        let urlsWithData = urls.map((url) => ({
+          ...url,
+          skillCount: countMap.get(url.id) || 0,
+          // Derived categories from linked skills (falls back to stored categories if none linked)
+          categories: categoryMap.has(url.id)
+            ? Array.from(categoryMap.get(url.id)!)
+            : url.categories,
+        }));
+
+        // Filter by category if provided (now filtering on derived categories)
+        if (category) {
+          urlsWithData = urlsWithData.filter((url) => url.categories.includes(category));
+        }
+
+        return urlsWithData;
       }
-      const catSet = categoryMap.get(ss.sourceId)!;
-      for (const cat of ss.skill.categories) {
-        catSet.add(cat);
-      }
-    }
-
-    // Add skillCount and derived categories to each URL
-    let urlsWithData = urls.map((url) => ({
-      ...url,
-      skillCount: countMap.get(url.id) || 0,
-      // Derived categories from linked skills (falls back to stored categories if none linked)
-      categories: categoryMap.has(url.id)
-        ? Array.from(categoryMap.get(url.id)!)
-        : url.categories,
-    }));
-
-    // Filter by category if provided (now filtering on derived categories)
-    if (category) {
-      urlsWithData = urlsWithData.filter((url) => url.categories.includes(category));
-    }
+    );
 
     // Add HTTP caching - URLs are fairly stable
     const response = apiSuccess(urlsWithData);
@@ -119,6 +135,9 @@ export async function POST(request: NextRequest) {
       undefined,
       { url: data.url, categories: data.categories }
     );
+
+    // Invalidate cache
+    await cacheDeletePattern(`${URLS_CACHE_KEY_PREFIX}:*`);
 
     return apiSuccess(url, { status: 201 });
   } catch (error) {
@@ -178,6 +197,9 @@ export async function PUT(request: NextRequest) {
       undefined,
       { importedCount: results.length, urls: results.map(r => r.url) }
     );
+
+    // Invalidate cache
+    await cacheDeletePattern(`${URLS_CACHE_KEY_PREFIX}:*`);
 
     return apiSuccess({ imported: results.length, urls: results });
   } catch (error) {
