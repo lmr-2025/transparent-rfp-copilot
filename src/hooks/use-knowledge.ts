@@ -135,7 +135,7 @@ export function useDocuments(options: { categories?: string[] } = {}) {
       const docs = Array.isArray(data) ? data : [];
       if (options.categories && options.categories.length > 0) {
         return docs.filter((doc) =>
-          doc.categories?.some((cat) => options.categories!.includes(cat))
+          doc.categories?.some((cat: string) => options.categories!.includes(cat))
         );
       }
       return docs;
@@ -156,7 +156,7 @@ export function useReferenceUrls(options: { categories?: string[] } = {}) {
       const urls = Array.isArray(data) ? data : [];
       if (options.categories && options.categories.length > 0) {
         return urls.filter((url) =>
-          url.categories?.some((cat) => options.categories!.includes(cat))
+          url.categories?.some((cat: string) => options.categories!.includes(cat))
         );
       }
       return urls;

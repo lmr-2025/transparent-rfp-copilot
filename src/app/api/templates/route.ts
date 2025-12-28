@@ -99,6 +99,7 @@ export async function POST(request: NextRequest) {
         instructionPresetId: data.instructionPresetId || null,
         isActive: data.isActive,
         sortOrder: data.sortOrder,
+        ownerId: session.user.id,
         createdBy: session.user.id,
       },
     });

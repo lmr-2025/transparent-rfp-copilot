@@ -26,40 +26,11 @@ Open [http://localhost:3000](http://localhost:3000) to access the platform.
 
 ### AWS Deployment
 
-The application deploys to AWS using Terraform with Tailscale-only access (no public internet).
-
-**Prerequisites:**
-
-- AWS CLI configured with appropriate credentials
-- Terraform >= 1.0 installed
-- ACM certificate for `*.mcdinternal.io`
-- Route53 private hosted zone for `mcdinternal.io`
-
-**Bootstrap Terraform State (one-time setup):**
-
-```bash
-cd infrastructure/bootstrap
-terraform init
-terraform apply
-```
-
-After bootstrap completes, copy the backend configuration from the outputs and add it to your environment files.
-
-**Deploy Environment:**
-
-```bash
-cd infrastructure/env/dev-us-security  # or prod-us-security
-terraform init
-terraform plan
-terraform apply
-```
-
-**Access:** Applications are deployed as internal ALBs on private subnets. Access requires Tailscale VPN connected to the VPC. Domains:
-
-- Dev: `transparent-trust-dev.mcdinternal.io`
-- Prod: `transparent-trust-prod.mcdinternal.io`
-
-See [infrastructure/env/TAILSCALE_CONFIGURATION.md](infrastructure/env/TAILSCALE_CONFIGURATION.md) for complete setup details.
+The application deploys to AWS using Terraform. See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for complete deployment guide including:
+- Infrastructure setup (Terraform, ECS/Amplify options)
+- Security configuration and compliance
+- Cost estimates and optimization
+- Monitoring and operational procedures
 
 ## Features
 
@@ -127,57 +98,7 @@ src/lib/              # Utilities (promptBlocks, auth, capabilities, prisma)
 infrastructure/       # Terraform modules for AWS deployment
 ```
 
-### Architecture Options
-
-**Option 1: AWS Amplify (Recommended)**
-- Fully managed hosting with Git-based CI/CD
-- Automatic builds and deployments
-- PR preview environments
-- Cost: ~$5-30/month
-
-**Option 2: ECS Fargate**
-- More control and flexibility
-- Better for complex requirements
-- Auto-scaling and self-healing
-- Cost: ~$30-50/month
-
-### Estimated Monthly Costs
-
-| Configuration | Monthly Cost | Description |
-|--------------|--------------|-------------|
-| **Minimal** | $29-39 | Amplify + Single-AZ RDS + Basic monitoring |
-| **Standard** | $130-163 | ECS + Multi-AZ RDS + Full compliance |
-| **Optimized** | $75-100 | Cost-optimized with Upstash, VPC endpoints |
-
-See [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) for detailed deployment guide.
-
-### Security & Compliance
-
-All infrastructure modules include:
-- ✅ Encryption at rest and in transit
-- ✅ Multi-AZ high availability
-- ✅ Automated backups and disaster recovery
-- ✅ Least privilege IAM policies
-- ✅ Network isolation (VPC, private subnets)
-- ✅ Comprehensive monitoring and alerting
-- ✅ Audit logging (CloudTrail)
-- ✅ Compliance monitoring (AWS Config)
-- ✅ Threat detection (GuardDuty)
-- ✅ Cost tracking and optimization
-
-**Compliance Frameworks**: SOC 2 Type II, HIPAA, PCI DSS
-
-### Infrastructure Documentation
-
-- **[AWS Deployment Guide](docs/AWS_DEPLOYMENT.md)**: Complete deployment walkthrough
-- **[RDS Security](docs/RDS_SECURITY.md)**: Database security best practices
-- **[Monitoring Runbook](docs/runbooks/rds-security-monitoring.md)**: Operational procedures
-
-Each infrastructure module includes:
-- `README.md` - Usage examples and troubleshooting
-- `variables.tf` - Configurable parameters
-- `outputs.tf` - Values for other modules
-- `main.tf` - Resource definitions
+For AWS deployment architecture, security, and cost details, see [docs/AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md).
 
 ## Third-Party Integrations
 

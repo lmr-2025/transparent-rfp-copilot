@@ -65,6 +65,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const urlStrings = sourceUrls.map((s) => s.url);
     const sourceContent = await buildSourceMaterial(urlStrings);
 
+    // Check for contradictions in sources (scales to any number of sources)
+    let coherenceResult = null;
+    if (urlStrings.length >= 1) {
+      try {
+        coherenceResult = await analyzeSourceCoherence(urlStrings, skill.title, auth.session);
+      } catch (error) {
+        logger.warn("Failed to analyze source coherence during refresh", { skillId: skill.id, error });
+        // Continue without coherence analysis - non-blocking
+      }
+    }
+
     // Generate draft update comparing existing content with fresh source
     const draftResult = await generateDraftUpdate(
       { title: skill.title, content: skill.content },
@@ -101,9 +112,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
         },
       });
 
+      // Build message with coherence info
+      let message = "Source URLs re-fetched. No updates needed - skill is already up to date.";
+      if (coherenceResult) {
+        if (coherenceResult.coherent) {
+          message += ` Sources are ${coherenceResult.coherencePercentage}% aligned with no discrepancies found.`;
+        } else {
+          message += ` However, ${coherenceResult.conflicts.length} discrepancy(ies) detected in sources.`;
+        }
+      }
+
       return apiSuccess({
         hasChanges: false,
-        message: "Source URLs re-fetched. No updates needed - skill is already up to date.",
+        message,
+        coherenceAnalysis: coherenceResult,
       });
     }
 
@@ -118,6 +140,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
       originalTitle: skill.title,
       originalContent: skill.content,
+      coherenceAnalysis: coherenceResult,
     });
   } catch (error) {
     logger.error("Failed to refresh skill", error, { route: "/api/skills/[id]/refresh" });
@@ -344,4 +367,180 @@ Return ONLY the JSON object.`;
   });
 
   return parsed;
+}
+
+// Analyze source coherence for contradictions (source-vs-skill comparison)
+async function analyzeSourceCoherence(
+  sourceUrls: string[],
+  skillTitle: string,
+  authSession: { user?: { id?: string; email?: string | null } } | null
+) {
+  const skill = await prisma.skill.findFirst({
+    where: { title: skillTitle },
+    select: { content: true },
+  });
+
+  if (!skill) {
+    throw new Error("Skill not found for coherence analysis");
+  }
+
+  const anthropic = getAnthropicClient();
+
+  // Fetch all source contents in parallel
+  const sourceContents = await Promise.all(
+    sourceUrls.map(async (url, idx) => {
+      const content = await fetchUrlContent(url, { maxLength: 15000 });
+      return {
+        index: idx,
+        url,
+        content: content || "[Could not fetch content]",
+      };
+    })
+  );
+
+  // Analyze each source against the skill content in parallel
+  const analyses = await Promise.all(
+    sourceContents.map(async (source) => {
+      const systemPrompt = await loadSystemPrompt(
+        "source_skill_coherence",
+        "You are a content analysis specialist who identifies contradictions between source materials and finalized content."
+      );
+
+      const userPrompt = `FINALIZED SKILL: "${skillTitle}"
+
+Skill Content (established truth):
+${skill.content}
+
+---
+
+SOURCE TO ANALYZE:
+URL: ${source.url}
+
+${source.content}
+
+---
+
+Your task: Determine if this source CONTRADICTS the finalized skill content.
+
+The skill content represents the agreed-upon information. Check if the source:
+1. Contradicts technical details in the skill
+2. Provides outdated information that conflicts with the skill
+3. Recommends different approaches than the skill establishes
+4. Contains version mismatches or deprecated information
+5. Takes an incompatible stance on topics covered by the skill
+
+Return a JSON object:
+{
+  "contradicts": boolean,
+  "alignment": <number 0-100, where 100 = perfect alignment>,
+  "issues": [
+    {
+      "type": "technical_contradiction" | "outdated_information" | "different_approach" | "version_mismatch" | "incompatible_stance",
+      "description": "<specific contradiction with examples>",
+      "severity": "low" | "medium" | "high"
+    }
+  ],
+  "recommendation": "<should this source be updated, removed, or is it acceptable?>",
+  "summary": "<brief summary of alignment or conflicts>"
+}
+
+Guidelines:
+- contradicts = false if source aligns with or complements the skill
+- contradicts = true ONLY if actual contradictions exist (and issues array is populated)
+- Be specific about what contradicts and provide examples
+- If contradicts = true, issues array MUST have at least one detailed entry
+
+Return ONLY the JSON object.`;
+
+      const speed = getEffectiveSpeed("skills-refresh");
+      const model = speed === "fast" ? "claude-3-5-haiku-20241022" : getModel(speed);
+
+      const stream = anthropic.messages.stream({
+        model,
+        max_tokens: 2000,
+        temperature: 0.1,
+        system: systemPrompt,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+
+      const response = await stream.finalMessage();
+      const content = response.content[0];
+
+      if (content.type !== "text") {
+        throw new Error("Unexpected response format");
+      }
+
+      const parsed = parseJsonResponse<{
+        contradicts: boolean;
+        alignment: number;
+        issues: Array<{
+          type: string;
+          description: string;
+          severity: "low" | "medium" | "high";
+        }>;
+        recommendation: string;
+        summary: string;
+      }>(content.text);
+
+      // Log usage for this source
+      logUsage({
+        userId: authSession?.user?.id,
+        userEmail: authSession?.user?.email,
+        feature: "skill-refresh-coherence",
+        model,
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        metadata: { skillTitle, sourceUrl: source.url },
+      });
+
+      return {
+        sourceIndex: source.index,
+        sourceUrl: source.url,
+        ...parsed,
+      };
+    })
+  );
+
+  // Aggregate results
+  const conflictingSources = analyses.filter((a) => a.contradicts);
+  const avgAlignment = Math.round(
+    analyses.reduce((sum, a) => sum + a.alignment, 0) / analyses.length
+  );
+
+  // Flatten all issues with source attribution
+  const allConflicts = conflictingSources.flatMap((source) =>
+    source.issues.map((issue) => ({
+      type: issue.type,
+      description: `Source ${source.sourceIndex + 1} (${source.sourceUrl}): ${issue.description}`,
+      affectedSources: [source.sourceIndex],
+      severity: issue.severity,
+    }))
+  );
+
+  return {
+    coherent: conflictingSources.length === 0,
+    coherenceLevel: (avgAlignment > 90 ? "high" : avgAlignment > 70 ? "medium" : "low") as
+      | "high"
+      | "medium"
+      | "low",
+    coherencePercentage: avgAlignment,
+    conflicts: allConflicts,
+    recommendation:
+      conflictingSources.length === 0
+        ? "All sources align with the skill content"
+        : `${conflictingSources.length} of ${sourceUrls.length} sources contain contradictions - review recommended`,
+    summary:
+      conflictingSources.length === 0
+        ? `All ${sourceUrls.length} sources align with the finalized skill content`
+        : `${conflictingSources.length} source(s) contradict the skill content`,
+    sourceAnalyses: analyses.map((a) => ({
+      sourceIndex: a.sourceIndex,
+      sourceUrl: a.sourceUrl,
+      contradicts: a.contradicts,
+      alignment: a.alignment,
+      issues: a.issues,
+      recommendation: a.recommendation,
+      summary: a.summary,
+    })),
+  };
 }

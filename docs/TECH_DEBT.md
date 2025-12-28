@@ -713,6 +713,28 @@ The underscore prefix follows the convention for intentionally unused variables.
 **Fix:** Add keyboard shortcut system (Cmd+K for search, Cmd+N for new, etc.)
 **Effort:** Medium
 
+### F11. Owner → System User Linking (BulkProject)
+**Current State:** Schema ready, needs UI/API work
+- `BulkProject.ownerId` field exists in Prisma schema with relation to `User`
+- `ownerName` is stored as a string (denormalized)
+- Owner is manually entered as text
+
+**User Need:** Link projects to actual system users for better tracking and permissions
+
+**To Complete:**
+1. Update project upload page to:
+   - Auto-fill owner from authenticated session (`session.user.id`)
+   - Or provide dropdown to select from system users
+2. Update project creation API to save `ownerId` alongside `ownerName`
+3. Optionally: Display owner as clickable link or show avatar in projects table
+
+**Files Involved:**
+- `src/app/projects/upload/page.tsx`
+- `src/app/api/projects/route.ts`
+- `prisma/schema.prisma` (already has the relation)
+
+**Effort:** Medium (2-4 hours)
+
 ---
 
 ## How to Use This Document

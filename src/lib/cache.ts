@@ -184,6 +184,7 @@ export async function invalidatePromptCache(): Promise<void> {
  */
 export async function invalidateSkillCache(): Promise<void> {
   await cacheDelete(CacheKeys.SKILLS_ALL);
+  await cacheDeletePattern(`${CacheKeys.SKILLS_ALL}:*`); // Delete all skill cache variations with query params
   await cacheDeletePattern("cache:skills:domain:*");
   logger.info("Skill cache invalidated");
 }

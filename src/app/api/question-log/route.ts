@@ -119,9 +119,21 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 name: true,
-                customerName: true,
+                customerId: true,
+                customer: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
                 ownerId: true,
-                ownerName: true,
+                owner: {
+                  select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                  },
+                },
                 createdAt: true,
               },
             },
@@ -187,8 +199,8 @@ export async function GET(request: NextRequest) {
       id: row.id,
       source: "project" as const,
       projectId: row.project?.id,
-      projectName: row.project?.name || row.project?.customerName || "Unknown Project",
-      customerName: row.project?.customerName || undefined,
+      projectName: row.project?.name || "Unknown Project",
+      customerName: row.project?.customer?.name || undefined,
       question: row.question,
       response: row.response,
       confidence: row.confidence || undefined,
@@ -198,7 +210,7 @@ export async function GET(request: NextRequest) {
       status: getStatus(row),
       // Who asked (prefer row-level user, fall back to project owner)
       askedById: row.askedById || row.project?.ownerId || undefined,
-      askedBy: row.askedByName || row.project?.ownerName || undefined,
+      askedBy: row.askedByName || row.project?.owner?.name || row.project?.owner?.email || undefined,
       askedByEmail: row.askedByEmail || undefined,
       // Who finalized
       finalizedById: row.reviewedBy || row.flagResolvedBy || undefined,

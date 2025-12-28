@@ -113,7 +113,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         // Read file buffer
-        const buffer = Buffer.from(await file.arrayBuffer());
+        const arrayBuffer = await file.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
 
         // Extract text content - use Claude for PDFs if processing for content, otherwise use pdf-parse
         let content: string;
@@ -264,12 +265,18 @@ async function extractTextContent(buffer: Buffer, fileType: string): Promise<str
       return buffer.toString("utf-8");
     }
     case "xlsx": {
-      const XLSX = await import("xlsx");
-      const workbook = XLSX.read(buffer, { type: "buffer" });
-      const sheets = workbook.SheetNames.map((name) => {
-        const sheet = workbook.Sheets[name];
-        const csv = XLSX.utils.sheet_to_csv(sheet);
-        return `--- Sheet: ${name} ---\n${csv}`;
+      const ExcelJS = (await import("exceljs")).default;
+      const workbook = new ExcelJS.Workbook();
+      // TypeScript has issues with Buffer types between Node.js and ExcelJS - use any to bypass
+      await workbook.xlsx.load(buffer as any);
+      const sheets = workbook.worksheets.map((worksheet) => {
+        const csvRows: string[] = [];
+        worksheet.eachRow((row) => {
+          const values = row.values as unknown[];
+          csvRows.push(values.slice(1).map((v) => String(v ?? "")).join(","));
+        });
+        const csv = csvRows.join("\n");
+        return `--- Sheet: ${worksheet.name} ---\n${csv}`;
       });
       return sheets.join("\n\n");
     }

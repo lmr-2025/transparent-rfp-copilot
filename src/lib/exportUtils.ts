@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import type { QuestionLogEntry } from "@/app/admin/question-log/types";
 
 // ============================================
@@ -71,10 +71,10 @@ function buildQuestionLogRows(
   });
 }
 
-export function exportQuestionLog(
+export async function exportQuestionLog(
   entries: QuestionLogEntry[],
   options: Partial<QuestionLogExportOptions> = {}
-): void {
+): Promise<void> {
   const opts = { ...DEFAULT_QUESTION_LOG_OPTIONS, ...options };
   const timestamp = new Date().toISOString().split("T")[0];
   const filename = `question-log_${timestamp}`;
@@ -89,19 +89,37 @@ export function exportQuestionLog(
   const rows = buildQuestionLogRows(entries, opts);
 
   if (opts.format === "csv") {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, "Question Log");
-    const csvContent = XLSX.utils.sheet_to_csv(ws);
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Question Log");
+
+    // Add headers
+    if (rows.length > 0) {
+      const headers = Object.keys(rows[0]);
+      worksheet.addRow(headers);
+
+      // Add data rows
+      rows.forEach((row) => {
+        worksheet.addRow(headers.map((h) => row[h]));
+      });
+    }
+
+    // Convert to CSV manually
+    const csvRows: string[] = [];
+    worksheet.eachRow((row) => {
+      const values = row.values as unknown[];
+      csvRows.push(values.slice(1).map((v) => String(v ?? "")).join(","));
+    });
+    const csvContent = csvRows.join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
     downloadBlob(blob, `${filename}.csv`);
     return;
   }
 
   // Excel format
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
 
   // Summary sheet
+  const summarySheet = workbook.addWorksheet("Summary");
   const summaryData = [
     ["Question Log Export"],
     [],
@@ -119,35 +137,45 @@ export function exportQuestionLog(
     ["Projects", entries.filter((e) => e.source === "project").length],
     ["Quick Questions", entries.filter((e) => e.source === "questions").length],
   ];
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  summarySheet["!cols"] = [{ wch: 20 }, { wch: 30 }];
-  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+  summarySheet.addRows(summaryData);
+  summarySheet.columns = [{ width: 20 }, { width: 30 }];
 
   // Data sheet
-  const dataSheet = XLSX.utils.json_to_sheet(rows);
+  const dataSheet = workbook.addWorksheet("Questions");
+  if (rows.length > 0) {
+    const headers = Object.keys(rows[0]);
+    dataSheet.addRow(headers);
+    rows.forEach((row) => {
+      dataSheet.addRow(headers.map((h) => row[h]));
+    });
 
-  // Set column widths
-  const colWidths = [
-    { wch: 18 }, // Date
-    { wch: 14 }, // Source
-    { wch: 25 }, // Project
-    { wch: 20 }, // Customer
-    { wch: 60 }, // Question
-    { wch: 80 }, // Response
-    { wch: 12 }, // Status
-    { wch: 12 }, // Confidence
-  ];
-  if (opts.includeTransparency) {
-    colWidths.push({ wch: 50 }, { wch: 30 }, { wch: 40 });
+    // Set column widths
+    const colWidths = [
+      18, // Date
+      14, // Source
+      25, // Project
+      20, // Customer
+      60, // Question
+      80, // Response
+      12, // Status
+      12, // Confidence
+    ];
+    if (opts.includeTransparency) {
+      colWidths.push(50, 30, 40);
+    }
+    if (opts.includeMetadata) {
+      colWidths.push(20, 20);
+    }
+    dataSheet.columns = dataSheet.columns.map((col, idx) => ({
+      ...col,
+      width: colWidths[idx] || 15,
+    }));
   }
-  if (opts.includeMetadata) {
-    colWidths.push({ wch: 20 }, { wch: 20 });
-  }
-  dataSheet["!cols"] = colWidths;
 
-  XLSX.utils.book_append_sheet(wb, dataSheet, "Questions");
-
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  // Write file
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 // ============================================
@@ -237,10 +265,10 @@ function formatChatToPlainText(session: ChatSession): string {
   return lines.join("\n");
 }
 
-export function exportChatSession(
+export async function exportChatSession(
   session: ChatSession,
   options: Partial<ChatExportOptions> = {}
-): void {
+): Promise<void> {
   const opts = { ...DEFAULT_CHAT_OPTIONS, ...options };
   const timestamp = new Date().toISOString().split("T")[0];
   const titleSlug = (session.title || "chat").slice(0, 30).replace(/[^a-z0-9]/gi, "_").toLowerCase();
@@ -267,10 +295,11 @@ export function exportChatSession(
   }
 
   // Excel format
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
 
   // Metadata sheet
   if (opts.includeMetadata) {
+    const metaSheet = workbook.addWorksheet("Info");
     const metaData = [
       ["Chat Session Export"],
       [],
@@ -292,30 +321,39 @@ export function exportChatSession(
     if (session.urlsUsed && session.urlsUsed.length > 0) {
       metaData.push(["URLs", session.urlsUsed.map((u) => u.title || u.url || u.id).join(", ")]);
     }
-    const metaSheet = XLSX.utils.aoa_to_sheet(metaData);
-    metaSheet["!cols"] = [{ wch: 15 }, { wch: 80 }];
-    XLSX.utils.book_append_sheet(wb, metaSheet, "Info");
+    metaSheet.addRows(metaData);
+    metaSheet.columns = [{ width: 15 }, { width: 80 }];
   }
 
   // Messages sheet
+  const msgSheet = workbook.addWorksheet("Messages");
   const messageRows = session.messages.map((msg, idx) => ({
     "#": idx + 1,
     "Role": msg.role === "user" ? "You" : "Assistant",
     "Message": msg.content,
     "Timestamp": msg.timestamp ? formatDateForExport(msg.timestamp) : "",
   }));
-  const msgSheet = XLSX.utils.json_to_sheet(messageRows);
-  msgSheet["!cols"] = [{ wch: 5 }, { wch: 10 }, { wch: 100 }, { wch: 18 }];
-  XLSX.utils.book_append_sheet(wb, msgSheet, "Messages");
 
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  if (messageRows.length > 0) {
+    const headers = Object.keys(messageRows[0]);
+    msgSheet.addRow(headers);
+    messageRows.forEach((row) => {
+      msgSheet.addRow(headers.map((h) => row[h as keyof typeof row]));
+    });
+    msgSheet.columns = [{ width: 5 }, { width: 10 }, { width: 100 }, { width: 18 }];
+  }
+
+  // Write file
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 // Export multiple chat sessions
-export function exportChatHistory(
+export async function exportChatHistory(
   sessions: ChatSession[],
   options: Partial<ChatExportOptions> = {}
-): void {
+): Promise<void> {
   const opts = { ...DEFAULT_CHAT_OPTIONS, ...options };
   const timestamp = new Date().toISOString().split("T")[0];
   const filename = `chat-history_${timestamp}`;
@@ -343,9 +381,10 @@ export function exportChatHistory(
   }
 
   // Excel format - one workbook with all sessions
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
 
   // Summary sheet
+  const summarySheet = workbook.addWorksheet("Summary");
   const summaryData = [
     ["Chat History Export"],
     [],
@@ -353,11 +392,11 @@ export function exportChatHistory(
     ["Total Sessions", sessions.length],
     ["Total Messages", sessions.reduce((sum, s) => sum + s.messages.length, 0)],
   ];
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  summarySheet["!cols"] = [{ wch: 20 }, { wch: 30 }];
-  XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+  summarySheet.addRows(summaryData);
+  summarySheet.columns = [{ width: 20 }, { width: 30 }];
 
   // All messages in one sheet with session markers
+  const allMsgSheet = workbook.addWorksheet("All Messages");
   const allRows: Record<string, unknown>[] = [];
   sessions.forEach((session, sessionIdx) => {
     session.messages.forEach((msg, msgIdx) => {
@@ -370,11 +409,20 @@ export function exportChatHistory(
       });
     });
   });
-  const allMsgSheet = XLSX.utils.json_to_sheet(allRows);
-  allMsgSheet["!cols"] = [{ wch: 8 }, { wch: 18 }, { wch: 5 }, { wch: 10 }, { wch: 100 }];
-  XLSX.utils.book_append_sheet(wb, allMsgSheet, "All Messages");
 
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+  if (allRows.length > 0) {
+    const headers = Object.keys(allRows[0]);
+    allMsgSheet.addRow(headers);
+    allRows.forEach((row) => {
+      allMsgSheet.addRow(headers.map((h) => row[h]));
+    });
+    allMsgSheet.columns = [{ width: 8 }, { width: 18 }, { width: 5 }, { width: 10 }, { width: 100 }];
+  }
+
+  // Write file
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  downloadBlob(blob, `${filename}.xlsx`);
 }
 
 // ============================================

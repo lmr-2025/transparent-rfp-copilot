@@ -187,9 +187,8 @@ export async function POST(request: NextRequest) {
         name: data.name,
         sheetName: data.sheetName,
         columns: data.columns,
-        ownerName: data.ownerName || auth.session.user.name,
         ownerId: data.ownerId || auth.session.user.id, // Use provided owner or fall back to current user
-        customerName: data.customerName,
+        // customerId can be added later via PATCH - not available at creation time
         notes: data.notes,
         status: projectStatus,
         rows: {
