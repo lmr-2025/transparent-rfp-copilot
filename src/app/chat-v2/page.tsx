@@ -745,6 +745,11 @@ ${keyFactsText}`;
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>
                 Context: {getSelectedSkillIds().length} skills, {getSelectedDocumentIds().length} docs, {getSelectedUrlIds().length} URLs
+                {(() => {
+                  const selectedSkills = skills.filter((s) => getSelectedSkillIds().includes(s.id));
+                  const skillSourceUrlCount = selectedSkills.reduce((count, skill) => count + (skill.sourceUrls?.length || 0), 0);
+                  return skillSourceUrlCount > 0 ? ` (+${skillSourceUrlCount} skill sources)` : '';
+                })()}
               </span>
               <button
                 onClick={handleCustomizeKnowledge}
