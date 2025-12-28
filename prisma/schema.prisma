@@ -141,11 +141,9 @@ model BulkProject {
   columns        String[] // Array of column names from spreadsheet
   createdAt      DateTime @default(now())
   lastModifiedAt DateTime @updatedAt
-  ownerName      String?
-  ownerId        String?  // Foreign key to User
-  owner          User?    @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId        String   // Foreign key to User
+  owner          User     @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   assignedUsers  Json?    // Array of user IDs who can access this project
-  customerName   String?  // Legacy: kept for backwards compatibility
 
   // Primary customer relationship (1-to-1)
   customerId     String?  // Foreign key to CustomerProfile
@@ -275,13 +273,14 @@ model KnowledgeDocument {
   description     String?  @db.Text
   isTemplate      Boolean  @default(false) // Whether this doc is a template
   templateContent String?  @db.Text // LLM-generated markdown template version
-  ownerId         String?  // Foreign key to User
-  owner           User?    @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId         String   // Foreign key to User
+  owner           User     @relation("DocumentOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   createdBy       String?  // User email for display
   // Unified Knowledge Pipeline fields
   isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
   // Note: skillId removed - use SkillSource join table instead
 
+  @@index([categories], type: Gin)
   @@index([uploadedAt])
   @@index([isTemplate])
   @@index([ownerId])
@@ -321,8 +320,8 @@ model CustomerProfile {
   updatedAt       DateTime @updatedAt
   lastRefreshedAt DateTime?
   createdBy       String?
-  ownerId         String?  // Foreign key to User
-  owner           User?    @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId         String   // Foreign key to User
+  owner           User     @relation("CustomerOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   owners          Json?    // Array of {name, email}
   history         Json?    // Audit trail entries
 
@@ -339,6 +338,7 @@ model CustomerProfile {
   collateralOutputs CollateralOutput[]
   contractReviews   ContractReview[] @relation("ContractCustomer") // Contracts for this customer
 
+  @@unique([name])
   @@index([isActive, updatedAt])
   @@index([industry])
   @@index([ownerId])
@@ -420,8 +420,8 @@ model Skill {
   updatedAt       DateTime @updatedAt
   lastRefreshedAt DateTime?
   createdBy       String?
-  ownerId         String?  // Foreign key to User
-  owner           User?    @relation("SkillOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  ownerId         String   // Foreign key to User
+  owner           User     @relation("SkillOwner", fields: [ownerId], references: [id], onDelete: Restrict)
   owners          Json?    // Array of {name, email} - legacy/additional owners
   history         Json?    // Audit trail entries
 
@@ -450,12 +450,14 @@ model Skill {
   usageCount          Int        @default(0) // How many times this skill has been used in answers
   lastUsedAt          DateTime?  // Last time this skill was used in an answer
 
+  @@unique([title])
   @@index([isActive, updatedAt])
   @@index([ownerId])
   @@index([status])
   @@index([reviewRequestedAt])
   @@index([syncStatus])
   @@index([lastSyncedAt])
+  @@index([categories], type: Gin)
   @@index([tier, isActive])
   @@index([tier, categories])
   @@index([usageCount]) // For sorting by most-used skills
@@ -632,6 +634,7 @@ model ReferenceUrl {
   isReferenceOnly Boolean  @default(false) // True if saved as reference without skill conversion
   // Note: skillId removed - use SkillSource join table instead
 
+  @@index([categories], type: Gin)
   @@index([addedAt])
   @@index([ownerId])
 }
@@ -663,6 +666,7 @@ model KnowledgeRequest {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  @@index([categories], type: Gin)
   @@index([status])
   @@index([requestedById])
   @@index([createdAt])
@@ -713,6 +717,7 @@ model InstructionPreset {
   createdByEmail   String?                 // For display
   defaultCategories String[]               @default([]) // Auto-select skills in these categories when persona is chosen
 
+  @@index([defaultCategories], type: Gin)
   @@index([isShared])
   @@index([shareStatus])
   @@index([createdBy])
@@ -762,7 +767,6 @@ model ContractReview {
   name            String   // Contract/document name
   filename        String   // Original filename
   fileType        String   // pdf, docx
-  customerName    String?  // Legacy: kept for backwards compatibility
   customerId      String?  // Foreign key to CustomerProfile
   customer        CustomerProfile? @relation("ContractCustomer", fields: [customerId], references: [id], onDelete: SetNull)
   contractType    String?  // e.g., "MSA", "DPA", "NDA", "SaaS Agreement"
@@ -780,8 +784,8 @@ model ContractReview {
   notes           String?  @db.Text
 
   // Owner tracking (like BulkProject)
-  ownerId         String?
-  ownerName       String?
+  ownerId         String
+  owner           User     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
 
   // Reviewer assignments
   legalReviewerId     String?   // Primary reviewer (typically legal)
@@ -1100,6 +1104,8 @@ model Template {
   updatedAt           DateTime       @updatedAt
   createdBy           String?        // User email who created it
   updatedBy           String?        // User email who last updated
+  ownerId             String         // Owning user (required)
+  owner               User           @relation(fields: [ownerId], references: [id], onDelete: Restrict)
 
   // Git sync tracking (Phase 4 of git-first architecture)
   lastSyncedAt    DateTime?  // Last successful sync to/from git
@@ -1145,9 +1151,7 @@ model CollateralOutput {
 
   // Source references
   templateId          String?              // Template used (if any)
-  templateName        String?              // Snapshot of template name at creation
   customerId          String?              // Customer context used
-  customerName        String?              // Snapshot of customer name
 
   // Generated content
   filledContent       Json?                // Key-value pairs of placeholder -> value
@@ -1194,9 +1198,9 @@ model CollateralOutput {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   createdBy           String?
-  ownerId             String?
+  ownerId             String
 
-  owner               User?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  owner               User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   customer            CustomerProfile?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
 
   @@index([status])
@@ -1314,4 +1318,3 @@ model LLMTrace {
   // Composite for feedback analysis
   @@index([feature, wasEdited])
 }
-
