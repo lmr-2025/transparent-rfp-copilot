@@ -41,6 +41,23 @@ export type CoherenceConflict = {
   severity: "low" | "medium" | "high";
 };
 
+// Volume analysis - split recommendations for large groups
+export type SplitSuggestion = {
+  title: string;
+  subtopic: string;
+  relevantSources: number[];
+  estimatedSize: number;
+  reason: string;
+};
+
+export type VolumeSplitRecommendation = {
+  shouldSplit: boolean;
+  reason: string;
+  totalCharacterCount: number;
+  volumeLevel: "normal" | "warning" | "critical";
+  suggestedSplits?: SplitSuggestion[];
+};
+
 export type CoherenceAnalysis = {
   coherent: boolean;
   coherenceLevel: "high" | "medium" | "low";
@@ -48,6 +65,7 @@ export type CoherenceAnalysis = {
   conflicts: CoherenceConflict[];
   recommendation: string;
   summary: string;
+  volumeAnalysis?: VolumeSplitRecommendation;
 };
 
 export type SkillGroup = {

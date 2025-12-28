@@ -269,6 +269,45 @@ export default function ReviewGroupsStep({
                     </div>
                   </div>
                 )}
+                {/* Volume Warning - recommend splitting large groups */}
+                {group.coherenceAnalysis?.volumeAnalysis && group.coherenceAnalysis.volumeAnalysis.shouldSplit && (
+                  <div style={{ marginTop: "12px", padding: "12px", backgroundColor: group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "#fef3c7" : "#fef9c3", border: `1px solid ${group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "#f59e0b" : "#eab308"}`, borderRadius: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                      <AlertTriangle size={16} style={{ color: group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "#f59e0b" : "#eab308", flexShrink: 0 }} />
+                      <div style={{ fontSize: "13px", fontWeight: 600, color: group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "#92400e" : "#713f12" }}>
+                        {group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "Large Content Volume - Split Recommended" : "Large Content Volume - Consider Splitting"}
+                      </div>
+                      <div style={{ marginLeft: "auto", fontSize: "11px", padding: "2px 6px", borderRadius: "4px", backgroundColor: group.coherenceAnalysis.volumeAnalysis.volumeLevel === "critical" ? "#fbbf24" : "#fde047", color: "#000", fontWeight: 600 }}>
+                        {group.coherenceAnalysis.volumeAnalysis.totalCharacterCount.toLocaleString()} chars
+                      </div>
+                    </div>
+                    <div style={{ fontSize: "12px", color: "#374151", marginBottom: "8px" }}>
+                      {group.coherenceAnalysis.volumeAnalysis.reason}
+                    </div>
+                    {group.coherenceAnalysis.volumeAnalysis.suggestedSplits && group.coherenceAnalysis.volumeAnalysis.suggestedSplits.length > 0 && (
+                      <div style={{ fontSize: "11px", color: "#6b7280", marginTop: "12px" }}>
+                        <strong style={{ display: "block", marginBottom: "8px", fontSize: "12px", color: "#374151" }}>Suggested Splits:</strong>
+                        {group.coherenceAnalysis.volumeAnalysis.suggestedSplits.map((split, idx) => (
+                          <div key={idx} style={{ marginBottom: "8px", padding: "8px", backgroundColor: "rgba(255,255,255,0.6)", borderRadius: "4px", border: "1px solid #e5e7eb" }}>
+                            <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: "4px" }}>
+                              {idx + 1}. {split.title}
+                            </div>
+                            <div style={{ color: "#6b7280", marginBottom: "4px", fontSize: "11px" }}>
+                              {split.subtopic}
+                            </div>
+                            <div style={{ display: "flex", gap: "12px", fontSize: "10px", color: "#94a3b8" }}>
+                              <span>Sources: {split.relevantSources.map(i => i + 1).join(", ")}</span>
+                              <span>~{split.estimatedSize.toLocaleString()} chars</span>
+                            </div>
+                            <div style={{ marginTop: "4px", fontSize: "11px", color: "#6b7280", fontStyle: "italic" }}>
+                              {split.reason}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {/* Notes/Guidance */}
                 <div style={{ marginTop: "12px" }}>
                   <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "6px", fontWeight: 500 }}>

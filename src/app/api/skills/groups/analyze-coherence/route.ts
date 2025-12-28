@@ -7,6 +7,7 @@ import { checkRateLimit, getRateLimitIdentifier } from "@/lib/rateLimit";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { loadSystemPrompt } from "@/lib/loadSystemPrompt";
+import { SKILL_VOLUME } from "@/lib/constants";
 
 export const maxDuration = 180; // 3 minutes for URL fetches + draft generation + LLM analysis
 
@@ -33,6 +34,22 @@ type CoherenceConflict = {
   severity: "low" | "medium" | "high";
 };
 
+type SplitSuggestion = {
+  title: string;
+  subtopic: string;
+  relevantSources: number[]; // Indices of sources
+  estimatedSize: number;
+  reason: string;
+};
+
+type VolumeSplitRecommendation = {
+  shouldSplit: boolean;
+  reason: string;
+  totalCharacterCount: number;
+  volumeLevel: "normal" | "warning" | "critical";
+  suggestedSplits?: SplitSuggestion[];
+};
+
 type CoherenceAnalysisResult = {
   coherent: boolean;
   coherenceLevel: "high" | "medium" | "low";
@@ -40,6 +57,7 @@ type CoherenceAnalysisResult = {
   conflicts: CoherenceConflict[];
   recommendation: string;
   summary: string;
+  volumeAnalysis?: VolumeSplitRecommendation;
 };
 
 /**
@@ -134,30 +152,170 @@ export async function POST(request: NextRequest) {
     }
 
     // Choose analysis strategy based on group size
-    let analysis: CoherenceAnalysisResult;
+    let coherenceAnalysis: CoherenceAnalysisResult;
 
     if (sourceContents.length <= 5) {
       // Multi-source comparison for small groups
-      analysis = await analyzeGroupCoherence(
+      coherenceAnalysis = await analyzeGroupCoherence(
         sourceContents,
         groupTitle,
         auth.session
       );
     } else {
       // Draft-based comparison for large groups
-      analysis = await analyzeLargeGroupCoherence(
+      coherenceAnalysis = await analyzeLargeGroupCoherence(
         sourceContents,
         groupTitle,
         auth.session
       );
     }
 
-    return apiSuccess(analysis);
+    // Add volume analysis
+    try {
+      const volumeAnalysis = await analyzeVolume(sourceContents, groupTitle, auth.session);
+      coherenceAnalysis.volumeAnalysis = volumeAnalysis;
+    } catch (error) {
+      logger.warn("Failed to analyze volume during coherence check", { groupTitle, error });
+      // Continue without volume analysis - non-blocking
+    }
+
+    return apiSuccess(coherenceAnalysis);
   } catch (error) {
     logger.error("Failed to analyze group coherence", error, { route: "/api/skills/groups/analyze-coherence" });
     const message = error instanceof Error ? error.message : "Failed to analyze coherence";
     return errors.internal(message);
   }
+}
+
+async function analyzeVolume(
+  sources: { index: number; label: string; content: string }[],
+  groupTitle: string,
+  authSession: { user?: { id?: string; email?: string | null } } | null
+): Promise<VolumeSplitRecommendation> {
+  // Calculate total character count
+  const totalCharacterCount = sources.reduce((sum, s) => sum + s.content.length, 0);
+
+  // Determine volume level
+  let volumeLevel: "normal" | "warning" | "critical";
+  if (totalCharacterCount < SKILL_VOLUME.WARNING_THRESHOLD) {
+    volumeLevel = "normal";
+  } else if (totalCharacterCount < SKILL_VOLUME.SPLIT_THRESHOLD) {
+    volumeLevel = "warning";
+  } else {
+    volumeLevel = "critical";
+  }
+
+  // If volume is normal or we don't have enough sources, skip LLM analysis
+  if (volumeLevel === "normal" || sources.length < SKILL_VOLUME.MIN_SOURCES_FOR_SPLIT) {
+    return {
+      shouldSplit: false,
+      reason: `Total content size (${totalCharacterCount.toLocaleString()} characters) is within acceptable limits for a single skill.`,
+      totalCharacterCount,
+      volumeLevel,
+    };
+  }
+
+  // Use LLM to analyze subtopics and suggest splits
+  const anthropic = getAnthropicClient();
+
+  const systemPrompt = await loadSystemPrompt(
+    "skill_volume_analysis",
+    "You are a content organization specialist who identifies natural divisions in large collections of related information."
+  );
+
+  const sourcesSection = sources
+    .map((s, idx) => `SOURCE ${idx}: ${s.label}\n\n${s.content.slice(0, 2000)}...\n\n${"=".repeat(80)}`)
+    .join("\n\n");
+
+  const userPrompt = `SKILL GROUP: "${groupTitle}"
+TOTAL CONTENT SIZE: ${totalCharacterCount.toLocaleString()} characters
+${sources.length} sources
+
+CONTENT PREVIEW:
+${sourcesSection}
+
+---
+
+This skill group has ${totalCharacterCount.toLocaleString()} characters of content across ${sources.length} sources.
+
+${volumeLevel === "critical"
+  ? `⚠️ CRITICAL: This exceeds ${SKILL_VOLUME.SPLIT_THRESHOLD.toLocaleString()} characters and should likely be split into multiple focused skills.`
+  : `⚠️ WARNING: This exceeds ${SKILL_VOLUME.WARNING_THRESHOLD.toLocaleString()} characters and may benefit from splitting.`}
+
+Your task: Analyze if this content naturally divides into DISTINCT SUBTOPICS that warrant separate skills.
+
+Consider:
+1. Are there 2-3 clear subtopics with minimal overlap?
+2. Would splitting improve clarity and focused learning?
+3. Does each subtopic have sufficient content (>5000 chars) to stand alone?
+4. Are the subtopics distinct enough to justify separate skills?
+
+Return a JSON object:
+{
+  "shouldSplit": boolean,
+  "reason": "<why split is or isn't recommended>",
+  "suggestedSplits": [
+    {
+      "title": "<suggested skill title>",
+      "subtopic": "<description of what this covers>",
+      "relevantSources": [<array of source indices 0-based>],
+      "estimatedSize": <approximate character count>,
+      "reason": "<why this grouping makes sense>"
+    }
+  ]
+}
+
+Guidelines:
+- Only recommend split if there are truly distinct subtopics (not just arbitrary division)
+- Each split should cover a coherent, focused area
+- If content is just detailed on one topic, shouldSplit = false (better as comprehensive single skill)
+- Aim for 2-3 splits maximum - more fragmentation reduces usefulness
+- If shouldSplit = false, omit suggestedSplits array
+
+Return ONLY the JSON object.`;
+
+  const speed = getEffectiveSpeed("skills-refresh");
+  const model = speed === "fast" ? "claude-3-5-haiku-20241022" : getModel(speed);
+
+  const stream = anthropic.messages.stream({
+    model,
+    max_tokens: 3000,
+    temperature: 0.1,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userPrompt }],
+  });
+
+  const response = await stream.finalMessage();
+
+  const content = response.content[0];
+  if (content.type !== "text") {
+    throw new Error("Unexpected response format from volume analysis");
+  }
+
+  const parsed = parseJsonResponse<{
+    shouldSplit: boolean;
+    reason: string;
+    suggestedSplits?: SplitSuggestion[];
+  }>(content.text);
+
+  // Log usage
+  logUsage({
+    userId: authSession?.user?.id,
+    userEmail: authSession?.user?.email,
+    feature: "skill-volume-analysis",
+    model,
+    inputTokens: response.usage?.input_tokens || 0,
+    outputTokens: response.usage?.output_tokens || 0,
+    metadata: { groupTitle, sourceCount: sources.length, totalChars: totalCharacterCount },
+  });
+
+  return {
+    shouldSplit: parsed.shouldSplit,
+    reason: parsed.reason,
+    totalCharacterCount,
+    volumeLevel,
+    suggestedSplits: parsed.suggestedSplits,
+  };
 }
 
 async function analyzeGroupCoherence(

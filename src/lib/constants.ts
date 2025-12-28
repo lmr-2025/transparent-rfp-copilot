@@ -102,3 +102,16 @@ export const API_LIMITS = {
   /** Total characters for bulk URL processing */
   BULK_TOTAL_CHAR_LIMIT: 100000,
 } as const;
+
+// =============================================================================
+// SKILL VOLUME LIMITS
+// =============================================================================
+
+export const SKILL_VOLUME = {
+  /** Character count at which to warn about large skill groups */
+  WARNING_THRESHOLD: 15000,
+  /** Character count at which to recommend splitting into multiple skills */
+  SPLIT_THRESHOLD: 25000,
+  /** Minimum sources required to trigger split analysis */
+  MIN_SOURCES_FOR_SPLIT: 3,
+} as const;
