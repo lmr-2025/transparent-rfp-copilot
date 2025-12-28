@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useState, useRef, useMemo } from "react";
+import { useEffect, useCallback, useState, useRef, useMemo, lazy, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { History, Plus, MessageSquareOff, Eye, Scissors, Settings2 } from "lucide-react";
@@ -8,25 +8,25 @@ import { Button } from "@/components/ui/button";
 import { ResizableDivider } from "@/components/ui/resizable-divider";
 import { useChatStore, ChatMessage } from "@/stores/chat-store";
 import { useSelectionStore } from "@/stores/selection-store";
+import { useSkills, useDocuments, useReferenceUrls, useCustomerProfiles } from "@/hooks/use-knowledge";
 import {
-  useSkills,
-  useDocuments,
-  useReferenceUrls,
-  useCustomerProfiles,
   useChatSessions,
   useSendMessage,
   useSaveSession,
   ChatSessionItem,
-} from "@/hooks/use-chat-data";
+} from "@/hooks/use-chat";
 import { useResizablePanel } from "@/hooks/use-resizable-panel";
 import { ChatInput } from "@/components/chat/chat-input";
 import { MessageList } from "@/components/chat/message-list";
 import { ChatHistoryPanel } from "@/components/chat/chat-history-panel";
-import { TransparencyModal, TransparencyData } from "@/components/chat/transparency-modal";
+import { TransparencyData } from "@/components/chat/transparency-modal";
 import { ChatFeedbackModal } from "@/components/chat/chat-feedback-modal";
 import { ContextControlsBar, InstructionPreset } from "./components/context-controls-bar";
-import { CollapsibleKnowledgeSidebar } from "./components/collapsible-knowledge-sidebar";
 import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
+
+// Lazy load heavy components to reduce initial bundle size
+const TransparencyModal = lazy(() => import("@/components/chat/transparency-modal").then(m => ({ default: m.TransparencyModal })));
+const CollapsibleKnowledgeSidebar = lazy(() => import("./components/collapsible-knowledge-sidebar").then(m => ({ default: m.CollapsibleKnowledgeSidebar })));
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseAnswerSections } from "@/lib/questionHelpers";
@@ -83,8 +83,9 @@ export default function ChatV2Page() {
     setCustomerSelected,
   } = useSelectionStore();
 
-  // React Query data fetching
-  const { data: skills = [], isLoading: skillsLoading } = useSkills();
+  // React Query data fetching - only show active skills in chat
+  const { data: skillsData, isLoading: skillsLoading } = useSkills({ activeOnly: true });
+  const skills = skillsData?.skills || [];
   const { data: documents = [], isLoading: documentsLoading } = useDocuments();
   const { data: urls = [], isLoading: urlsLoading } = useReferenceUrls();
   const { data: customers = [], isLoading: customersLoading } = useCustomerProfiles();
@@ -644,27 +645,31 @@ ${keyFactsText}`;
         }}
         className="flex-shrink-0 flex flex-col h-full transition-all duration-200"
       >
-        <CollapsibleKnowledgeSidebar
-          skills={skills}
-          documents={documents}
-          urls={urls}
-          selectedCustomer={focusedCustomer}
-          selectedPersonaName={selectedPresetName}
-          isLoading={isDataLoading}
-          isCollapsed={sidebarCollapsed}
-          onCollapsedChange={setSidebarCollapsed}
-          onCustomizeKnowledge={handleCustomizeKnowledge}
-        />
+        <Suspense fallback={<div className="flex items-center justify-center h-full text-slate-400">Loading...</div>}>
+          <CollapsibleKnowledgeSidebar
+            skills={skills}
+            documents={documents}
+            urls={urls}
+            selectedCustomer={focusedCustomer}
+            selectedPersonaName={selectedPresetName}
+            isLoading={isDataLoading}
+            isCollapsed={sidebarCollapsed}
+            onCollapsedChange={setSidebarCollapsed}
+            onCustomizeKnowledge={handleCustomizeKnowledge}
+          />
+        </Suspense>
       </div>
 
       {/* Transparency Modal */}
       {transparencyData && (
-        <TransparencyModal
-          open={showTransparency}
-          onClose={() => setShowTransparency(false)}
-          data={transparencyData}
-          isPreview={!lastTransparency}
-        />
+        <Suspense fallback={null}>
+          <TransparencyModal
+            open={showTransparency}
+            onClose={() => setShowTransparency(false)}
+            data={transparencyData}
+            isPreview={!lastTransparency}
+          />
+        </Suspense>
       )}
 
       {/* Chat Feedback Modal */}

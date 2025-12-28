@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAllUsers, SkillOwner, AppUser } from "@/hooks/use-knowledge-data";
+import { useUsers, SkillOwner, AppUser } from "@/hooks/use-knowledge";
 import { cn } from "@/lib/utils";
 
 interface OwnerManagementDialogProps {
@@ -29,7 +29,7 @@ export function OwnerManagementDialog({
   onSave,
   itemTitle,
 }: OwnerManagementDialogProps) {
-  const { data: users = [], isLoading: usersLoading } = useAllUsers();
+  const { data: users = [], isLoading: usersLoading } = useUsers();
   const [selectedOwners, setSelectedOwners] = useState<SkillOwner[]>(currentOwners);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);

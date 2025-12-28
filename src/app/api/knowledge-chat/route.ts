@@ -14,6 +14,7 @@ import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { buildGTMContextString, type CustomerGTMData } from "@/types/gtmData";
 import { buildCacheableSystem, type SystemContent } from "@/lib/anthropicCache";
+import { smartTruncate, buildContextString, type ContextItem } from "@/lib/smartTruncation";
 
 export const maxDuration = 60;
 
@@ -97,40 +98,84 @@ export async function POST(request: NextRequest) {
     const authSession = await getServerSession(authOptions);
     const anthropic = getAnthropicClient();
 
-    // Fetch documents content from database if any are selected
-    // Include fileData for PDFs to enable native Claude document support
-    let documents: { id: string; title: string; filename: string; content: string; fileType: string; fileData: Uint8Array | null }[] = [];
-    if (documentIds.length > 0) {
-      documents = await prisma.knowledgeDocument.findMany({
-        where: { id: { in: documentIds } },
-        select: { id: true, title: true, filename: true, content: true, fileType: true, fileData: true },
-      });
-    }
+    // Parallelize document and customer document fetching for better performance
+    const [documents, customerDocumentsData] = await Promise.all([
+      // Fetch knowledge documents if any are selected
+      documentIds.length > 0
+        ? prisma.knowledgeDocument.findMany({
+            where: { id: { in: documentIds } },
+            select: { id: true, title: true, filename: true, content: true, fileType: true, fileData: true },
+          })
+        : Promise.resolve([]),
+      // Fetch customer documents if customer profiles are selected
+      customerProfiles.length > 0
+        ? prisma.customerDocument.findMany({
+            where: { customerId: { in: customerProfiles.map(p => p.id) } },
+            select: { id: true, customerId: true, title: true, content: true, docType: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
     // Separate PDFs with native file data from text-only documents
     const pdfDocuments = documents.filter(d => d.fileType === "pdf" && d.fileData);
     const textDocuments = documents.filter(d => d.fileType !== "pdf" || !d.fileData);
 
-    // Build knowledge base context from skills
-    const knowledgeContext = skills.length > 0
-      ? skills.map((skill, idx) =>
-          `=== SKILL ${idx + 1}: ${skill.title} ===\n\n${skill.content}`
-        ).join("\n\n---\n\n")
+    // Use smart truncation to prioritize most relevant items
+    // Convert skills to ContextItems
+    const skillItems: ContextItem[] = skills.map((skill) => ({
+      id: skill.id,
+      title: skill.title,
+      content: skill.content,
+      type: "skill" as const,
+    }));
+
+    // Convert documents to ContextItems
+    const documentItems: ContextItem[] = textDocuments.map((doc) => ({
+      id: doc.id,
+      title: doc.title,
+      content: `Filename: ${doc.filename}\n\n${doc.content}`,
+      type: "document" as const,
+    }));
+
+    // Convert URLs to ContextItems (include URL in content)
+    const urlItems: ContextItem[] = referenceUrls.map((url) => ({
+      id: url.id,
+      title: url.title || url.url,
+      content: `URL: ${url.url}`,
+      type: "url" as const,
+    }));
+
+    // Apply smart truncation to each type
+    const truncatedSkills = skills.length > 0
+      ? smartTruncate(message, skillItems, CONTEXT_LIMITS.skills, { topKFullContent: 10, nextKSummaries: 10 })
+      : null;
+
+    const truncatedDocuments = textDocuments.length > 0
+      ? smartTruncate(message, documentItems, CONTEXT_LIMITS.documents, { topKFullContent: 5, nextKSummaries: 5 })
+      : null;
+
+    const truncatedUrls = referenceUrls.length > 0
+      ? smartTruncate(message, urlItems, CONTEXT_LIMITS.urls, { topKFullContent: 5, nextKSummaries: 5 })
+      : null;
+
+    // Build context strings from truncated items
+    const knowledgeContext = truncatedSkills
+      ? buildContextString(truncatedSkills.items, "skill")
       : "";
 
-    // Build document context for text-only documents (PDFs with fileData are sent natively)
-    const documentContext = textDocuments.length > 0
-      ? textDocuments.map((doc, idx) =>
-          `=== DOCUMENT ${idx + 1}: ${doc.title} ===\nFilename: ${doc.filename}\n\n${doc.content}`
-        ).join("\n\n---\n\n")
+    const documentContext = truncatedDocuments
+      ? buildContextString(truncatedDocuments.items, "document")
       : "";
 
-    // Build URL context (just include the reference info - actual fetching would require a separate call)
-    const urlContext = referenceUrls.length > 0
-      ? referenceUrls.map((url, idx) =>
-          `=== REFERENCE URL ${idx + 1}: ${url.title} ===\nURL: ${url.url}`
-        ).join("\n\n---\n\n")
+    const urlContext = truncatedUrls
+      ? buildContextString(truncatedUrls.items, "url")
       : "";
+
+    // Track if any truncation occurred
+    const contextTruncatedFlag =
+      (truncatedSkills?.truncated || false) ||
+      (truncatedDocuments?.truncated || false) ||
+      (truncatedUrls?.truncated || false);
 
     // Build GTM context from Snowflake data (Gong, HubSpot, Looker)
     let gtmContext = "";
@@ -172,15 +217,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Fetch customer documents if customer profiles are selected
-    let customerDocuments: { id: string; customerId: string; title: string; content: string; docType: string | null }[] = [];
-    if (customerProfiles.length > 0) {
-      const customerIds = customerProfiles.map(p => p.id);
-      customerDocuments = await prisma.customerDocument.findMany({
-        where: { customerId: { in: customerIds } },
-        select: { id: true, customerId: true, title: true, content: true, docType: true },
-      });
-    }
+    // Use parallelized customer documents data fetched above
+    const customerDocuments = customerDocumentsData;
 
     // Build customer context from profiles (including their documents)
     const customerContext = customerProfiles.length > 0
@@ -250,14 +288,16 @@ ${profileContent}${considerationsText}${customerDocsText}`;
       combinedKnowledgeContext = "No knowledge base documents provided.";
     }
 
-    // Apply context size limits to prevent excessive API costs and context overflow
-    // Allocate budget: 60% knowledge, 30% customer, 10% buffer for base prompt
+    // Apply final boundary truncation if combined context still exceeds limits
+    // (Smart truncation already happened per-type above)
     const knowledgeBudget = Math.floor(CONTEXT_LIMITS.MAX_CONTEXT * 0.6);
     const customerBudget = Math.floor(CONTEXT_LIMITS.MAX_CONTEXT * 0.3);
 
     const truncatedKnowledge = truncateContext(combinedKnowledgeContext, knowledgeBudget);
     const truncatedCustomer = truncateContext(customerContext, customerBudget);
-    const contextTruncated = truncatedKnowledge.truncated || truncatedCustomer.truncated;
+
+    // Combine smart truncation flag with boundary truncation
+    const contextTruncated = contextTruncatedFlag || truncatedKnowledge.truncated || truncatedCustomer.truncated;
 
     combinedKnowledgeContext = truncatedKnowledge.text;
     const finalCustomerContext = truncatedCustomer.text;

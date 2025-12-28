@@ -53,7 +53,7 @@ function PromptLibraryContent() {
       {/* Header with Tabs */}
       <div className="h-14 border-b bg-white flex items-center px-4 flex-shrink-0">
         <div className="flex items-center gap-4">
-          <h1 className="text-base font-semibold">Prompt Library</h1>
+          <h1 className="text-base font-semibold">Prompts</h1>
           {/* Tab Navigation */}
           <div className="flex items-center">
             {tabs.map((tab) => (

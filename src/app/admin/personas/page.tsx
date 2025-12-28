@@ -74,7 +74,7 @@ function PersonasContent() {
       <div className="flex-shrink-0 bg-white border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Persona Library</h1>
+            <h1 className="text-xl font-bold text-slate-800">Personas</h1>
             <p className="text-sm text-slate-500">Custom AI personas that shape how the assistant responds</p>
           </div>
         </div>

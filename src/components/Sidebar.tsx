@@ -40,7 +40,7 @@ const navItems: NavSection[] = [
   {
     section: "Knowledge Base",
     items: [
-      { href: "/knowledge", label: "Library", hint: "Browse all skills" },
+      { href: "/knowledge", label: "Browse Knowledge", hint: "Browse all skills" },
       { href: "/knowledge/add", label: "Add Knowledge", hint: "Create new skills" },
       { href: "/customers", label: "Customer Profiles", hint: "View all customers", featureFlag: "customerProfiles" },
     ],
@@ -65,7 +65,7 @@ const navItems: NavSection[] = [
     section: "Backstage",
     adminOnly: true,
     items: [
-      { href: "/admin/libraries", label: "Libraries", hint: "Prompts, personas, templates" },
+      { href: "/admin/libraries", label: "Library", hint: "Prompts, personas, templates" },
       { href: "/accuracy", label: "AI Accuracy & Feedback", hint: "Track performance & feedback" },
       { href: "/admin/settings", label: "Settings", hint: "App configuration" },
     ],

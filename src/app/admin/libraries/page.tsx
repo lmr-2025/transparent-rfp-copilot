@@ -547,7 +547,7 @@ function LibrariesContent() {
       <div className="px-6 py-4 border-b border-border bg-background flex-shrink-0">
         <div className="flex justify-between items-start">
           <div>
-            <h1 className="text-xl font-bold mb-1">Libraries</h1>
+            <h1 className="text-xl font-bold mb-1">Library</h1>
             <p className="text-muted-foreground text-sm">
               Manage AI prompts, personas, and collateral templates
             </p>

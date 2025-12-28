@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/ConfirmModal";
 import { exportChatSession, exportChatHistory, type ChatSession } from "@/lib/exportUtils";
-import { ChatSessionItem } from "@/hooks/use-chat-data";
+import { ChatSessionItem } from "@/hooks/use-chat";
 
 interface ChatHistoryPanelProps {
   sessions: ChatSessionItem[];

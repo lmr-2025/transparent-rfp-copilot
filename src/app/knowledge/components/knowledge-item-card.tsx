@@ -7,7 +7,7 @@ import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { UnifiedLibraryItem, LibraryItemType, SkillOwner, RefreshResult } from "@/hooks/use-knowledge-data";
+import { UnifiedKnowledgeItem, LibraryItemType, SkillOwner, RefreshResult } from "@/hooks/use-knowledge";
 import { OwnerManagementDialog } from "./owner-management-dialog";
 import { SkillRefreshDialog } from "./skill-refresh-dialog";
 import { CategoryManagementDialog } from "./category-management-dialog";
@@ -20,7 +20,7 @@ import { getTierForCategory } from "@/lib/skillTiers";
 import type { Skill, SkillTier } from "@/types/skill";
 
 interface KnowledgeItemCardProps {
-  item: UnifiedLibraryItem;
+  item: UnifiedKnowledgeItem;
   onDelete?: () => void;
   isDeleting?: boolean;
   onUpdateOwners?: (id: string, owners: SkillOwner[]) => Promise<void>;

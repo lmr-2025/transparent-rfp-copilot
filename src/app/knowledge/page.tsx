@@ -5,17 +5,17 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Plus, Search, Filter, CheckSquare, Trash2, FileText, Globe, BarChart3, ArrowUpDown, LayoutGrid, List, Lightbulb, Upload, Tag, Power, Download } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
-import LibraryAnalysisModal from "./components/LibraryAnalysisModal";
+import KnowledgeAnalysisModal from "./components/KnowledgeAnalysisModal";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { useConfirm } from "@/components/ConfirmModal";
 import {
-  useAllSkills,
-  useAllDocuments,
-  useAllReferenceUrls,
-  useAllCategories,
+  useSkills,
+  useDocuments,
+  useReferenceUrls,
+  useCategories,
   useDeleteSkill,
   useDeleteDocument,
   useDeleteUrl,
@@ -25,9 +25,9 @@ import {
   skillToUnifiedItem,
   documentToUnifiedItem,
   urlToUnifiedItem,
-  UnifiedLibraryItem,
+  UnifiedKnowledgeItem,
   SkillOwner,
-} from "@/hooks/use-knowledge-data";
+} from "@/hooks/use-knowledge";
 import { useSyncHealthStatus, useSyncSkillToGit } from "@/hooks/useSkillSyncStatus";
 import { SyncHealthBar } from "@/components/knowledge/sync-health-bar";
 import { useSession } from "next-auth/react";
@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LibraryTabs, TabType } from "./components/library-tabs";
+import { KnowledgeTabs, TabType } from "./components/knowledge-tabs";
 import { KnowledgeItemCard } from "./components/knowledge-item-card";
 import { KnowledgeGridTile } from "./components/knowledge-grid-tile";
 import { CollapsibleCategorySection } from "./components/collapsible-category-section";
@@ -103,11 +103,12 @@ function KnowledgeLibraryContent() {
     router.push(`/knowledge?tab=${tab}`, { scroll: false });
   };
 
-  // React Query data
-  const { data: skills = [], isLoading: skillsLoading } = useAllSkills();
-  const { data: documents = [], isLoading: documentsLoading } = useAllDocuments();
-  const { data: urls = [], isLoading: urlsLoading } = useAllReferenceUrls();
-  const { data: categories = [] } = useAllCategories();
+  // React Query data - show all skills including inactive for management
+  const { data: skillsData, isLoading: skillsLoading } = useSkills();
+  const skills = skillsData?.skills || [];
+  const { data: documents = [], isLoading: documentsLoading } = useDocuments();
+  const { data: urls = [], isLoading: urlsLoading } = useReferenceUrls();
+  const { data: categories = [] } = useCategories();
   const { data: syncHealth, isLoading: syncHealthLoading, refetch: refetchSyncHealth } = useSyncHealthStatus();
 
   // Mutations
@@ -139,8 +140,8 @@ function KnowledgeLibraryContent() {
   }, [skills]);
 
   // Extract URLs from skills' sourceUrls field for the Sources tab
-  const skillSourceUrls = useMemo((): UnifiedLibraryItem[] => {
-    const items: UnifiedLibraryItem[] = [];
+  const skillSourceUrls = useMemo((): UnifiedKnowledgeItem[] => {
+    const items: UnifiedKnowledgeItem[] = [];
     const seenUrls = new Set<string>();
 
     for (const skill of skills) {
@@ -180,8 +181,8 @@ function KnowledgeLibraryContent() {
   }, [skills]);
 
   // Transform to unified items
-  const allItems = useMemo((): UnifiedLibraryItem[] => {
-    const items: UnifiedLibraryItem[] = [];
+  const allItems = useMemo((): UnifiedKnowledgeItem[] => {
+    const items: UnifiedKnowledgeItem[] = [];
 
     if (activeTab === "skills") {
       items.push(...skills.map(skillToUnifiedItem));
@@ -579,7 +580,7 @@ function KnowledgeLibraryContent() {
   };
 
   // Handle delete
-  const handleDelete = async (item: UnifiedLibraryItem) => {
+  const handleDelete = async (item: UnifiedKnowledgeItem) => {
     const confirmed = await confirmDelete({
       title: `Delete ${item.type}`,
       message: `Are you sure you want to delete "${item.title}"? This action cannot be undone.`,
@@ -746,7 +747,7 @@ function KnowledgeLibraryContent() {
 
       {/* Tabs */}
       <div className="mb-6">
-        <LibraryTabs activeTab={activeTab} onTabChange={handleTabChange} counts={counts} />
+        <KnowledgeTabs activeTab={activeTab} onTabChange={handleTabChange} counts={counts} />
       </div>
 
       {/* Dashboard Tab Content */}
@@ -1037,8 +1038,8 @@ function KnowledgeLibraryContent() {
         </>
       )}
 
-      {/* Library Analysis Modal */}
-      <LibraryAnalysisModal
+      {/* Knowledge Analysis Modal */}
+      <KnowledgeAnalysisModal
         skills={skills}
         isOpen={showAnalysisModal}
         onClose={() => setShowAnalysisModal(false)}

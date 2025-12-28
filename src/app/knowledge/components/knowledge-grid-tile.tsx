@@ -3,11 +3,11 @@
 import { BookOpen, FileText, Globe, Code, CheckSquare, Square, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { UnifiedLibraryItem, LibraryItemType } from "@/hooks/use-knowledge-data";
+import { UnifiedKnowledgeItem, LibraryItemType } from "@/hooks/use-knowledge";
 import { SyncStatusBadge } from "@/components/ui/sync-status-badge";
 
 interface KnowledgeGridTileProps {
-  item: UnifiedLibraryItem;
+  item: UnifiedKnowledgeItem;
   onClick?: () => void;
   selectionMode?: boolean;
   isSelected?: boolean;

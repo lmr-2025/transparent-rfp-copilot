@@ -12,7 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { RefreshResult } from "@/hooks/use-knowledge-data";
+import { RefreshResult } from "@/hooks/use-knowledge";
 import { diffLines, Change } from "diff";
 
 interface SkillRefreshDialogProps {
