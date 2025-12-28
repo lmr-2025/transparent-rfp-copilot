@@ -744,11 +744,19 @@ ${keyFactsText}`;
           leftContent={
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>
-                Context: {getSelectedSkillIds().length} skills, {getSelectedDocumentIds().length} docs, {getSelectedUrlIds().length} URLs
-                {(() => {
+                Context: {getSelectedSkillIds().length} skills, {getSelectedDocumentIds().length} docs, {(() => {
+                  const refUrlCount = getSelectedUrlIds().length;
                   const selectedSkills = skills.filter((s) => getSelectedSkillIds().includes(s.id));
                   const skillSourceUrlCount = selectedSkills.reduce((count, skill) => count + (skill.sourceUrls?.length || 0), 0);
-                  return skillSourceUrlCount > 0 ? ` (+${skillSourceUrlCount} skill sources)` : '';
+                  const totalUrls = refUrlCount + skillSourceUrlCount;
+                  return `${totalUrls} URL${totalUrls !== 1 ? 's' : ''}`;
+                })()} {(() => {
+                  const refUrlCount = getSelectedUrlIds().length;
+                  const selectedSkills = skills.filter((s) => getSelectedSkillIds().includes(s.id));
+                  const skillSourceUrlCount = selectedSkills.reduce((count, skill) => count + (skill.sourceUrls?.length || 0), 0);
+                  if (refUrlCount > 0 && skillSourceUrlCount > 0) return `(${refUrlCount} ref + ${skillSourceUrlCount} skill)`;
+                  if (skillSourceUrlCount > 0) return `(${skillSourceUrlCount} from skills)`;
+                  return '';
                 })()}
               </span>
               <button

@@ -44,7 +44,7 @@ function MessageTransparencyDropdown({
   const notesText = message.notes || message.reasoning || null;
 
   return (
-    <div className="mt-2 pt-2 border-t border-border/50">
+    <div className="mt-3">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -69,7 +69,7 @@ function MessageTransparencyDropdown({
             <ChevronDown className="h-3 w-3 ml-0.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-96 max-w-[calc(100vw-2rem)]">
+        <DropdownMenuContent align="start" className="w-96 max-w-[calc(100vw-2rem)]">
           {/* Confidence header section */}
           {confidenceBadge && (
             <>
