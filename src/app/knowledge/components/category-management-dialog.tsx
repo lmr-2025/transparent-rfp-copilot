@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAllCategories } from "@/hooks/use-knowledge-data";
+import { useCategories } from "@/hooks/use-knowledge";
 import { cn } from "@/lib/utils";
 
 interface CategoryManagementDialogProps {
@@ -29,7 +29,7 @@ export function CategoryManagementDialog({
   onSave,
   itemTitle,
 }: CategoryManagementDialogProps) {
-  const { data: allCategories = [], isLoading: categoriesLoading } = useAllCategories();
+  const { data: allCategories = [], isLoading: categoriesLoading } = useCategories();
   const [selectedCategories, setSelectedCategories] = useState<string[]>(currentCategories);
   const [searchQuery, setSearchQuery] = useState("");
   const [isSaving, setIsSaving] = useState(false);

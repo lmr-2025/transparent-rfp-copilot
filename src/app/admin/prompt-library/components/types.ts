@@ -322,6 +322,8 @@ export const promptColors: Record<string, { bg: string; text: string; light: str
   orange: { bg: "bg-orange-500", text: "text-orange-700", light: "bg-orange-50" },
   rose: { bg: "bg-rose-500", text: "text-rose-700", light: "bg-rose-50" },
   slate: { bg: "bg-slate-500", text: "text-slate-700", light: "bg-slate-50" },
+  yellow: { bg: "bg-yellow-500", text: "text-yellow-700", light: "bg-yellow-50" },
+  lime: { bg: "bg-lime-500", text: "text-lime-700", light: "bg-lime-50" },
 };
 
 // API block format

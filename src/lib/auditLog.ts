@@ -320,5 +320,77 @@ export async function logAnswerChange(
   });
 }
 
+/**
+ * Log a template change
+ */
+export async function logTemplateChange(
+  action: AuditAction,
+  templateId: string,
+  templateName: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
+): Promise<void> {
+  await createAuditLog({
+    entityType: "SETTING", // Templates use SETTING entity type
+    entityId: templateId,
+    entityTitle: templateName,
+    action,
+    user,
+    changes,
+    metadata,
+    ...requestContext,
+  });
+}
+
+/**
+ * Log a prompt block change
+ */
+export async function logPromptBlockChange(
+  action: AuditAction,
+  blockId: string,
+  blockName: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
+): Promise<void> {
+  await createAuditLog({
+    entityType: "PROMPT",
+    entityId: blockId,
+    entityTitle: blockName,
+    action,
+    user,
+    changes,
+    metadata: { ...metadata, promptType: "block" },
+    ...requestContext,
+  });
+}
+
+/**
+ * Log a prompt modifier change
+ */
+export async function logPromptModifierChange(
+  action: AuditAction,
+  modifierId: string,
+  modifierName: string,
+  user?: AuditUser,
+  changes?: Record<string, { from: unknown; to: unknown }>,
+  metadata?: Record<string, unknown>,
+  requestContext?: RequestContext
+): Promise<void> {
+  await createAuditLog({
+    entityType: "PROMPT",
+    entityId: modifierId,
+    entityTitle: modifierName,
+    action,
+    user,
+    changes,
+    metadata: { ...metadata, promptType: "modifier" },
+    ...requestContext,
+  });
+}
+
 // Re-export types for convenience
 export { AuditEntityType, AuditAction };

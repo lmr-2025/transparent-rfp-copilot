@@ -5,31 +5,50 @@ import { requireAuth } from "@/lib/apiAuth";
 import { createCategorySchema, validateBody } from "@/lib/validations";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { cacheGetOrSet, cacheDelete } from "@/lib/cache";
+
+const CATEGORIES_CACHE_KEY = "cache:skill-categories:all";
+const CATEGORIES_TTL = 3600; // 1 hour
 
 // GET /api/skill-categories - List all categories
 export async function GET() {
   try {
-    let categories = await prisma.skillCategory.findMany({
-      orderBy: { sortOrder: "asc" },
-    });
+    // Use Redis caching with 1 hour TTL
+    const categories = await cacheGetOrSet(
+      CATEGORIES_CACHE_KEY,
+      CATEGORIES_TTL,
+      async () => {
+        let cats = await prisma.skillCategory.findMany({
+          orderBy: { sortOrder: "asc" },
+        });
 
-    // If no categories exist, seed with defaults
-    if (categories.length === 0) {
-      const now = new Date();
-      await prisma.skillCategory.createMany({
-        data: DEFAULT_SKILL_CATEGORIES.map((name, index) => ({
-          name,
-          sortOrder: index,
-          createdAt: now,
-          updatedAt: now,
-        })),
-      });
-      categories = await prisma.skillCategory.findMany({
-        orderBy: { sortOrder: "asc" },
-      });
-    }
+        // If no categories exist, seed with defaults
+        if (cats.length === 0) {
+          const now = new Date();
+          await prisma.skillCategory.createMany({
+            data: DEFAULT_SKILL_CATEGORIES.map((name, index) => ({
+              name,
+              sortOrder: index,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          });
+          cats = await prisma.skillCategory.findMany({
+            orderBy: { sortOrder: "asc" },
+          });
+        }
 
-    return apiSuccess({ categories });
+        return cats;
+      }
+    );
+
+    // Add HTTP caching - categories are very stable
+    const response = apiSuccess({ categories });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=3600, stale-while-revalidate=7200'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch skill categories", error, { route: "/api/skill-categories" });
     return errors.internal("Failed to fetch skill categories");
@@ -66,6 +85,9 @@ export async function POST(request: NextRequest) {
         sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
       },
     });
+
+    // Invalidate cache
+    await cacheDelete(CATEGORIES_CACHE_KEY);
 
     return apiSuccess({ category }, { status: 201 });
   } catch (error) {
@@ -113,6 +135,9 @@ export async function PUT(request: NextRequest) {
         orderBy: { sortOrder: "asc" },
       });
     });
+
+    // Invalidate cache
+    await cacheDelete(CATEGORIES_CACHE_KEY);
 
     return apiSuccess({ categories: updated });
   } catch (error) {

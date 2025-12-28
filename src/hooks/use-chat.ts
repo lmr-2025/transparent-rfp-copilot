@@ -1,92 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { loadSkillsFromApi } from "@/lib/skillStorage";
-import { fetchActiveProfiles } from "@/lib/customerProfileApi";
-import { loadCategoriesFromApi } from "@/lib/categoryStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
-import { ReferenceUrl } from "@/types/referenceUrl";
-import { KnowledgeDocument } from "@/types/document";
+import { knowledgeQueryKeys } from "./use-knowledge";
 
 // Query keys for cache management
 export const chatQueryKeys = {
-  skills: ["skills"] as const,
-  documents: ["documents"] as const,
-  urls: ["reference-urls"] as const,
-  customers: ["customers"] as const,
-  categories: ["categories"] as const,
-  presets: ["instruction-presets"] as const,
   sessions: ["chat-sessions"] as const,
 };
-
-// Fetch skills
-export function useSkills() {
-  return useQuery({
-    queryKey: chatQueryKeys.skills,
-    queryFn: async () => {
-      const skills = await loadSkillsFromApi();
-      return skills.filter((s) => s.isActive);
-    },
-  });
-}
-
-// Fetch documents
-export function useDocuments() {
-  return useQuery({
-    queryKey: chatQueryKeys.documents,
-    queryFn: async (): Promise<KnowledgeDocument[]> => {
-      const res = await fetch("/api/documents");
-      if (!res.ok) throw new Error("Failed to fetch documents");
-      const json = await res.json();
-      const data = parseApiData<KnowledgeDocument[]>(json, "documents");
-      return Array.isArray(data) ? data : [];
-    },
-  });
-}
-
-// Fetch reference URLs
-export function useReferenceUrls() {
-  return useQuery({
-    queryKey: chatQueryKeys.urls,
-    queryFn: async (): Promise<ReferenceUrl[]> => {
-      const res = await fetch("/api/reference-urls");
-      if (!res.ok) throw new Error("Failed to fetch URLs");
-      const json = await res.json();
-      const data = parseApiData<ReferenceUrl[]>(json);
-      return Array.isArray(data) ? data : [];
-    },
-  });
-}
-
-// Fetch customer profiles
-export function useCustomerProfiles() {
-  return useQuery({
-    queryKey: chatQueryKeys.customers,
-    queryFn: async () => {
-      return fetchActiveProfiles();
-    },
-  });
-}
-
-// Fetch categories
-export function useCategories() {
-  return useQuery({
-    queryKey: chatQueryKeys.categories,
-    queryFn: loadCategoriesFromApi,
-  });
-}
-
-// Fetch instruction presets
-export function useInstructionPresets() {
-  return useQuery({
-    queryKey: chatQueryKeys.presets,
-    queryFn: async () => {
-      const res = await fetch("/api/instruction-presets");
-      if (!res.ok) throw new Error("Failed to fetch presets");
-      const json = await res.json();
-      const data = parseApiData<unknown[]>(json, "presets");
-      return Array.isArray(data) ? data : [];
-    },
-  });
-}
 
 // Chat session item type
 export interface ChatSessionItem {
@@ -100,10 +19,13 @@ export interface ChatSessionItem {
   urlsUsed?: { id: string; title: string }[];
 }
 
-// Fetch chat sessions
+/**
+ * Fetch chat sessions
+ * @param limit - Number of sessions to fetch (default: 20)
+ */
 export function useChatSessions(limit = 20) {
   return useQuery({
-    queryKey: chatQueryKeys.sessions,
+    queryKey: [...chatQueryKeys.sessions, { limit }],
     queryFn: async (): Promise<ChatSessionItem[]> => {
       const res = await fetch(`/api/chat-sessions?limit=${limit}`);
       if (!res.ok) throw new Error("Failed to fetch sessions");
@@ -111,10 +33,14 @@ export function useChatSessions(limit = 20) {
       const data = parseApiData<ChatSessionItem[]>(json, "sessions");
       return Array.isArray(data) ? data : [];
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes - sessions may be actively updated
   });
 }
 
-// Send chat message mutation
+// ============================================================================
+// CHAT MESSAGE MUTATION
+// ============================================================================
+
 type SendMessageParams = {
   message: string;
   skills: { id: string; title: string; content: string }[];
@@ -122,10 +48,8 @@ type SendMessageParams = {
     id: string;
     name: string;
     industry?: string;
-    // New unified content field
     content?: string;
     considerations?: string[];
-    // Legacy fields for backwards compatibility
     overview?: string;
     products?: string;
     challenges?: string;
@@ -159,6 +83,9 @@ type SendMessageResponse = {
   };
 };
 
+/**
+ * Send a message to the knowledge chat API
+ */
 export function useSendMessage() {
   return useMutation({
     mutationFn: async (params: SendMessageParams): Promise<SendMessageResponse> => {
@@ -179,7 +106,10 @@ export function useSendMessage() {
   });
 }
 
-// Save chat session mutation
+// ============================================================================
+// CHAT SESSION MUTATIONS
+// ============================================================================
+
 type SaveSessionParams = {
   sessionId: string | null;
   messages: { role: string; content: string; timestamp: string; confidence?: string; notes?: string }[];
@@ -189,6 +119,9 @@ type SaveSessionParams = {
   urlsUsed: { id: string; title: string }[];
 };
 
+/**
+ * Save or update a chat session
+ */
 export function useSaveSession() {
   const queryClient = useQueryClient();
 
@@ -197,7 +130,7 @@ export function useSaveSession() {
       const { sessionId, ...body } = params;
 
       if (sessionId) {
-        // Update existing
+        // Update existing session
         const res = await fetch(`/api/chat-sessions/${sessionId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -206,7 +139,7 @@ export function useSaveSession() {
         if (!res.ok) throw new Error("Failed to update session");
         return { id: sessionId };
       } else {
-        // Create new
+        // Create new session
         const res = await fetch("/api/chat-sessions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -222,3 +155,6 @@ export function useSaveSession() {
     },
   });
 }
+
+// Re-export knowledge query keys for convenience
+export { knowledgeQueryKeys };

@@ -10,6 +10,9 @@ import { getCustomerSlug } from "@/lib/customerFiles";
 import { updateCustomerAndCommit, deleteCustomerAndCommit } from "@/lib/customerGitSync";
 import { withCustomerSyncLogging } from "@/lib/customerSyncLog";
 import type { CustomerFile } from "@/lib/customerFiles";
+import { cacheDeletePattern } from "@/lib/cache";
+
+const CUSTOMERS_CACHE_KEY_PREFIX = "cache:customers";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -226,6 +229,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       Object.keys(changes).length > 0 ? changes : undefined
     );
 
+    // Invalidate cache
+    await cacheDeletePattern(`${CUSTOMERS_CACHE_KEY_PREFIX}:*`);
+
     return apiSuccess({ profile });
   } catch (error) {
     logger.error("Failed to update customer profile", error, { route: "/api/customers/[id]" });
@@ -312,6 +318,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       undefined,
       { deletedProfile: { name: result.name, industry: result.industry } }
     );
+
+    // Invalidate cache
+    await cacheDeletePattern(`${CUSTOMERS_CACHE_KEY_PREFIX}:*`);
 
     return apiSuccess({ message: "Customer profile deleted successfully" });
   } catch (error) {

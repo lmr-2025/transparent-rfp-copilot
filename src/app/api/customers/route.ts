@@ -15,6 +15,10 @@ import { createCustomerSchema, validateBody } from "@/lib/validations";
 import { logCustomerChange, getUserFromSession } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import { cacheGetOrSet, cacheDeletePattern } from "@/lib/cache";
+
+const CUSTOMERS_CACHE_KEY_PREFIX = "cache:customers";
+const CUSTOMERS_TTL = 900; // 15 minutes
 
 /**
  * GET /api/customers - List customer profiles
@@ -51,39 +55,55 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 500);
     const offset = parseInt(searchParams.get("offset") || "0", 10);
 
-    const where: {
-      isActive?: boolean;
-      industry?: string;
-      name?: { contains: string; mode: "insensitive" };
-    } = {};
+    // Create cache key based on query parameters
+    const cacheKey = `${CUSTOMERS_CACHE_KEY_PREFIX}:${JSON.stringify({ activeOnly, industry, search, limit, offset })}`;
 
-    if (activeOnly) {
-      where.isActive = true;
-    }
+    // Use Redis caching with 15 min TTL
+    const profiles = await cacheGetOrSet(
+      cacheKey,
+      CUSTOMERS_TTL,
+      async () => {
+        const where: {
+          isActive?: boolean;
+          industry?: string;
+          name?: { contains: string; mode: "insensitive" };
+        } = {};
 
-    if (industry) {
-      where.industry = industry;
-    }
+        if (activeOnly) {
+          where.isActive = true;
+        }
 
-    if (search) {
-      where.name = { contains: search, mode: "insensitive" };
-    }
+        if (industry) {
+          where.industry = industry;
+        }
 
-    const profiles = await prisma.customerProfile.findMany({
-      where,
-      orderBy: {
-        updatedAt: "desc",
-      },
-      take: limit,
-      skip: offset,
-      include: {
-        owner: {
-          select: { id: true, name: true, email: true },
-        },
-      },
-    });
+        if (search) {
+          where.name = { contains: search, mode: "insensitive" };
+        }
 
-    return apiSuccess({ profiles });
+        return await prisma.customerProfile.findMany({
+          where,
+          orderBy: {
+            updatedAt: "desc",
+          },
+          take: limit,
+          skip: offset,
+          include: {
+            owner: {
+              select: { id: true, name: true, email: true },
+            },
+          },
+        });
+      }
+    );
+
+    // Add HTTP caching - customers updated more frequently than skills
+    const response = apiSuccess({ profiles });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=900, stale-while-revalidate=1800'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch customer profiles", error, { route: "/api/customers" });
     return errors.internal("Failed to fetch customer profiles");
@@ -179,6 +199,9 @@ export async function POST(request: NextRequest) {
       undefined,
       { industry: data.industry }
     );
+
+    // Invalidate cache
+    await cacheDeletePattern(`${CUSTOMERS_CACHE_KEY_PREFIX}:*`);
 
     return apiSuccess({ profile }, { status: 201 });
   } catch (error) {

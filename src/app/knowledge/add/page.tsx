@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
-import { useAllCategories } from "@/hooks/use-knowledge-data";
+import { useCategories } from "@/hooks/use-knowledge";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 import {
@@ -73,7 +73,7 @@ function AddKnowledgeContent() {
     useBulkImportCounts();
 
   // Categories for skill assignment
-  const { data: categories = [] } = useAllCategories();
+  const { data: categories = [] } = useCategories();
 
   const { prompt: promptForSkillName, PromptDialog } = usePrompt({
     title: "New Skill Name",

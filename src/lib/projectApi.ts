@@ -134,8 +134,6 @@ function transformProjectToDb(project: BulkProject) {
     sheetName: project.sheetName,
     columns: project.columns,
     ownerId: project.ownerId,
-    ownerName: project.ownerName,
-    customerName: project.customerName,
     notes: project.notes,
     status: project.status,
     // Review workflow fields

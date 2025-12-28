@@ -11,7 +11,7 @@ import {
 import { ConversationalPanel, Message } from "@/components/ui/conversational-panel";
 import { Skill } from "@/types/skill";
 
-type LibraryAnalysisModalProps = {
+type KnowledgeAnalysisModalProps = {
   skills: Skill[];
   isOpen: boolean;
   onClose: () => void;
@@ -46,7 +46,7 @@ const PRIORITY_COLORS: Record<string, { bg: string; text: string }> = {
   low: { bg: "#e0f2fe", text: "#0284c7" },
 };
 
-export default function LibraryAnalysisModal({ skills, isOpen, onClose }: LibraryAnalysisModalProps) {
+export default function KnowledgeAnalysisModal({ skills, isOpen, onClose }: KnowledgeAnalysisModalProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");

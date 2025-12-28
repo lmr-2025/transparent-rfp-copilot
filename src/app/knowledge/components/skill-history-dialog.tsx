@@ -7,13 +7,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { HistoryEntry, UnifiedLibraryItem } from "@/hooks/use-knowledge-data";
+import { HistoryEntry, UnifiedKnowledgeItem } from "@/hooks/use-knowledge";
 import { cn } from "@/lib/utils";
 
 interface SkillHistoryDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  item: UnifiedLibraryItem;
+  item: UnifiedKnowledgeItem;
 }
 
 function getActionIcon(action: string) {

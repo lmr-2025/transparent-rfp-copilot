@@ -1,11 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { loadSkillsFromApi, updateSkillViaApi, deleteSkillViaApi } from "@/lib/skillStorage";
 import { loadCategoriesFromApi } from "@/lib/categoryStorage";
+import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { Skill } from "@/types/skill";
 import { KnowledgeDocument } from "@/types/document";
 import { ReferenceUrl } from "@/types/referenceUrl";
 import { ContextSnippet } from "@/types/contextSnippet";
-import { fetchActiveProfiles } from "@/lib/customerProfileApi";
 import { useApiQuery, useApiMutation } from "@/hooks/use-api";
 
 // Define types locally to avoid Turbopack export issues with `export type`
@@ -47,72 +47,163 @@ export const knowledgeQueryKeys = {
   snippets: ["context-snippets"] as const,
   categories: ["categories"] as const,
   users: ["users"] as const,
+  presets: ["instruction-presets"] as const,
 };
 
 // Stale times for caching - data stays "fresh" for this duration before refetching
 // This significantly reduces redundant API calls during active sessions
 const STALE_TIMES = {
-  skills: 30 * 60 * 1000, // 30 minutes - skills are stable after initial build
-  documents: 30 * 60 * 1000, // 30 minutes - documents are stable
+  skills: 60 * 60 * 1000, // 1 hour - core skills are very stable
+  documents: 30 * 60 * 1000, // 30 minutes - documents are fairly stable
   urls: 30 * 60 * 1000, // 30 minutes - URLs rarely change
   customers: 15 * 60 * 1000, // 15 minutes - customer profiles may be updated
   snippets: 60 * 60 * 1000, // 1 hour - snippets are very stable
   categories: 60 * 60 * 1000, // 1 hour - categories rarely change
   users: 30 * 60 * 1000, // 30 minutes - users list is fairly stable
+  presets: 4 * 60 * 60 * 1000, // 4 hours - library/extended skills are very stable
 };
 
-// Fetch all skills
-export function useAllSkills() {
+// ============================================================================
+// UNIFIED HOOKS - Single source of truth for all knowledge data
+// ============================================================================
+
+/**
+ * Fetch skills with optional filtering, search, and pagination
+ * @param options.activeOnly - Only return active skills (default: false)
+ * @param options.search - Search term to filter by title/content
+ * @param options.categories - Filter by categories
+ * @param options.limit - Maximum number of results to return
+ * @param options.offset - Number of results to skip (for pagination)
+ */
+export function useSkills(options: {
+  activeOnly?: boolean;
+  search?: string;
+  categories?: string[];
+  limit?: number;
+  offset?: number;
+} = {}) {
   return useQuery({
-    queryKey: knowledgeQueryKeys.skills,
-    queryFn: loadSkillsFromApi,
+    queryKey: [...knowledgeQueryKeys.skills, options],
+    queryFn: async () => {
+      const allSkills = await loadSkillsFromApi();
+
+      // Apply filters
+      let filtered = allSkills;
+
+      if (options.activeOnly) {
+        filtered = filtered.filter((s) => s.isActive);
+      }
+
+      if (options.search) {
+        const searchLower = options.search.toLowerCase();
+        filtered = filtered.filter((s) =>
+          s.title.toLowerCase().includes(searchLower) ||
+          s.content.toLowerCase().includes(searchLower)
+        );
+      }
+
+      if (options.categories && options.categories.length > 0) {
+        filtered = filtered.filter((s) =>
+          s.categories?.some((cat) => options.categories!.includes(cat))
+        );
+      }
+
+      // Apply pagination
+      const start = options.offset || 0;
+      const end = options.limit ? start + options.limit : undefined;
+
+      return {
+        skills: filtered.slice(start, end),
+        total: filtered.length,
+        hasMore: end ? filtered.length > end : false,
+      };
+    },
     staleTime: STALE_TIMES.skills,
   });
 }
 
-// Fetch documents
-export function useAllDocuments() {
+/**
+ * Fetch documents with optional filtering
+ * @param options.categories - Filter by categories
+ */
+export function useDocuments(options: { categories?: string[] } = {}) {
   return useApiQuery<KnowledgeDocument[]>({
-    queryKey: knowledgeQueryKeys.documents,
+    queryKey: [...knowledgeQueryKeys.documents, { categories: options.categories }],
     url: "/api/documents",
     responseKey: "documents",
-    transform: (data) => (Array.isArray(data) ? data : []),
+    transform: (data) => {
+      const docs = Array.isArray(data) ? data : [];
+      if (options.categories && options.categories.length > 0) {
+        return docs.filter((doc) =>
+          doc.categories?.some((cat) => options.categories!.includes(cat))
+        );
+      }
+      return docs;
+    },
     staleTime: STALE_TIMES.documents,
   });
 }
 
-// Fetch reference URLs
-export function useAllReferenceUrls() {
+/**
+ * Fetch reference URLs with optional filtering
+ * @param options.categories - Filter by categories
+ */
+export function useReferenceUrls(options: { categories?: string[] } = {}) {
   return useApiQuery<ReferenceUrl[]>({
-    queryKey: knowledgeQueryKeys.urls,
+    queryKey: [...knowledgeQueryKeys.urls, { categories: options.categories }],
     url: "/api/reference-urls",
-    transform: (data) => (Array.isArray(data) ? data : []),
+    transform: (data) => {
+      const urls = Array.isArray(data) ? data : [];
+      if (options.categories && options.categories.length > 0) {
+        return urls.filter((url) =>
+          url.categories?.some((cat) => options.categories!.includes(cat))
+        );
+      }
+      return urls;
+    },
     staleTime: STALE_TIMES.urls,
   });
 }
 
-// Fetch customer profiles
-export function useAllCustomers() {
+/**
+ * Fetch customer profiles with optional filtering
+ * @param options.activeOnly - Only return active profiles (default: true)
+ */
+export function useCustomerProfiles(options: { activeOnly?: boolean } = { activeOnly: true }) {
   return useQuery({
-    queryKey: knowledgeQueryKeys.customers,
-    queryFn: fetchActiveProfiles,
+    queryKey: [...knowledgeQueryKeys.customers, { activeOnly: options.activeOnly }],
+    queryFn: async () => {
+      const profiles = await fetchActiveProfiles();
+      return options.activeOnly ? profiles.filter((p) => p.isActive !== false) : profiles;
+    },
     staleTime: STALE_TIMES.customers,
   });
 }
 
-// Fetch context snippets
-export function useAllSnippets() {
+/**
+ * Fetch context snippets with optional filtering
+ * @param options.category - Filter by category
+ */
+export function useContextSnippets(options: { category?: string } = {}) {
   return useApiQuery<ContextSnippet[]>({
-    queryKey: knowledgeQueryKeys.snippets,
+    queryKey: [...knowledgeQueryKeys.snippets, { category: options.category }],
     url: "/api/context-snippets",
     responseKey: "snippets",
-    transform: (data) => (Array.isArray(data) ? data : []),
+    transform: (data) => {
+      const snippets = Array.isArray(data) ? data : [];
+      if (options.category) {
+        return snippets.filter((s) => s.category === options.category);
+      }
+      return snippets;
+    },
     staleTime: STALE_TIMES.snippets,
   });
 }
 
-// Fetch categories
-export function useAllCategories() {
+/**
+ * Fetch categories
+ */
+export function useCategories() {
   return useQuery({
     queryKey: knowledgeQueryKeys.categories,
     queryFn: loadCategoriesFromApi,
@@ -120,8 +211,23 @@ export function useAllCategories() {
   });
 }
 
-// Fetch users (for owner management)
-export function useAllUsers() {
+/**
+ * Fetch instruction presets
+ */
+export function useInstructionPresets() {
+  return useApiQuery<unknown[]>({
+    queryKey: knowledgeQueryKeys.presets,
+    url: "/api/instruction-presets",
+    responseKey: "presets",
+    transform: (data) => (Array.isArray(data) ? data : []),
+    staleTime: STALE_TIMES.presets,
+  });
+}
+
+/**
+ * Fetch users (for owner management)
+ */
+export function useUsers() {
   return useApiQuery<AppUser[]>({
     queryKey: knowledgeQueryKeys.users,
     url: "/api/users",
@@ -131,7 +237,13 @@ export function useAllUsers() {
   });
 }
 
-// Update skill mutation
+// ============================================================================
+// MUTATIONS
+// ============================================================================
+
+/**
+ * Update skill mutation
+ */
 export function useUpdateSkill() {
   const queryClient = useQueryClient();
 
@@ -144,7 +256,9 @@ export function useUpdateSkill() {
   });
 }
 
-// Delete skill mutation
+/**
+ * Delete skill mutation
+ */
 export function useDeleteSkill() {
   const queryClient = useQueryClient();
 
@@ -156,7 +270,9 @@ export function useDeleteSkill() {
   });
 }
 
-// Delete document mutation
+/**
+ * Delete document mutation
+ */
 export function useDeleteDocument() {
   return useApiMutation<void, string>({
     url: (id) => `/api/documents/${id}`,
@@ -165,7 +281,9 @@ export function useDeleteDocument() {
   });
 }
 
-// Delete URL mutation
+/**
+ * Delete URL mutation
+ */
 export function useDeleteUrl() {
   return useApiMutation<void, string>({
     url: (id) => `/api/reference-urls/${id}`,
@@ -174,7 +292,9 @@ export function useDeleteUrl() {
   });
 }
 
-// Delete snippet mutation
+/**
+ * Delete snippet mutation
+ */
 export function useDeleteSnippet() {
   return useApiMutation<void, string>({
     url: (id) => `/api/context-snippets/${id}`,
@@ -183,7 +303,10 @@ export function useDeleteSnippet() {
   });
 }
 
-// Refresh skill from source URLs
+// ============================================================================
+// SKILL REFRESH OPERATIONS
+// ============================================================================
+
 export type RefreshResult = {
   hasChanges: boolean;
   message?: string;
@@ -197,6 +320,9 @@ export type RefreshResult = {
   originalContent?: string;
 };
 
+/**
+ * Refresh skill from source URLs
+ */
 export function useRefreshSkill() {
   return useApiMutation<RefreshResult, string>({
     url: (id) => `/api/skills/${id}/refresh`,
@@ -205,7 +331,6 @@ export function useRefreshSkill() {
   });
 }
 
-// Apply refresh changes after user review
 export type ApplyRefreshInput = {
   id: string;
   title: string;
@@ -213,6 +338,9 @@ export type ApplyRefreshInput = {
   changeHighlights?: string[];
 };
 
+/**
+ * Apply refresh changes after user review
+ */
 export function useApplyRefreshChanges() {
   return useApiMutation<RefreshResult, ApplyRefreshInput>({
     url: (vars) => `/api/skills/${vars.id}/refresh`,
@@ -221,54 +349,48 @@ export function useApplyRefreshChanges() {
   });
 }
 
-// Helper types for unified library items
+// ============================================================================
+// UNIFIED KNOWLEDGE ITEM TYPES & TRANSFORMS
+// ============================================================================
+
 export type LibraryItemType = "skill" | "document" | "url" | "customer" | "snippet";
 
-// Source document info (for skills built from uploaded documents)
 export interface SourceDocument {
   id: string;
   filename: string;
   uploadedAt: string;
 }
 
-// Sync status type for git-backed skills
 export type SyncStatus = "synced" | "pending" | "failed" | null;
 
-export interface UnifiedLibraryItem {
+export interface UnifiedKnowledgeItem {
   id: string;
   type: LibraryItemType;
   title: string;
   subtitle?: string;
   content?: string;
   categories?: string[];
-  tier?: "core" | "extended" | "library"; // Default skill tier for progressive loading
-  tierOverrides?: Record<string, "core" | "extended" | "library">; // Category-specific tier overrides
+  tier?: "core" | "extended" | "library";
+  tierOverrides?: Record<string, "core" | "extended" | "library">;
   isActive?: boolean;
   createdAt: string;
   updatedAt: string;
   owners?: SkillOwner[];
-  // Expanded details for skills
   sourceUrls?: SourceUrl[];
   sourceDocuments?: SourceDocument[];
   history?: HistoryEntry[];
   lastRefreshedAt?: string;
-  // Git sync tracking (skills only)
   syncStatus?: SyncStatus;
   lastSyncedAt?: string;
-  // Document-specific
   filename?: string;
   fileSize?: number;
   fileType?: string;
-  // Snippet-specific
   snippetKey?: string;
-  // Linked skill info (for sources)
   linkedSkillId?: string;
-  // Skill count (for sources) - via SkillSource join table
   skillCount?: number;
 }
 
-// Transform skills to unified items
-export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
+export function skillToUnifiedItem(skill: Skill): UnifiedKnowledgeItem {
   return {
     id: skill.id,
     type: "skill",
@@ -286,14 +408,12 @@ export function skillToUnifiedItem(skill: Skill): UnifiedLibraryItem {
     sourceDocuments: skill.sourceDocuments as SourceDocument[] | undefined,
     history: skill.history,
     lastRefreshedAt: skill.lastRefreshedAt,
-    // Git sync tracking
     syncStatus: skill.syncStatus as SyncStatus,
     lastSyncedAt: skill.lastSyncedAt,
   };
 }
 
-// Transform documents to unified items
-export function documentToUnifiedItem(doc: KnowledgeDocument): UnifiedLibraryItem {
+export function documentToUnifiedItem(doc: KnowledgeDocument): UnifiedKnowledgeItem {
   return {
     id: doc.id,
     type: "document",
@@ -310,12 +430,11 @@ export function documentToUnifiedItem(doc: KnowledgeDocument): UnifiedLibraryIte
   };
 }
 
-// Transform URLs to unified items
-export function urlToUnifiedItem(url: ReferenceUrl): UnifiedLibraryItem {
+export function urlToUnifiedItem(url: ReferenceUrl): UnifiedKnowledgeItem {
   return {
     id: url.id,
     type: "url",
-    title: url.title || url.url, // Fallback to URL if no title
+    title: url.title || url.url,
     subtitle: url.url,
     content: url.description || undefined,
     categories: url.categories,
@@ -325,8 +444,7 @@ export function urlToUnifiedItem(url: ReferenceUrl): UnifiedLibraryItem {
   };
 }
 
-// Transform snippets to unified items
-export function snippetToUnifiedItem(snippet: ContextSnippet): UnifiedLibraryItem {
+export function snippetToUnifiedItem(snippet: ContextSnippet): UnifiedKnowledgeItem {
   return {
     id: snippet.id,
     type: "snippet",

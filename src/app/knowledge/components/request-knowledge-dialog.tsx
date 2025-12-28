@@ -13,7 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import { useAllCategories } from "@/hooks/use-knowledge-data";
+import { useCategories } from "@/hooks/use-knowledge";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -26,7 +26,7 @@ export function RequestKnowledgeDialog({
   open,
   onOpenChange,
 }: RequestKnowledgeDialogProps) {
-  const { data: allCategories = [] } = useAllCategories();
+  const { data: allCategories = [] } = useCategories();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);

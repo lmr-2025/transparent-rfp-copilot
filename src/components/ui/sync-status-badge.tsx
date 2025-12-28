@@ -7,7 +7,7 @@
 
 import { CheckCircle2, Clock, AlertCircle, HelpCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { SyncStatus } from "@/hooks/use-knowledge-data";
+import type { SyncStatus } from "@/hooks/use-knowledge";
 
 // Extended type that includes "unknown" for display purposes
 type DisplaySyncStatus = SyncStatus | "unknown";

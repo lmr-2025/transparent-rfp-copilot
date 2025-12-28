@@ -7,12 +7,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { SourceUrl, SourceDocument, UnifiedLibraryItem } from "@/hooks/use-knowledge-data";
+import { SourceUrl, SourceDocument, UnifiedKnowledgeItem } from "@/hooks/use-knowledge";
 
 interface SkillSourcesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  item: UnifiedLibraryItem;
+  item: UnifiedKnowledgeItem;
 }
 
 export function SkillSourcesDialog({

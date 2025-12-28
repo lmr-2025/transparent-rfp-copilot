@@ -56,41 +56,72 @@ export async function GET(request: NextRequest) {
     >();
 
     if (includeFeedbackStats && projects.length > 0) {
-      const rowSummaries = await prisma.bulkRow.findMany({
-        where: { projectId: { in: projects.map((project) => project.id) } },
-        select: {
-          projectId: true,
-          status: true,
-          originalResponse: true,
-          userEditedAnswer: true,
-          reviewStatus: true,
-          flaggedForReview: true,
-        },
-      });
-
-      for (const row of rowSummaries) {
-        const stats =
-          feedbackStats.get(row.projectId) || {
+      // If rows are already included, compute stats from them (avoids N+1 query)
+      if (includeRows) {
+        for (const project of projects) {
+          const stats = {
             totalRows: 0,
             completedRows: 0,
             editedResponses: 0,
             reviewedRows: 0,
             flaggedRows: 0,
           };
-        stats.totalRows += 1;
-        if (row.status === "COMPLETED") {
-          stats.completedRows += 1;
+
+          for (const row of project.rows) {
+            stats.totalRows += 1;
+            if (row.status === "COMPLETED") {
+              stats.completedRows += 1;
+            }
+            if (row.originalResponse && row.userEditedAnswer && row.userEditedAnswer !== row.originalResponse) {
+              stats.editedResponses += 1;
+            }
+            if (row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED") {
+              stats.reviewedRows += 1;
+            }
+            if (row.flaggedForReview) {
+              stats.flaggedRows += 1;
+            }
+          }
+          feedbackStats.set(project.id, stats);
         }
-        if (row.originalResponse && row.userEditedAnswer && row.userEditedAnswer !== row.originalResponse) {
-          stats.editedResponses += 1;
+      } else {
+        // Otherwise, fetch row summaries separately (only when rows not already loaded)
+        const rowSummaries = await prisma.bulkRow.findMany({
+          where: { projectId: { in: projects.map((project) => project.id) } },
+          select: {
+            projectId: true,
+            status: true,
+            originalResponse: true,
+            userEditedAnswer: true,
+            reviewStatus: true,
+            flaggedForReview: true,
+          },
+        });
+
+        for (const row of rowSummaries) {
+          const stats =
+            feedbackStats.get(row.projectId) || {
+              totalRows: 0,
+              completedRows: 0,
+              editedResponses: 0,
+              reviewedRows: 0,
+              flaggedRows: 0,
+            };
+          stats.totalRows += 1;
+          if (row.status === "COMPLETED") {
+            stats.completedRows += 1;
+          }
+          if (row.originalResponse && row.userEditedAnswer && row.userEditedAnswer !== row.originalResponse) {
+            stats.editedResponses += 1;
+          }
+          if (row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED") {
+            stats.reviewedRows += 1;
+          }
+          if (row.flaggedForReview) {
+            stats.flaggedRows += 1;
+          }
+          feedbackStats.set(row.projectId, stats);
         }
-        if (row.reviewStatus === "APPROVED" || row.reviewStatus === "CORRECTED") {
-          stats.reviewedRows += 1;
-        }
-        if (row.flaggedForReview) {
-          stats.flaggedRows += 1;
-        }
-        feedbackStats.set(row.projectId, stats);
       }
     }
 

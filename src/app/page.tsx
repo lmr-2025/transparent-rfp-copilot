@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useSession } from "next-auth/react";
 import { useBranding } from "@/lib/branding";
 import { features } from "@/lib/featureFlags";
 
@@ -61,13 +60,6 @@ function Card({ href, title, description, accentColor, bgColor, featured }: Card
 
 export default function HomePage() {
   const { branding, isLoading } = useBranding();
-  const { data: session } = useSession();
-  // Check for admin access using capabilities (with legacy fallback)
-  const userCapabilities = session?.user?.capabilities || [];
-  const isAdmin = userCapabilities.includes("ADMIN") ||
-    userCapabilities.includes("MANAGE_PROMPTS") ||
-    session?.user?.role === "ADMIN" ||
-    session?.user?.role === "PROMPT_ADMIN";
 
   return (
     <div style={{
@@ -118,7 +110,7 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Foundation Section */}
+      {/* Knowledge Base Section */}
       <div style={{ marginBottom: "40px" }}>
         <h2 style={{
           fontSize: "0.8rem",
@@ -128,16 +120,16 @@ export default function HomePage() {
           letterSpacing: "0.5px",
           marginBottom: "12px",
         }}>
-          Foundation
+          Knowledge Base
         </h2>
         <p style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "16px" }}>
-          These power everything else. Build your knowledge base and configure how AI responds.
+          The foundation that grounds all AI responses. Your single source of truth.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px" }}>
           <Card
             href="/knowledge"
-            title="Knowledge Base"
-            description="Skills, documents, and URLs that ground all AI responses. Your single source of truth."
+            title="Skills & Documents"
+            description="Skills, documents, and URLs that ground all AI responses."
             accentColor="#f59e0b"
             bgColor="#fffbeb"
             featured
@@ -150,16 +142,46 @@ export default function HomePage() {
             bgColor="#fff7ed"
             featured
           />
-          {isAdmin && (
-            <Card
-              href="/admin/prompt-library"
-              title="Prompt Library"
-              description="Configure how AI responds across all features. Edit system prompts, output formats, and quality rules. Git-backed."
-              accentColor="#8b5cf6"
-              bgColor="#faf5ff"
-              featured
-            />
-          )}
+        </div>
+      </div>
+
+      {/* Library Section */}
+      <div style={{ marginBottom: "40px" }}>
+        <h2 style={{
+          fontSize: "0.8rem",
+          fontWeight: 600,
+          color: "#94a3b8",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px",
+          marginBottom: "12px",
+        }}>
+          Library
+        </h2>
+        <p style={{ fontSize: "0.9rem", color: "#64748b", marginBottom: "16px" }}>
+          Configure how AI responds and structures its output. Control prompts, personas, and templates.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+          <Card
+            href="/admin/libraries?library=prompts"
+            title="Prompts"
+            description="Configure how AI responds across all features. Edit system prompts, output formats, and quality rules."
+            accentColor="#3b82f6"
+            bgColor="#eff6ff"
+          />
+          <Card
+            href="/admin/libraries?library=personas"
+            title="Personas"
+            description="Custom AI response styles. Define different modes and behaviors for various use cases."
+            accentColor="#8b5cf6"
+            bgColor="#faf5ff"
+          />
+          <Card
+            href="/admin/libraries?library=templates"
+            title="Templates"
+            description="Collateral templates for generating slide decks, one-pagers, and other structured content."
+            accentColor="#10b981"
+            bgColor="#f0fdf4"
+          />
         </div>
       </div>
 

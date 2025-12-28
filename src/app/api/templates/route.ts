@@ -6,6 +6,7 @@ import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { z } from "zod";
 import { validateBody } from "@/lib/validations";
+import { logTemplateChange, getUserFromSession, getRequestContext } from "@/lib/auditLog";
 
 // Validation schemas
 const createTemplateSchema = z.object({
@@ -101,6 +102,17 @@ export async function POST(request: NextRequest) {
         createdBy: session.user.id,
       },
     });
+
+    // Audit log
+    await logTemplateChange(
+      "CREATED",
+      template.id,
+      template.name,
+      getUserFromSession(session),
+      undefined,
+      { category: data.category, outputFormat: data.outputFormat },
+      getRequestContext(request)
+    );
 
     return apiSuccess(template, { status: 201 });
   } catch (error) {

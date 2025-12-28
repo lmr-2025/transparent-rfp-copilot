@@ -27,6 +27,12 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       where: { id },
       include: {
         findings: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     });
 
@@ -99,7 +105,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     return apiSuccess({
       contractId: contract.id,
       contractName: contract.name,
-      customerName: contract.customerName,
+      customerName: contract.customer?.name || null,
       reviewedAt: contract.reviewedAt?.toISOString(),
       reviewedBy: contract.reviewedBy,
       stats,

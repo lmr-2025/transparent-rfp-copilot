@@ -1,134 +1,158 @@
-import {
-  writeBlockFile,
-  deleteBlockFile,
-  writeModifierFile,
-  deleteModifierFile,
-} from "./promptFiles";
+/**
+ * Prompt Git Sync (Compatibility Layer)
+ *
+ * Maintains the old function-based API while delegating to the new class-based services.
+ * Handles both blocks and modifiers.
+ *
+ * DEPRECATED: New code should use promptBlockGitSync and promptModifierGitSync services directly
+ */
+
+import { promptBlockGitSync } from "./git-sync/prompt-block-git-sync.service";
+import { promptModifierGitSync } from "./git-sync/prompt-modifier-git-sync.service";
 import type { PromptBlockFile, PromptModifierFile } from "./promptFiles";
-import {
-  gitAdd,
-  gitRemove,
-  commitStagedChangesIfAny,
-  getFileHistory,
-  isPathClean,
-  getCurrentBranch as getGitCurrentBranch,
-  pushToRemote as pushToGitRemote,
-  GitAuthor,
-} from "./gitCommitHelpers";
+import type { GitAuthor } from "./gitCommitHelpers";
 
 // ============================================
 // BLOCK GIT OPERATIONS
 // ============================================
 
+/**
+ * @deprecated Use promptBlockGitSync.saveAndCommit() instead
+ */
 export async function saveBlockAndCommit(
   blockId: string,
   block: PromptBlockFile,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await writeBlockFile(blockId, block);
-  await gitAdd(`prompts/blocks/${blockId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptBlockGitSync.saveAndCommit(blockId, block, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptBlockGitSync.updateAndCommit() instead
+ */
 export async function updateBlockAndCommit(
   blockId: string,
   block: PromptBlockFile,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await writeBlockFile(blockId, block);
-  await gitAdd(`prompts/blocks/${blockId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptBlockGitSync.updateAndCommit(blockId, block, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptBlockGitSync.deleteAndCommit() instead
+ */
 export async function deleteBlockAndCommit(
   blockId: string,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await deleteBlockFile(blockId);
-  await gitRemove(`prompts/blocks/${blockId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptBlockGitSync.deleteAndCommit(blockId, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptBlockGitSync.getHistory() instead
+ */
 export async function getBlockHistory(
   blockId: string,
   limit = 10
-): Promise<Array<{
-  sha: string;
-  author: string;
-  email: string;
-  date: string;
-  message: string;
-}>> {
-  return getFileHistory(`prompts/blocks/${blockId}.md`, limit);
+): Promise<
+  Array<{
+    sha: string;
+    author: string;
+    email: string;
+    date: string;
+    message: string;
+  }>
+> {
+  return promptBlockGitSync.getHistory(blockId, limit);
 }
 
 // ============================================
 // MODIFIER GIT OPERATIONS
 // ============================================
 
+/**
+ * @deprecated Use promptModifierGitSync.saveAndCommit() instead
+ */
 export async function saveModifierAndCommit(
   modifierId: string,
   modifier: PromptModifierFile,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await writeModifierFile(modifierId, modifier);
-  await gitAdd(`prompts/modifiers/${modifierId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptModifierGitSync.saveAndCommit(modifierId, modifier, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptModifierGitSync.updateAndCommit() instead
+ */
 export async function updateModifierAndCommit(
   modifierId: string,
   modifier: PromptModifierFile,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await writeModifierFile(modifierId, modifier);
-  await gitAdd(`prompts/modifiers/${modifierId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptModifierGitSync.updateAndCommit(modifierId, modifier, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptModifierGitSync.deleteAndCommit() instead
+ */
 export async function deleteModifierAndCommit(
   modifierId: string,
   commitMessage: string,
   author: GitAuthor
 ): Promise<string | null> {
-  await deleteModifierFile(modifierId);
-  await gitRemove(`prompts/modifiers/${modifierId}.md`);
-  return commitStagedChangesIfAny(commitMessage, author);
+  return promptModifierGitSync.deleteAndCommit(modifierId, commitMessage, author);
 }
 
+/**
+ * @deprecated Use promptModifierGitSync.getHistory() instead
+ */
 export async function getModifierHistory(
   modifierId: string,
   limit = 10
-): Promise<Array<{
-  sha: string;
-  author: string;
-  email: string;
-  date: string;
-  message: string;
-}>> {
-  return getFileHistory(`prompts/modifiers/${modifierId}.md`, limit);
+): Promise<
+  Array<{
+    sha: string;
+    author: string;
+    email: string;
+    date: string;
+    message: string;
+  }>
+> {
+  return promptModifierGitSync.getHistory(modifierId, limit);
 }
 
 // ============================================
-// SHARED GIT UTILITIES
+// SHARED OPERATIONS
 // ============================================
 
-export async function isPromptsGitClean(): Promise<boolean> {
-  return isPathClean("prompts/");
+/**
+ * @deprecated Use promptBlockGitSync.isClean() or promptModifierGitSync.isClean() instead
+ */
+export async function isPromptsClean(): Promise<boolean> {
+  return promptBlockGitSync.isClean();
 }
 
+/**
+ * @deprecated Use promptBlockGitSync.getCurrentBranch() instead
+ */
 export async function getCurrentBranch(): Promise<string> {
-  return getGitCurrentBranch();
+  return promptBlockGitSync.getCurrentBranch();
 }
 
+/**
+ * @deprecated Use promptBlockGitSync.pushToRemote() instead
+ */
 export async function pushToRemote(
   remote = "origin",
   branch?: string
 ): Promise<void> {
-  await pushToGitRemote(remote, branch);
+  await promptBlockGitSync.pushToRemote(remote, branch);
 }
+
+// Re-export the services for new code
+export { promptBlockGitSync, promptModifierGitSync };

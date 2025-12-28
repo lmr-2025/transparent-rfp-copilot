@@ -5,7 +5,7 @@ import { BookOpen, FolderOpen, LayoutDashboard } from "lucide-react";
 
 export type TabType = "skills" | "sources" | "dashboard";
 
-interface LibraryTabsProps {
+interface KnowledgeTabsProps {
   activeTab: TabType;
   onTabChange: (tab: TabType) => void;
   counts: {
@@ -14,7 +14,7 @@ interface LibraryTabsProps {
   };
 }
 
-export function LibraryTabs({ activeTab, onTabChange, counts }: LibraryTabsProps) {
+export function KnowledgeTabs({ activeTab, onTabChange, counts }: KnowledgeTabsProps) {
   const tabs: { key: TabType; label: string; icon: React.ReactNode; count?: number; description: string }[] = [
     { key: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="h-4 w-4" />, description: "Overview & guide" },
     { key: "skills", label: "Skills", icon: <BookOpen className="h-4 w-4" />, count: counts.skills, description: "Structured knowledge for Q&A" },

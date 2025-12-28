@@ -11,6 +11,9 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  // Connection pooling configuration for 200+ concurrent users
+  // Requires PostgreSQL max_connections >= 150 (default is 100)
+  relationMode = "prisma"
 }
 
 // User roles (legacy - being replaced by capabilities)
@@ -59,6 +62,8 @@ model User {
   ownedUrls           ReferenceUrl[]      @relation("UrlOwner")
   collateralOutputs   CollateralOutput[]
   knowledgeRequests   KnowledgeRequest[]  @relation("KnowledgeRequests")
+  contractReviews     ContractReview[]
+  templates           Template[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt
 }
@@ -165,6 +170,9 @@ model BulkProject {
   @@index([lastModifiedAt])
   @@index([ownerId])
   @@index([customerId])
+  // Composite indexes for scalability with 50+ concurrent users
+  @@index([ownerId, status])
+  @@index([status, createdAt])
 }
 
 model BulkRow {
@@ -238,6 +246,7 @@ model BulkRow {
   @@index([projectId, status])
   @@index([reviewStatus, createdAt])
   @@index([flagResolved, flaggedForReview])
+  @@index([askedById, createdAt])  // For "my questions" queries
 }
 
 enum ProjectStatus {
@@ -806,7 +815,6 @@ model ContractReview {
 
   @@index([status])
   @@index([createdAt])
-  @@index([customerName])
   @@index([customerId])
   @@index([ownerId])
 }
