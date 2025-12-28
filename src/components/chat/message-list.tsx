@@ -69,7 +69,7 @@ function MessageTransparencyDropdown({
             <ChevronDown className="h-3 w-3 ml-0.5" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-80">
+        <DropdownMenuContent align="end" className="w-96 max-w-[calc(100vw-2rem)]">
           {/* Confidence header section */}
           {confidenceBadge && (
             <>
@@ -86,8 +86,8 @@ function MessageTransparencyDropdown({
           {/* Notes section */}
           {notesText && (
             <>
-              <div className="px-3 py-2">
-                <p className="text-xs text-muted-foreground leading-relaxed">
+              <div className="px-3 py-2 max-h-80 overflow-y-auto">
+                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
                   {notesText}
                 </p>
               </div>
