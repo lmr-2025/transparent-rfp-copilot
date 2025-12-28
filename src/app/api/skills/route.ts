@@ -105,7 +105,14 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return apiSuccess({ skills: transformedSkills });
+    // Add HTTP caching for read-heavy endpoint
+    // Skills rarely change, cache for 1 hour publicly
+    const response = apiSuccess({ skills: transformedSkills });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=3600, stale-while-revalidate=7200'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch skills", error, { route: "/api/skills" });
     return errors.internal("Failed to fetch skills");

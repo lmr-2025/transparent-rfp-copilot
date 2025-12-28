@@ -94,7 +94,13 @@ export async function GET(request: NextRequest) {
       documentsWithData = documentsWithData.filter((doc) => doc.categories.includes(category));
     }
 
-    return apiSuccess({ documents: documentsWithData });
+    // Add HTTP caching - documents are fairly stable
+    const response = apiSuccess({ documents: documentsWithData });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=1800, stale-while-revalidate=3600'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch documents", error, { route: "/api/documents" });
     return errors.internal("Failed to fetch documents");

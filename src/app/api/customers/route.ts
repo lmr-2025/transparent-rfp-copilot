@@ -83,7 +83,13 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    return apiSuccess({ profiles });
+    // Add HTTP caching - customers updated more frequently than skills
+    const response = apiSuccess({ profiles });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=900, stale-while-revalidate=1800'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch customer profiles", error, { route: "/api/customers" });
     return errors.internal("Failed to fetch customer profiles");

@@ -27,6 +27,7 @@ const protectedRoutes: Record<string, keyof typeof features> = {
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const start = Date.now();
 
   // Check if this route is feature-flagged
   for (const [route, feature] of Object.entries(protectedRoutes)) {
@@ -40,20 +41,32 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+
+  // Add Server-Timing header for observability
+  const duration = Date.now() - start;
+  response.headers.set('Server-Timing', `middleware;dur=${duration}`);
+
+  // Log slow requests (>500ms) for monitoring
+  if (pathname.startsWith('/api/') && duration > 500) {
+    console.warn(`⚠️ Slow API route: ${pathname} took ${duration}ms`);
+  }
+
+  return response;
 }
 
-// Only run middleware on app routes (not api, static files, etc.)
+// Run middleware on app routes AND API routes for performance monitoring
 export const config = {
   matcher: [
     /*
      * Match all request paths except:
-     * - api (API routes)
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - public folder
+     *
+     * Now includes /api/* for slow query logging
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\..*|_next).*)",
+    "/((?!_next/static|_next/image|favicon.ico|.*\\..*|_next).*)",
   ],
 };

@@ -70,7 +70,13 @@ export async function GET(request: NextRequest) {
       urlsWithData = urlsWithData.filter((url) => url.categories.includes(category));
     }
 
-    return apiSuccess(urlsWithData);
+    // Add HTTP caching - URLs are fairly stable
+    const response = apiSuccess(urlsWithData);
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=1800, stale-while-revalidate=3600'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch reference URLs", error, { route: "/api/reference-urls" });
     return errors.internal("Failed to fetch reference URLs");

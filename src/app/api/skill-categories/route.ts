@@ -29,7 +29,13 @@ export async function GET() {
       });
     }
 
-    return apiSuccess({ categories });
+    // Add HTTP caching - categories are very stable
+    const response = apiSuccess({ categories });
+    response.headers.set(
+      'Cache-Control',
+      'public, s-maxage=3600, stale-while-revalidate=7200'
+    );
+    return response;
   } catch (error) {
     logger.error("Failed to fetch skill categories", error, { route: "/api/skill-categories" });
     return errors.internal("Failed to fetch skill categories");
