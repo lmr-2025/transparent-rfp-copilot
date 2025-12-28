@@ -298,10 +298,13 @@ function AddKnowledgeContent() {
 
   // Fetch coherence analysis for groups with multiple sources (runs in background)
   const fetchCoherenceAnalysis = useCallback(async (groups: SkillGroup[]) => {
-    // Filter: Only analyze groups with 2-5 sources (Option 1)
+    // Filter: Only analyze groups with 2-5 sources for coherence check
+    // But volume analysis runs for all groups (including single-source UPDATE groups)
     const eligibleGroups = groups.filter(g => {
       const sourceCount = (g.urls?.length || 0) + (g.documentIds?.length || 0);
-      return sourceCount >= 2 && sourceCount <= 5;
+      // For coherence: need 2+ sources
+      // For volume: always check (especially UPDATE groups with existing content)
+      return sourceCount >= 2 && sourceCount <= 5 || (g.type === "update" && sourceCount >= 1);
     });
 
     // Run analyses in parallel with max concurrency of 3
@@ -324,6 +327,7 @@ function AddKnowledgeContent() {
           body: JSON.stringify({
             sources,
             groupTitle: group.skillTitle,
+            existingContent: group.type === "update" ? group.originalContent : undefined,
           }),
         });
 

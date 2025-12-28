@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { sources, groupTitle } = body;
+    const { sources, groupTitle, existingContent } = body;
 
     if (!Array.isArray(sources) || sources.length === 0) {
       return errors.badRequest("sources array is required");
@@ -100,8 +100,8 @@ export async function POST(request: NextRequest) {
       return errors.badRequest("groupTitle is required");
     }
 
-    // Skip analysis for single source
-    if (sources.length < 2) {
+    // For single source with no existing content, skip coherence but still check volume
+    if (sources.length < 2 && !existingContent) {
       return apiSuccess({
         coherent: true,
         coherenceLevel: "high" as const,
@@ -154,7 +154,17 @@ export async function POST(request: NextRequest) {
     // Choose analysis strategy based on group size
     let coherenceAnalysis: CoherenceAnalysisResult;
 
-    if (sourceContents.length <= 5) {
+    // Skip coherence analysis for single-source UPDATE groups (only do volume)
+    if (sourceContents.length === 1 && existingContent) {
+      coherenceAnalysis = {
+        coherent: true,
+        coherenceLevel: "high" as const,
+        coherencePercentage: 100,
+        conflicts: [],
+        recommendation: "Single new source - coherence check not applicable",
+        summary: "Adding 1 source to existing skill",
+      };
+    } else if (sourceContents.length <= 5) {
       // Multi-source comparison for small groups
       coherenceAnalysis = await analyzeGroupCoherence(
         sourceContents,
@@ -170,9 +180,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add volume analysis
+    // Add volume analysis (always run for UPDATE groups with existing content)
     try {
-      const volumeAnalysis = await analyzeVolume(sourceContents, groupTitle, auth.session);
+      const volumeAnalysis = await analyzeVolume(
+        sourceContents,
+        groupTitle,
+        auth.session,
+        existingContent
+      );
       coherenceAnalysis.volumeAnalysis = volumeAnalysis;
     } catch (error) {
       logger.warn("Failed to analyze volume during coherence check", { groupTitle, error });
@@ -190,10 +205,13 @@ export async function POST(request: NextRequest) {
 async function analyzeVolume(
   sources: { index: number; label: string; content: string }[],
   groupTitle: string,
-  authSession: { user?: { id?: string; email?: string | null } } | null
+  authSession: { user?: { id?: string; email?: string | null } } | null,
+  existingContent?: string
 ): Promise<VolumeSplitRecommendation> {
-  // Calculate total character count
-  const totalCharacterCount = sources.reduce((sum, s) => sum + s.content.length, 0);
+  // Calculate total character count including existing content
+  const newSourcesSize = sources.reduce((sum, s) => sum + s.content.length, 0);
+  const existingSize = existingContent ? existingContent.length : 0;
+  const totalCharacterCount = newSourcesSize + existingSize;
 
   // Determine volume level
   let volumeLevel: "normal" | "warning" | "critical";
@@ -205,11 +223,20 @@ async function analyzeVolume(
     volumeLevel = "critical";
   }
 
-  // If volume is normal or we don't have enough sources, skip LLM analysis
-  if (volumeLevel === "normal" || sources.length < SKILL_VOLUME.MIN_SOURCES_FOR_SPLIT) {
+  // For UPDATE groups, always analyze if adding sources would push us over threshold
+  // For CREATE groups, need at least MIN_SOURCES_FOR_SPLIT sources
+  const shouldAnalyze = existingContent
+    ? volumeLevel !== "normal" // UPDATE: analyze if we're in warning/critical
+    : volumeLevel !== "normal" && sources.length >= SKILL_VOLUME.MIN_SOURCES_FOR_SPLIT; // CREATE: need enough sources
+
+  if (!shouldAnalyze) {
+    const reason = existingContent
+      ? `Total size including existing skill (${totalCharacterCount.toLocaleString()} chars: ${existingSize.toLocaleString()} existing + ${newSourcesSize.toLocaleString()} new) is within acceptable limits.`
+      : `Total content size (${totalCharacterCount.toLocaleString()} characters) is within acceptable limits for a single skill.`;
+
     return {
       shouldSplit: false,
-      reason: `Total content size (${totalCharacterCount.toLocaleString()} characters) is within acceptable limits for a single skill.`,
+      reason,
       totalCharacterCount,
       volumeLevel,
     };
@@ -227,16 +254,24 @@ async function analyzeVolume(
     .map((s, idx) => `SOURCE ${idx}: ${s.label}\n\n${s.content.slice(0, 2000)}...\n\n${"=".repeat(80)}`)
     .join("\n\n");
 
+  const existingContentSection = existingContent
+    ? `\n\nEXISTING SKILL CONTENT (${existingSize.toLocaleString()} characters):\n${existingContent.slice(0, 3000)}...\n\n${"=".repeat(80)}\n`
+    : "";
+
+  const contextDescription = existingContent
+    ? `This is an UPDATE to an existing skill. The skill currently has ${existingSize.toLocaleString()} characters. Adding ${sources.length} new source(s) (${newSourcesSize.toLocaleString()} chars) would bring the total to ${totalCharacterCount.toLocaleString()} characters.`
+    : `This skill group has ${totalCharacterCount.toLocaleString()} characters of content across ${sources.length} sources.`;
+
   const userPrompt = `SKILL GROUP: "${groupTitle}"
 TOTAL CONTENT SIZE: ${totalCharacterCount.toLocaleString()} characters
-${sources.length} sources
-
-CONTENT PREVIEW:
+${existingContent ? `(${existingSize.toLocaleString()} existing + ${newSourcesSize.toLocaleString()} new from ${sources.length} source(s))` : `${sources.length} sources`}
+${existingContentSection}
+NEW SOURCES TO ADD:
 ${sourcesSection}
 
 ---
 
-This skill group has ${totalCharacterCount.toLocaleString()} characters of content across ${sources.length} sources.
+${contextDescription}
 
 ${volumeLevel === "critical"
   ? `⚠️ CRITICAL: This exceeds ${SKILL_VOLUME.SPLIT_THRESHOLD.toLocaleString()} characters and should likely be split into multiple focused skills.`
@@ -244,11 +279,20 @@ ${volumeLevel === "critical"
 
 Your task: Analyze if this content naturally divides into DISTINCT SUBTOPICS that warrant separate skills.
 
+${existingContent ? `
+IMPORTANT FOR UPDATES:
+- Consider whether the NEW sources add a distinct topic that doesn't fit the existing skill
+- If new sources naturally extend the existing topic, recommend keeping together
+- Only suggest splitting if new content introduces a truly different focus area
+- You can suggest extracting new sources into a separate skill while keeping existing content
+` : ""}
+
 Consider:
 1. Are there 2-3 clear subtopics with minimal overlap?
 2. Would splitting improve clarity and focused learning?
 3. Does each subtopic have sufficient content (>5000 chars) to stand alone?
 4. Are the subtopics distinct enough to justify separate skills?
+${existingContent ? "5. For updates: Do the new sources fit the existing skill's focus, or introduce a new topic?" : ""}
 
 Return a JSON object:
 {
