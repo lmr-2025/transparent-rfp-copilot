@@ -147,7 +147,8 @@ export function useSaveSession() {
         });
         if (!res.ok) throw new Error("Failed to create session");
         const json = await res.json();
-        return parseApiData<{ id: string }>(json);
+        const session = parseApiData<{ id: string }>(json, "session");
+        return { id: session.id };
       }
     },
     onSuccess: () => {
