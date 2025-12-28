@@ -20,7 +20,8 @@
     "export:prompts": "tsx scripts/export-prompts-to-git.ts",
     "sync:prompts": "tsx scripts/sync-prompts-to-db.ts",
     "export:templates": "tsx scripts/export-templates-to-git.ts",
-    "sync:templates": "tsx scripts/sync-templates-to-db.ts"
+    "sync:templates": "tsx scripts/sync-templates-to-db.ts",
+    "db:preflight": "node scripts/db-preflight.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
