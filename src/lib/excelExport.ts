@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { BulkProject, BulkRow } from "@/types/bulkProject";
 
 export type ExportOptions = {
@@ -61,7 +61,13 @@ function calculateStats(rows: BulkRow[]) {
   };
 }
 
-function createSummarySheet(project: BulkProject, stats: ReturnType<typeof calculateStats>): XLSX.WorkSheet {
+async function createSummarySheet(
+  workbook: ExcelJS.Workbook,
+  project: BulkProject,
+  stats: ReturnType<typeof calculateStats>
+): Promise<void> {
+  const worksheet = workbook.addWorksheet("Summary");
+
   const data = [
     ["Project Summary"],
     [],
@@ -97,19 +103,15 @@ function createSummarySheet(project: BulkProject, stats: ReturnType<typeof calcu
     }
   }
 
-  const sheet = XLSX.utils.aoa_to_sheet(data);
+  worksheet.addRows(data);
 
   // Set column widths
-  sheet["!cols"] = [{ wch: 20 }, { wch: 50 }];
+  worksheet.columns = [{ width: 20 }, { width: 50 }];
 
   // Merge title cells
-  sheet["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }, // Project Summary title
-    { s: { r: 9, c: 0 }, e: { r: 9, c: 1 } }, // Completion Statistics title
-    { s: { r: 16, c: 0 }, e: { r: 16, c: 1 } }, // Confidence Breakdown title
-  ];
-
-  return sheet;
+  worksheet.mergeCells("A1:B1"); // Project Summary title
+  worksheet.mergeCells("A10:B10"); // Completion Statistics title
+  worksheet.mergeCells("A17:B17"); // Confidence Breakdown title
 }
 
 // Extract URLs from text and return as array
@@ -130,17 +132,19 @@ function formatSourcesForExcel(sources: string): string {
   return urls.join("\n");
 }
 
-function createResponsesSheet(rows: BulkRow[]): XLSX.WorkSheet {
+async function createResponsesSheet(workbook: ExcelJS.Workbook, rows: BulkRow[]): Promise<void> {
   // Check if we have multiple source tabs
   const uniqueTabs = new Set(rows.map((r) => r.sourceTab).filter(Boolean));
   const hasMultipleTabs = uniqueTabs.size > 1;
+
+  const worksheet = workbook.addWorksheet("Q&A");
 
   // Headers - include Source Tab column only if there are multiple tabs
   const headers = hasMultipleTabs
     ? ["Source Tab", "Row #", "Question", "Answer", "Status", "Confidence", "Reasoning", "Inference", "Sources", "Remarks"]
     : ["Row #", "Question", "Answer", "Status", "Confidence", "Reasoning", "Inference", "Sources", "Remarks"];
 
-  const data = [headers];
+  worksheet.addRow(headers);
 
   // Add rows
   rows.forEach((row) => {
@@ -170,62 +174,64 @@ function createResponsesSheet(rows: BulkRow[]): XLSX.WorkSheet {
           formattedSources,
           row.remarks || "",
         ];
-    data.push(rowData);
+    worksheet.addRow(rowData);
   });
 
-  const sheet = XLSX.utils.aoa_to_sheet(data);
-
   // Add hyperlinks to source URLs
-  const sourcesColIndex = hasMultipleTabs ? 8 : 7; // 0-indexed column for Sources
+  const sourcesColIndex = hasMultipleTabs ? 9 : 8; // 1-indexed column for Sources
   rows.forEach((row, rowIndex) => {
     const urls = extractUrls(row.sources || "");
     if (urls.length > 0) {
-      const cellAddress = XLSX.utils.encode_cell({ r: rowIndex + 1, c: sourcesColIndex }); // +1 for header row
-      const cell = sheet[cellAddress];
-      if (cell) {
-        // For single URL, make the cell itself a hyperlink
-        if (urls.length === 1) {
-          cell.l = { Target: urls[0], Tooltip: "Click to open source" };
-        }
-        // For multiple URLs, add hyperlink to first URL (Excel limitation for cell hyperlinks)
-        // The full list is shown as text with newlines
-        else {
-          cell.l = { Target: urls[0], Tooltip: `Click to open first source (${urls.length} total)` };
-        }
+      const cell = worksheet.getCell(rowIndex + 2, sourcesColIndex); // +2 for header row and 1-indexed
+      // For single URL, make the cell itself a hyperlink
+      if (urls.length === 1) {
+        cell.value = {
+          text: formattedSources,
+          hyperlink: urls[0],
+          tooltip: "Click to open source",
+        };
+      }
+      // For multiple URLs, add hyperlink to first URL
+      else {
+        cell.value = {
+          text: formatSourcesForExcel(row.sources || ""),
+          hyperlink: urls[0],
+          tooltip: `Click to open first source (${urls.length} total)`,
+        };
       }
     }
   });
 
-  // Set column widths - include Source Tab column only if there are multiple tabs
-  sheet["!cols"] = hasMultipleTabs
-    ? [
-        { wch: 15 }, // Source Tab
-        { wch: 8 }, // Row #
-        { wch: 50 }, // Question
-        { wch: 80 }, // Answer
-        { wch: 12 }, // Status
-        { wch: 15 }, // Confidence
-        { wch: 50 }, // Reasoning
-        { wch: 50 }, // Inference
-        { wch: 40 }, // Sources
-        { wch: 40 }, // Remarks
-      ]
-    : [
-        { wch: 8 }, // Row #
-        { wch: 50 }, // Question
-        { wch: 80 }, // Answer
-        { wch: 12 }, // Status
-        { wch: 15 }, // Confidence
-        { wch: 50 }, // Reasoning
-        { wch: 50 }, // Inference
-        { wch: 40 }, // Sources
-        { wch: 40 }, // Remarks
-      ];
+  // Set column widths
+  if (hasMultipleTabs) {
+    worksheet.columns = [
+      { width: 15 }, // Source Tab
+      { width: 8 }, // Row #
+      { width: 50 }, // Question
+      { width: 80 }, // Answer
+      { width: 12 }, // Status
+      { width: 15 }, // Confidence
+      { width: 50 }, // Reasoning
+      { width: 50 }, // Inference
+      { width: 40 }, // Sources
+      { width: 40 }, // Remarks
+    ];
+  } else {
+    worksheet.columns = [
+      { width: 8 }, // Row #
+      { width: 50 }, // Question
+      { width: 80 }, // Answer
+      { width: 12 }, // Status
+      { width: 15 }, // Confidence
+      { width: 50 }, // Reasoning
+      { width: 50 }, // Inference
+      { width: 40 }, // Sources
+      { width: 40 }, // Remarks
+    ];
+  }
 
-  // Set row heights for better readability
-  sheet["!rows"] = [{ hpt: 30 }]; // Header row height
-
-  return sheet;
+  // Set header row height for better readability
+  worksheet.getRow(1).height = 30;
 }
 
 function formatStatus(status: string): string {
@@ -250,7 +256,7 @@ function formatDate(dateString?: string): string {
   });
 }
 
-export function exportProjectToExcel(project: BulkProject, options: ExportOptions = {}): void {
+export async function exportProjectToExcel(project: BulkProject, options: ExportOptions = {}): Promise<void> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
 
   // Filter rows based on options
@@ -260,17 +266,15 @@ export function exportProjectToExcel(project: BulkProject, options: ExportOption
   const stats = calculateStats(project.rows);
 
   // Create workbook
-  const wb = XLSX.utils.book_new();
+  const workbook = new ExcelJS.Workbook();
 
   // Add summary sheet if requested
   if (opts.includeMetadata) {
-    const summarySheet = createSummarySheet(project, stats);
-    XLSX.utils.book_append_sheet(wb, summarySheet, "Summary");
+    await createSummarySheet(workbook, project, stats);
   }
 
   // Add Q&A sheet
-  const qaSheet = createResponsesSheet(filteredRows);
-  XLSX.utils.book_append_sheet(wb, qaSheet, "Q&A");
+  await createResponsesSheet(workbook, filteredRows);
 
   // Generate filename
   const timestamp = new Date().toISOString().split("T")[0];
@@ -279,18 +283,27 @@ export function exportProjectToExcel(project: BulkProject, options: ExportOption
   const filename = `${sanitizedName}${filterSuffix}_${timestamp}.xlsx`;
 
   // Write the file
-  XLSX.writeFile(wb, filename);
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // Export filtered versions for convenience
-export function exportCompletedOnly(project: BulkProject): void {
-  exportProjectToExcel(project, { includeIncomplete: false });
+export function exportCompletedOnly(project: BulkProject): Promise<void> {
+  return exportProjectToExcel(project, { includeIncomplete: false });
 }
 
-export function exportHighConfidenceOnly(project: BulkProject): void {
-  exportProjectToExcel(project, { confidenceFilter: "high" });
+export function exportHighConfidenceOnly(project: BulkProject): Promise<void> {
+  return exportProjectToExcel(project, { confidenceFilter: "high" });
 }
 
-export function exportLowConfidenceOnly(project: BulkProject): void {
-  exportProjectToExcel(project, { confidenceFilter: "low", includeIncomplete: false });
+export function exportLowConfidenceOnly(project: BulkProject): Promise<void> {
+  return exportProjectToExcel(project, { confidenceFilter: "low", includeIncomplete: false });
 }
