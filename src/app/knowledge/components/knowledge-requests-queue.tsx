@@ -324,14 +324,20 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                             variant="default"
                             size="sm"
                             onClick={() => {
-                              console.debug("[BuildSkill] Direct click handler fired");
+                              console.debug("[BuildSkill] Click fired", {
+                                requestId: request.id,
+                                urlsType: typeof request.suggestedUrls,
+                                urlsValue: request.suggestedUrls,
+                                urlsLength: request.suggestedUrls?.length || 0
+                              });
                               handleBuildSkill(request);
                             }}
                             disabled={!request.suggestedUrls || request.suggestedUrls.length === 0}
-                            className="gap-1.5"
+                            className="gap-1.5 pointer-events-auto"
+                            style={{ pointerEvents: "auto" }}
                           >
                             <Sparkles className="h-4 w-4" />
-                            Build Skill
+                            Build Skill ({request.suggestedUrls?.length || 0})
                           </Button>
                           <Button
                             variant="outline"
