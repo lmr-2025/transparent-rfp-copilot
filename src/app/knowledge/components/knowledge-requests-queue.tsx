@@ -131,27 +131,17 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   const handleBuildSkill = (request: KnowledgeRequest) => {
     // Store the request data and redirect to skill builder
     const urls = request.suggestedUrls;
-    console.error("[BuildSkill] 1. Handler called with urls:", urls);
-
     if (!urls || urls.length === 0) {
-      console.error("[BuildSkill] 2a. ERROR: No URLs available!");
       toast.error("No URLs to process");
       return;
     }
 
-    console.error("[BuildSkill] 2b. URLs available, attempting to store...");
     try {
-      console.error("[BuildSkill] 3. Setting sessionStorage.pendingKnowledgeUrls");
       sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
-      console.error("[BuildSkill] 4. Setting sessionStorage.pendingKnowledgeRequestId");
       sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
-      console.error("[BuildSkill] 5. SessionStorage set successfully");
-
-      console.error("[BuildSkill] 6. About to call router.push('/knowledge/add')");
       router.push("/knowledge/add");
-      console.error("[BuildSkill] 7. router.push called (this may not log if navigation happens immediately)");
     } catch (error) {
-      console.error("[BuildSkill] ERROR in try block:", error);
+      console.error("Failed to build skill:", error);
       toast.error("Failed to navigate to skill builder. Please try again.");
     }
   };
@@ -220,16 +210,6 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
             const isExpanded = expandedId === request.id;
             const status = statusConfig[request.status];
 
-            // Debug: log when expanded
-            if (isExpanded) {
-              console.debug(`[KnowledgeRequestsQueue] Expanded request:`, {
-                id: request.id,
-                status: request.status,
-                urlCount: request.suggestedUrls.length,
-                urls: request.suggestedUrls,
-                canManage,
-              });
-            }
 
             return (
               <Card key={request.id} className={cn(isExpanded && "ring-2 ring-primary")}>
@@ -330,20 +310,11 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => {
-                              console.error("[BuildSkill] ===== CLICK HANDLER FIRED =====");
-                              console.debug("[BuildSkill] Click fired", {
-                                requestId: request.id,
-                                urlsType: typeof request.suggestedUrls,
-                                urlsValue: request.suggestedUrls,
-                                urlsLength: request.suggestedUrls?.length || 0
-                              });
-                              handleBuildSkill(request);
-                            }}
+                            onClick={() => handleBuildSkill(request)}
                             className="gap-1.5"
                           >
                             <Sparkles className="h-4 w-4" />
-                            Build Skill ({request.suggestedUrls?.length || 0})
+                            Build Skill
                           </Button>
                           <Button
                             variant="outline"
@@ -375,14 +346,11 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => {
-                            console.error("[BuildSkill-Approved] ===== CLICK HANDLER FIRED =====");
-                            handleBuildSkill(request);
-                          }}
+                          onClick={() => handleBuildSkill(request)}
                           className="gap-1.5"
                         >
                           <Sparkles className="h-4 w-4" />
-                          Build Skill from URLs ({request.suggestedUrls?.length || 0})
+                          Build Skill from URLs
                         </Button>
                       </div>
                     )}
