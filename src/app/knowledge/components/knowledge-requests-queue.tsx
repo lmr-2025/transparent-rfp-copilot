@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Clock,
@@ -68,6 +69,7 @@ function formatRelativeTime(dateStr: string): string {
 }
 
 export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProps) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("PENDING");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
@@ -136,7 +138,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
         sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
         sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
         console.debug("[BuildSkill] Session storage set, navigating...");
-        window.location.href = "/knowledge/add";
+        router.push("/knowledge/add");
       } catch (error) {
         console.error("[BuildSkill] Error storing data or navigating:", error);
         toast.error("Failed to navigate to skill builder. Please try again.");
@@ -210,6 +212,17 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
           {requests.map((request) => {
             const isExpanded = expandedId === request.id;
             const status = statusConfig[request.status];
+
+            // Debug: log when expanded
+            if (isExpanded) {
+              console.debug(`[KnowledgeRequestsQueue] Expanded request:`, {
+                id: request.id,
+                status: request.status,
+                urlCount: request.suggestedUrls.length,
+                urls: request.suggestedUrls,
+                canManage,
+              });
+            }
 
             return (
               <Card key={request.id} className={cn(isExpanded && "ring-2 ring-primary")}>
