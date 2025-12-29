@@ -323,8 +323,11 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                           <Button
                             variant="default"
                             size="sm"
-                            onClick={() => handleBuildSkill(request)}
-                            disabled={request.suggestedUrls.length === 0}
+                            onClick={() => {
+                              console.debug("[BuildSkill] Direct click handler fired");
+                              handleBuildSkill(request);
+                            }}
+                            disabled={!request.suggestedUrls || request.suggestedUrls.length === 0}
                             className="gap-1.5"
                           >
                             <Sparkles className="h-4 w-4" />
