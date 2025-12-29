@@ -324,6 +324,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                             variant="default"
                             size="sm"
                             onClick={() => {
+                              console.error("[BuildSkill] ===== CLICK HANDLER FIRED =====");
                               console.debug("[BuildSkill] Click fired", {
                                 requestId: request.id,
                                 urlsType: typeof request.suggestedUrls,
@@ -332,9 +333,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                               });
                               handleBuildSkill(request);
                             }}
-                            disabled={!request.suggestedUrls || request.suggestedUrls.length === 0}
-                            className="gap-1.5 pointer-events-auto"
-                            style={{ pointerEvents: "auto" }}
+                            className="gap-1.5"
                           >
                             <Sparkles className="h-4 w-4" />
                             Build Skill ({request.suggestedUrls?.length || 0})
@@ -369,12 +368,14 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleBuildSkill(request)}
-                          disabled={request.suggestedUrls.length === 0}
+                          onClick={() => {
+                            console.error("[BuildSkill-Approved] ===== CLICK HANDLER FIRED =====");
+                            handleBuildSkill(request);
+                          }}
                           className="gap-1.5"
                         >
                           <Sparkles className="h-4 w-4" />
-                          Build Skill from URLs
+                          Build Skill from URLs ({request.suggestedUrls?.length || 0})
                         </Button>
                       </div>
                     )}
