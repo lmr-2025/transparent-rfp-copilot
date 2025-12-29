@@ -2,11 +2,13 @@
 
 import { useEffect, useState, useRef, Suspense, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { loadSkillsFromStorage, loadSkillsFromApi, createSkillViaApi, updateSkillViaApi } from "@/lib/skillStorage";
 import { parseApiData, getApiErrorMessage } from "@/lib/apiClient";
 import { Skill, SourceUrl, SkillHistoryEntry } from "@/types/skill";
 import { useCategories } from "@/hooks/use-knowledge";
+import { canManageKnowledge, type UserSession } from "@/lib/permissions";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import { usePrompt, useTextareaPrompt } from "@/components/ConfirmModal";
 import {
@@ -26,10 +28,15 @@ import {
   ProcessingIndicator,
   styles,
 } from "./components";
+import { KnowledgeRequestsQueue } from "../components/knowledge-requests-queue";
 
 function AddKnowledgeContent() {
   const searchParams = useSearchParams();
   const docIdParam = searchParams.get("docId");
+  const { data: session } = useSession();
+
+  // Check if user can manage knowledge (view/process requests)
+  const userCanManageKnowledge = canManageKnowledge(session?.user as UserSession | undefined);
 
   // Local state for skills (fetched from API)
   const [skills, setSkills] = useState<Skill[]>(() => loadSkillsFromStorage());
@@ -858,6 +865,14 @@ function AddKnowledgeContent() {
     <div style={styles.container}>
       <PromptDialog />
       <TextareaPromptDialog />
+
+      {/* Knowledge Requests Queue - shown to managers at the top */}
+      {userCanManageKnowledge && (
+        <div style={{ marginBottom: "32px" }}>
+          <KnowledgeRequestsQueue canManage={true} />
+        </div>
+      )}
+
       <h1 style={{ marginBottom: "8px" }}>Add Knowledge</h1>
       <p style={{ color: "#475569", marginBottom: "24px" }}>
         Add documentation URLs or upload files. The AI will analyze your sources and suggest skills to create or update.

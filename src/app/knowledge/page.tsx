@@ -747,7 +747,11 @@ function KnowledgeLibraryContent() {
 
       {/* Tabs */}
       <div className="mb-6">
-        <KnowledgeTabs activeTab={activeTab} onTabChange={handleTabChange} counts={counts} />
+        <KnowledgeTabs
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+          counts={counts}
+        />
       </div>
 
       {/* Dashboard Tab Content */}
@@ -756,7 +760,7 @@ function KnowledgeLibraryContent() {
       )}
 
       {/* Skills and Sources Tab Content */}
-      {activeTab !== "dashboard" && (
+      {(activeTab === "skills" || activeTab === "sources") && (
         <>
       {/* Search and Filter */}
       <div className="flex gap-3 mb-6">

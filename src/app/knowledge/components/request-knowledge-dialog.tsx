@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Lightbulb, Plus, Link } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
@@ -20,19 +20,37 @@ import { toast } from "sonner";
 interface RequestKnowledgeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Pre-populate URLs (e.g., from detected URLs in chat) */
+  initialUrls?: string[];
 }
 
 export function RequestKnowledgeDialog({
   open,
   onOpenChange,
+  initialUrls = [],
 }: RequestKnowledgeDialogProps) {
   const { data: allCategories = [] } = useCategories();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [urls, setUrls] = useState<string[]>([]);
+  const [urls, setUrls] = useState<string[]>(initialUrls);
   const [newUrl, setNewUrl] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update URLs and auto-fill title/description when initialUrls changes
+  useEffect(() => {
+    if (initialUrls.length > 0) {
+      setUrls(initialUrls);
+      // Auto-generate title and description for quick submission
+      if (!title) {
+        const urlCount = initialUrls.length;
+        setTitle(`Add ${urlCount} URL${urlCount > 1 ? "s" : ""} to knowledge base`);
+      }
+      if (!description) {
+        setDescription("These sources would be helpful to have in the knowledge base for answering customer questions.");
+      }
+    }
+  }, [initialUrls, title, description]);
 
   // Toggle category selection
   const toggleCategory = (categoryName: string) => {
@@ -121,7 +139,7 @@ export function RequestKnowledgeDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lightbulb className="h-5 w-5 text-amber-500" />
@@ -188,10 +206,33 @@ export function RequestKnowledgeDialog({
 
           {/* URLs */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Helpful URLs (optional)</label>
-            <p className="text-xs text-muted-foreground">
-              Add URLs that could help build this knowledge
-            </p>
+            <label className="text-sm font-medium">
+              Helpful URLs {urls.length === 0 && "(optional)"}
+            </label>
+            {urls.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                {urls.length} URL{urls.length > 1 ? "s" : ""} will be included with this request
+              </p>
+            )}
+            {urls.length > 0 && (
+              <div className="space-y-1.5">
+                {urls.map((url) => (
+                  <div
+                    key={url}
+                    className="flex items-start gap-2 bg-muted/50 rounded px-2.5 py-1.5 text-sm group"
+                  >
+                    <Link className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
+                    <span className="flex-1 break-all text-xs">{url}</span>
+                    <button
+                      onClick={() => removeUrl(url)}
+                      className="text-muted-foreground hover:text-foreground p-0.5 opacity-50 group-hover:opacity-100"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
             <div className="flex gap-2">
               <Input
                 placeholder="https://example.com/resource"
@@ -203,6 +244,7 @@ export function RequestKnowledgeDialog({
                     addUrl();
                   }
                 }}
+                className="text-sm"
               />
               <Button
                 type="button"
@@ -214,24 +256,10 @@ export function RequestKnowledgeDialog({
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
-            {urls.length > 0 && (
-              <div className="space-y-1 mt-2">
-                {urls.map((url) => (
-                  <div
-                    key={url}
-                    className="flex items-center gap-2 bg-muted/50 rounded px-2 py-1 text-sm"
-                  >
-                    <Link className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-                    <span className="truncate flex-1">{url}</span>
-                    <button
-                      onClick={() => removeUrl(url)}
-                      className="text-muted-foreground hover:text-foreground p-0.5"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-              </div>
+            {urls.length === 0 && (
+              <p className="text-xs text-muted-foreground">
+                Add URLs that could help build this knowledge
+              </p>
             )}
           </div>
         </div>
