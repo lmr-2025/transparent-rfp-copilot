@@ -18,6 +18,15 @@ export async function GET(
 
     const chatSession = await prisma.chatSession.findFirst({
       where: userId ? { id, userId } : { id },
+      include: {
+        customers: {
+          include: {
+            customer: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
     });
 
     if (!chatSession) {
@@ -61,9 +70,64 @@ export async function PUT(
     if (customersUsed !== undefined) updateData.customersUsed = customersUsed;
     if (urlsUsed !== undefined) updateData.urlsUsed = urlsUsed;
 
+    // If customers are being updated, sync the join table
+    if (customersUsed !== undefined) {
+      const customerIds: string[] = Array.isArray(customersUsed)
+        ? customersUsed
+            .filter((c: { id?: string }) => c && c.id)
+            .map((c: { id: string }) => c.id)
+        : [];
+
+      // Use transaction to update both JSON and join table atomically
+      const updated = await prisma.$transaction(async (tx) => {
+        // Delete existing customer links
+        await tx.chatSessionCustomer.deleteMany({
+          where: { chatSessionId: id },
+        });
+
+        // Create new customer links
+        if (customerIds.length > 0) {
+          await tx.chatSessionCustomer.createMany({
+            data: customerIds.map((customerId) => ({
+              chatSessionId: id,
+              customerId,
+            })),
+            skipDuplicates: true,
+          });
+        }
+
+        // Update the session itself
+        return tx.chatSession.update({
+          where: { id },
+          data: updateData,
+          include: {
+            customers: {
+              include: {
+                customer: {
+                  select: { id: true, name: true },
+                },
+              },
+            },
+          },
+        });
+      });
+
+      return apiSuccess({ session: updated });
+    }
+
+    // Simple update without customer changes
     const updated = await prisma.chatSession.update({
       where: { id },
       data: updateData,
+      include: {
+        customers: {
+          include: {
+            customer: {
+              select: { id: true, name: true },
+            },
+          },
+        },
+      },
     });
 
     return apiSuccess({ session: updated });

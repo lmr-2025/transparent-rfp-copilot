@@ -346,6 +346,7 @@ model CustomerProfile {
   documents         CustomerDocument[]
   collateralOutputs CollateralOutput[]
   contractReviews   ContractReview[] @relation("ContractCustomer") // Contracts for this customer
+  chatSessions      ChatSessionCustomer[] @relation("ChatCustomers")  // Chats involving this customer
 
   @@unique([name])
   @@index([isActive, updatedAt])
@@ -940,15 +941,32 @@ model ChatSession {
   messages        Json     // Array of {id, role, content, timestamp, skillsUsed?, documentsUsed?, urlsUsed?, customersUsed?}
   skillsUsed      Json?    // Skills selected for this session
   documentsUsed   Json?    // Documents selected
-  customersUsed   Json?    // Customer profiles selected
+  customersUsed   Json?    // @deprecated - Use customers relation instead. Kept for migration only.
   urlsUsed        Json?    // Reference URLs selected
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customers       ChatSessionCustomer[]  // Proper many-to-many relation to CustomerProfile
 
   @@index([userId, updatedAt])
   @@index([createdAt])
+}
+
+// ChatSessionCustomer - Join table for ChatSession <-> CustomerProfile (many-to-many)
+// Replaces the JSON customersUsed field for scalable queries like "all chats for customer X"
+model ChatSessionCustomer {
+  id            String          @id @default(cuid())
+  chatSessionId String
+  customerId    String
+  addedAt       DateTime        @default(now())
+
+  chatSession   ChatSession     @relation(fields: [chatSessionId], references: [id], onDelete: Cascade)
+  customer      CustomerProfile @relation("ChatCustomers", fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([chatSessionId, customerId])
+  @@index([customerId])
+  @@index([chatSessionId])
 }
 
 // API Usage Tracking - logs token usage and costs per API call

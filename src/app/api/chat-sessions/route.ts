@@ -30,10 +30,18 @@ export async function GET(request: NextRequest) {
         messages: true,
         skillsUsed: true,
         documentsUsed: true,
-        customersUsed: true,
+        customersUsed: true, // Deprecated - kept for backwards compatibility
         urlsUsed: true,
         createdAt: true,
         updatedAt: true,
+        // Include proper relation data
+        customers: {
+          include: {
+            customer: {
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     });
 
@@ -65,6 +73,13 @@ export async function POST(request: NextRequest) {
     // Auto-generate title from first user message if not provided
     const autoTitle = title || messages.find((m: { role: string }) => m.role === "user")?.content?.slice(0, 100) || "New Chat";
 
+    // Extract customer IDs for the join table relation
+    const customerIds: string[] = Array.isArray(customersUsed)
+      ? customersUsed
+          .filter((c: { id?: string }) => c && c.id)
+          .map((c: { id: string }) => c.id)
+      : [];
+
     const chatSession = await prisma.chatSession.create({
       data: {
         userId: userId || null,
@@ -73,8 +88,23 @@ export async function POST(request: NextRequest) {
         messages,
         skillsUsed: skillsUsed || null,
         documentsUsed: documentsUsed || null,
-        customersUsed: customersUsed || null,
+        customersUsed: customersUsed || null, // Keep for backwards compatibility (deprecated)
         urlsUsed: urlsUsed || null,
+        // Create ChatSessionCustomer join table entries
+        customers: customerIds.length > 0 ? {
+          create: customerIds.map((customerId) => ({
+            customerId,
+          })),
+        } : undefined,
+      },
+      include: {
+        customers: {
+          include: {
+            customer: {
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     });
 
