@@ -28,6 +28,7 @@ import { STORAGE_KEYS, DEFAULTS } from "@/lib/constants";
 const TransparencyModal = lazy(() => import("@/components/chat/transparency-modal").then(m => ({ default: m.TransparencyModal })));
 const CollapsibleKnowledgeSidebar = lazy(() => import("./components/collapsible-knowledge-sidebar").then(m => ({ default: m.CollapsibleKnowledgeSidebar })));
 const DetectedUrlsPanel = lazy(() => import("@/components/chat/detected-urls-panel").then(m => ({ default: m.DetectedUrlsPanel })));
+const RequestKnowledgeDialogWithUrls = lazy(() => import("@/app/knowledge/components/request-knowledge-dialog").then(m => ({ default: m.RequestKnowledgeDialog })));
 import { CLAUDE_MODEL } from "@/lib/config";
 import { getDefaultPrompt } from "@/lib/promptBlocks";
 import { parseAnswerSections } from "@/lib/questionHelpers";
@@ -45,12 +46,15 @@ export default function ChatV2Page() {
   const [showHistory, setShowHistory] = useState(false);
   const [showTransparency, setShowTransparency] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [feedbackSessionId, setFeedbackSessionId] = useState<string | null>(null);
   const [transparencyData, setTransparencyData] = useState<TransparencyData | null>(null);
   const [lastTransparency, setLastTransparency] = useState<TransparencyData | null>(null);
   // Quick mode for faster LLM responses (Haiku vs Sonnet)
   const [quickMode, setQuickMode] = useState(false);
   // Call mode for concise, rapid-fire responses during live calls
   const [callMode, setCallMode] = useState(false);
+  // Web search mode for real-time information beyond knowledge base
+  const [webSearch, setWebSearch] = useState(false);
 
   // V2 specific state
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -380,6 +384,7 @@ ${keyFactsText}`;
         userInstructions,
         quickMode,
         callMode, // Send as separate flag - API handles positioning at end of prompt
+        webSearch, // Enable real-time web search for current information
       });
 
       // Parse the response to extract transparency metadata
@@ -394,6 +399,7 @@ ${keyFactsText}`;
         customersUsed: response.customersUsed,
         documentsUsed: response.documentsUsed,
         urlsUsed: response.urlsUsed,
+        webSearchSources: response.webSearchSources,
         ...(parsed.confidence && { confidence: parsed.confidence }),
         ...(parsed.sources && { sources: parsed.sources }),
         ...(parsed.reasoning && { reasoning: parsed.reasoning }),
@@ -421,6 +427,7 @@ ${keyFactsText}`;
           timestamp: m.timestamp.toISOString(),
           confidence: m.confidence,
           notes: m.notes,
+          webSearchSources: m.webSearchSources,
         })),
         skillsUsed: response.skillsUsed || [],
         documentsUsed: response.documentsUsed || [],
@@ -465,6 +472,48 @@ ${keyFactsText}`;
     refetchSessions,
   ]);
 
+  const handleEndChat = async () => {
+    // Save session before showing feedback modal if not already saved
+    let sessionIdForFeedback = currentSessionId;
+    if (!currentSessionId && messages.length > 0) {
+      try {
+        const selectedSkillIds = getSelectedSkillIds();
+        const selectedUrlIds = getSelectedUrlIds();
+        const selectedCustomerIds = getSelectedCustomerIds();
+
+        const result = await saveSessionMutation.mutateAsync({
+          sessionId: null,
+          messages: messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+            timestamp: m.timestamp.toISOString(),
+            confidence: m.confidence,
+            notes: m.notes,
+            webSearchSources: m.webSearchSources,
+          })),
+          skillsUsed: skills
+            .filter((s) => selectedSkillIds.includes(s.id))
+            .map((s) => ({ id: s.id, title: s.title })),
+          documentsUsed: [], // Documents come from skills, not separate selection
+          customersUsed: customers
+            .filter((c) => selectedCustomerIds.includes(c.id))
+            .map((c) => ({ id: c.id, name: c.name })),
+          urlsUsed: urls
+            .filter((u) => selectedUrlIds.includes(u.id))
+            .map((u) => ({ id: u.id, title: u.title || u.url })),
+        });
+        if (result?.id) {
+          sessionIdForFeedback = result.id;
+          setCurrentSessionId(result.id);
+        }
+      } catch (error) {
+        console.error("Failed to save session before feedback:", error);
+      }
+    }
+    setFeedbackSessionId(sessionIdForFeedback);
+    setShowFeedback(true);
+  };
+
   const handleNewChat = () => {
     clearChat();
     setCurrentSessionId(null);
@@ -475,24 +524,15 @@ ${keyFactsText}`;
     // setDetectedUrls([]);
   };
 
-  // Handle adding detected URLs to knowledge base
-  const handleAddUrlsToKnowledge = useCallback(async (urlsToAdd: string[]) => {
-    try {
-      // Call API to add URLs as reference URLs in knowledge base
-      const promises = urlsToAdd.map(async (url) => {
-        const res = await fetch("/api/reference-urls", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        if (!res.ok) throw new Error(`Failed to add ${url}`);
-      });
-      await Promise.all(promises);
-      toast.success(`Added ${urlsToAdd.length} URL(s) to knowledge base`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to add URLs");
-      throw err;
-    }
+  // State for knowledge request dialog
+  const [showRequestKnowledge, setShowRequestKnowledge] = useState(false);
+  const [pendingUrlsForRequest, setPendingUrlsForRequest] = useState<string[]>([]);
+
+  // Handle adding detected URLs to knowledge base - opens request dialog
+  const handleAddUrlsToKnowledge = useCallback(async (urlsToAdd: { url: string; title: string }[]) => {
+    // Store the URLs and open the request dialog
+    setPendingUrlsForRequest(urlsToAdd.map(u => u.url));
+    setShowRequestKnowledge(true);
   }, []);
 
   // Handle adding detected URLs to customer profile
@@ -538,6 +578,7 @@ ${keyFactsText}`;
       timestamp: m.timestamp ? new Date(m.timestamp) : new Date(),
       confidence: m.confidence,
       notes: m.notes,
+      webSearchSources: m.webSearchSources,
     }));
     setMessages(loadedMessages);
     setCurrentSessionId(sessionItem.id);
@@ -672,7 +713,7 @@ ${keyFactsText}`;
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setShowFeedback(true)}
+                onClick={handleEndChat}
                 className="gap-2"
               >
                 <MessageSquareOff className="h-4 w-4" />
@@ -710,7 +751,13 @@ ${keyFactsText}`;
         <div className="relative flex-1 min-h-0 overflow-hidden">
           <MessageList
             messages={messages}
+            sessionId={currentSessionId}
             onViewTransparency={handleViewTransparency}
+            onRequestAddToKnowledge={handleAddUrlsToKnowledge}
+            onRequestKnowledge={() => {
+              setPendingUrlsForRequest([]);
+              setShowRequestKnowledge(true);
+            }}
           />
 
           {/* Chat History Panel - positioned inside relative container */}
@@ -741,6 +788,8 @@ ${keyFactsText}`;
           }
           quickMode={quickMode}
           onQuickModeChange={setQuickMode}
+          webSearch={webSearch}
+          onWebSearchChange={setWebSearch}
           leftContent={
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>
@@ -861,7 +910,7 @@ ${keyFactsText}`;
       {/* Chat Feedback Modal */}
       <ChatFeedbackModal
         isOpen={showFeedback}
-        sessionId={currentSessionId}
+        sessionId={feedbackSessionId}
         messageCount={messages.length}
         onClose={() => setShowFeedback(false)}
         onSubmitAndNewChat={() => {
@@ -870,6 +919,24 @@ ${keyFactsText}`;
           handleNewChat();
         }}
       />
+
+      {/* Request Knowledge Dialog - for adding detected URLs to knowledge base */}
+      <Suspense fallback={null}>
+        <RequestKnowledgeDialogWithUrls
+          open={showRequestKnowledge}
+          onOpenChange={(open) => {
+            setShowRequestKnowledge(open);
+            if (!open) {
+              // Clear pending URLs and remove them from detected list on close
+              pendingUrlsForRequest.forEach(url => {
+                setDetectedUrls(prev => prev.filter(u => u.url !== url));
+              });
+              setPendingUrlsForRequest([]);
+            }
+          }}
+          initialUrls={pendingUrlsForRequest}
+        />
+      </Suspense>
     </div>
   );
 }

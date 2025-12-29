@@ -12,6 +12,7 @@ export type ChatMessage = {
   documentsUsed?: { id: string; title: string }[];
   customersUsed?: { id: string; name: string }[];
   urlsUsed?: { id: string; title: string }[];
+  webSearchSources?: { url: string; title: string; citedText?: string }[];
   systemPrompt?: string;
   model?: string;
   // Response transparency metadata (parsed from LLM response)

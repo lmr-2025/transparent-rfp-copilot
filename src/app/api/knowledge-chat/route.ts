@@ -38,6 +38,7 @@ type ChatResponse = {
   documentsUsed: { id: string; title: string }[];
   urlsUsed: { id: string; title: string }[];
   contextTruncated?: boolean; // True if context was truncated to fit limits
+  webSearchSources?: { url: string; title: string; citedText?: string }[]; // Sources from web search
   // Transparency data
   transparency: {
     systemPrompt: string;
@@ -48,6 +49,8 @@ type ChatResponse = {
     urlContext: string;
     gtmContext?: string; // GTM data from Snowflake (Gong, HubSpot, Looker)
     nativePdfDocuments?: string[]; // PDFs sent directly to Claude (not as extracted text)
+    webSearchEnabled?: boolean; // Whether web search was enabled for this request
+    webSearchCount?: number; // Number of web searches performed
     model: string;
     maxTokens: number;
     temperature: number;
@@ -89,6 +92,7 @@ export async function POST(request: NextRequest) {
   const quickMode = data.quickMode;
   const callMode = data.callMode;
   const gtmData = data.gtmData;
+  const webSearch = data.webSearch;
 
   // Determine model speed (request override > user preference > system default)
   const speed = getEffectiveSpeed("chat", quickMode);
@@ -434,20 +438,59 @@ DO NOT write paragraphs. DO NOT explain context. Answer and STOP.`);
       messages.push({ role: "user", content: message });
     }
 
+    // Build tools array if web search is enabled
+    const tools: Array<{ type: string; name: string; max_uses?: number }> = [];
+    if (webSearch) {
+      tools.push({
+        type: "web_search_20250305",
+        name: "web_search",
+        max_uses: 3, // Limit searches per request to control costs
+      });
+    }
+
     const response = await anthropic.messages.create({
       model,
       max_tokens: 4000,
       temperature: 0.3,
       system: systemContent, // Uses cached content blocks when above token threshold
       messages: messages as Parameters<typeof anthropic.messages.create>[0]["messages"],
+      ...(tools.length > 0 && { tools: tools as Parameters<typeof anthropic.messages.create>[0]["tools"] }),
     });
 
-    const content = response.content[0];
-    if (content.type !== "text") {
-      throw new Error("Unexpected response format");
+    // Extract text content and web search citations from response
+    // Web search responses contain multiple content blocks: text, server_tool_use, web_search_tool_result
+    let responseText = "";
+    const webSearchSources: Array<{ url: string; title: string; citedText?: string }> = [];
+    let webSearchCount = 0;
+
+    for (const block of response.content) {
+      if (block.type === "text") {
+        responseText += block.text;
+        // Extract citations from text blocks if present
+        if ("citations" in block && Array.isArray(block.citations)) {
+          for (const citation of block.citations) {
+            if (citation.type === "web_search_result_location") {
+              const existing = webSearchSources.find(s => s.url === citation.url);
+              if (!existing) {
+                webSearchSources.push({
+                  url: citation.url,
+                  title: citation.title || citation.url,
+                  citedText: citation.cited_text,
+                });
+              }
+            }
+          }
+        }
+      } else if (block.type === "server_tool_use" && block.name === "web_search") {
+        webSearchCount++;
+      }
     }
 
-    // Log usage asynchronously (including cache metrics for cost tracking)
+    if (!responseText.trim()) {
+      throw new Error("Unexpected response format - no text content");
+    }
+
+    // Log usage asynchronously (including cache metrics and web search for cost tracking)
     logUsage({
       userId: authSession?.user?.id,
       userEmail: authSession?.user?.email,
@@ -468,47 +511,50 @@ DO NOT write paragraphs. DO NOT explain context. Answer and STOP.`);
         hasGtmData: !!gtmData,
         gtmGongCallCount: gtmData?.gongCalls?.length || 0,
         gtmHubSpotActivityCount: gtmData?.hubspotActivities?.length || 0,
+        webSearchEnabled: webSearch || false,
+        webSearchCount,
       },
     });
 
     // Determine which skills were likely used (simple heuristic: check if skill title is mentioned in response)
     const skillsUsed = skills
       .filter(skill =>
-        content.text.toLowerCase().includes(skill.title.toLowerCase())
+        responseText.toLowerCase().includes(skill.title.toLowerCase())
       )
       .map(skill => ({ id: skill.id, title: skill.title }));
 
     // Determine which customer profiles were likely used
     const customersUsed = customerProfiles
       .filter(profile =>
-        content.text.toLowerCase().includes(profile.name.toLowerCase()) ||
-        (profile.industry && content.text.toLowerCase().includes(profile.industry.toLowerCase()))
+        responseText.toLowerCase().includes(profile.name.toLowerCase()) ||
+        (profile.industry && responseText.toLowerCase().includes(profile.industry.toLowerCase()))
       )
       .map(profile => ({ id: profile.id, name: profile.name }));
 
     // Determine which documents were likely used
     const documentsUsed = documents
       .filter(doc =>
-        content.text.toLowerCase().includes(doc.title.toLowerCase()) ||
-        content.text.toLowerCase().includes(doc.filename.toLowerCase())
+        responseText.toLowerCase().includes(doc.title.toLowerCase()) ||
+        responseText.toLowerCase().includes(doc.filename.toLowerCase())
       )
       .map(doc => ({ id: doc.id, title: doc.title }));
 
     // Determine which URLs were likely used
     const urlsUsed = referenceUrls
       .filter(url =>
-        content.text.toLowerCase().includes(url.title.toLowerCase()) ||
-        content.text.toLowerCase().includes(url.url.toLowerCase())
+        responseText.toLowerCase().includes(url.title.toLowerCase()) ||
+        responseText.toLowerCase().includes(url.url.toLowerCase())
       )
       .map(url => ({ id: url.id, title: url.title }));
 
     const result: ChatResponse = {
-      response: content.text,
+      response: responseText,
       skillsUsed,
       customersUsed,
       documentsUsed,
       urlsUsed,
       contextTruncated,
+      webSearchSources: webSearchSources.length > 0 ? webSearchSources : undefined,
       transparency: {
         systemPrompt,
         baseSystemPrompt,
@@ -518,6 +564,8 @@ DO NOT write paragraphs. DO NOT explain context. Answer and STOP.`);
         urlContext,
         gtmContext: gtmContext || undefined,
         nativePdfDocuments: pdfDocuments.length > 0 ? pdfDocuments.map(d => d.title) : undefined,
+        webSearchEnabled: webSearch || false,
+        webSearchCount,
         model,
         maxTokens: 4000,
         temperature: 0.3,

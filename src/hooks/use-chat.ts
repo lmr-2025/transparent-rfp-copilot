@@ -12,7 +12,14 @@ export interface ChatSessionItem {
   id: string;
   createdAt: string;
   updatedAt: string;
-  messages?: { role: string; content: string; timestamp?: string; confidence?: string; notes?: string }[];
+  messages?: {
+    role: string;
+    content: string;
+    timestamp?: string;
+    confidence?: string;
+    notes?: string;
+    webSearchSources?: { url: string; title: string; citedText?: string }[];
+  }[];
   skillsUsed?: { id: string; title: string }[];
   documentsUsed?: { id: string; title: string }[];
   customersUsed?: { id: string; name: string }[];
@@ -61,6 +68,7 @@ type SendMessageParams = {
   userInstructions: string;
   quickMode?: boolean; // Use Haiku for faster responses
   callMode?: boolean; // Ultra-brief responses for live customer calls
+  webSearch?: boolean; // Enable real-time web search for current information
 };
 
 type SendMessageResponse = {
@@ -69,6 +77,7 @@ type SendMessageResponse = {
   customersUsed?: { id: string; name: string }[];
   documentsUsed?: { id: string; title: string }[];
   urlsUsed?: { id: string; title: string }[];
+  webSearchSources?: { url: string; title: string; citedText?: string }[];
   contextTruncated?: boolean;
   transparency?: {
     systemPrompt: string;

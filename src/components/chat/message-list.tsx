@@ -1,15 +1,8 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { User, Bot, Eye, ChevronDown, CheckCircle2, AlertCircle, HelpCircle, XCircle } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
+import { User, Bot, Eye, ChevronDown, ChevronUp, CheckCircle2, AlertCircle, HelpCircle, XCircle, Globe, ExternalLink, Lightbulb } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import type { ChatMessage } from "@/stores/chat-store";
@@ -31,76 +24,167 @@ function getConfidenceBadge(confidence: string | undefined) {
   return { icon: HelpCircle, color: "text-blue-600", bg: "bg-blue-50", border: "border-blue-200", label: confidence };
 }
 
-// Transparency dropdown component for message footer
-function MessageTransparencyDropdown({
+// Inline expandable transparency section for message footer
+function MessageTransparencySection({
   message,
   onViewFullPrompt,
+  onRequestAddToKnowledge,
+  onRequestKnowledge,
 }: {
   message: ChatMessage;
   onViewFullPrompt: () => void;
+  onRequestAddToKnowledge?: (urls: { url: string; title: string }[]) => void;
+  onRequestKnowledge?: () => void;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const confidenceBadge = getConfidenceBadge(message.confidence);
   // Use notes (new format) or fall back to reasoning (old format)
   const notesText = message.notes || message.reasoning || null;
+  const hasWebSources = message.webSearchSources && message.webSearchSources.length > 0;
 
   return (
     <div className="mt-3">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
-          >
-            {confidenceBadge ? (
-              <>
-                <confidenceBadge.icon className={`h-3.5 w-3.5 ${confidenceBadge.color}`} />
-                <span className="font-medium">Confidence:</span>
-                <span className={`font-medium ${confidenceBadge.color}`}>
-                  {confidenceBadge.label}
-                </span>
-              </>
-            ) : (
-              <>
-                <Eye className="h-3 w-3" />
-                <span>Transparency</span>
-              </>
-            )}
-            <ChevronDown className="h-3 w-3 ml-0.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-96 max-w-[calc(100vw-2rem)]">
+      {/* Toggle button */}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground"
+      >
+        {confidenceBadge ? (
+          <>
+            <confidenceBadge.icon className={`h-3.5 w-3.5 ${confidenceBadge.color}`} />
+            <span className="font-medium">Confidence:</span>
+            <span className={`font-medium ${confidenceBadge.color}`}>
+              {confidenceBadge.label}
+            </span>
+          </>
+        ) : (
+          <>
+            <Eye className="h-3 w-3" />
+            <span>Transparency</span>
+          </>
+        )}
+        {hasWebSources && (
+          <span className="flex items-center gap-1 text-blue-600">
+            <Globe className="h-3 w-3" />
+            <span className="text-[10px]">{message.webSearchSources!.length}</span>
+          </span>
+        )}
+        {isExpanded ? (
+          <ChevronUp className="h-3 w-3 ml-0.5" />
+        ) : (
+          <ChevronDown className="h-3 w-3 ml-0.5" />
+        )}
+      </Button>
+
+      {/* Expandable content */}
+      {isExpanded && (
+        <div className="mt-3 rounded-lg border bg-background/50 overflow-hidden max-h-[60vh] overflow-y-auto">
           {/* Confidence header section */}
           {confidenceBadge && (
-            <>
-              <div className={`px-3 py-2.5 ${confidenceBadge.bg} border-b ${confidenceBadge.border}`}>
+            <div className={`px-4 py-2.5 ${confidenceBadge.bg} border-b ${confidenceBadge.border}`}>
+              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <confidenceBadge.icon className={`h-5 w-5 ${confidenceBadge.color}`} />
                   <span className={`text-sm font-semibold ${confidenceBadge.color}`}>
                     {confidenceBadge.label} Confidence
                   </span>
                 </div>
+                {/* Show request knowledge button for low/medium/unable confidence */}
+                {onRequestKnowledge && ["low", "medium", "unable"].some(level =>
+                  message.confidence?.toLowerCase().includes(level)
+                ) && (
+                  <button
+                    onClick={onRequestKnowledge}
+                    className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-100 px-2 py-1 rounded transition-colors"
+                    title="Request to add this knowledge to the knowledge base"
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    <span>Request Knowledge</span>
+                  </button>
+                )}
               </div>
-            </>
+            </div>
           )}
+
           {/* Notes section */}
           {notesText && (
-            <>
-              <div className="px-3 py-2 max-h-80 overflow-y-auto">
-                <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
-                  {notesText}
-                </p>
-              </div>
-              <DropdownMenuSeparator />
-            </>
+            <div className="px-4 py-3 border-b">
+              <p className="text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap break-words">
+                {notesText}
+              </p>
+            </div>
           )}
+
+          {/* Web search sources section */}
+          {hasWebSources && (
+            <div className="px-4 py-3 border-b">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-600">
+                    Web Search Sources ({message.webSearchSources!.length})
+                  </span>
+                </div>
+                {onRequestAddToKnowledge && (
+                  <button
+                    onClick={() => {
+                      const urls = message.webSearchSources!.map(s => ({
+                        url: s.url,
+                        title: s.title || s.url,
+                      }));
+                      onRequestAddToKnowledge(urls);
+                    }}
+                    className="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 px-2 py-1 rounded transition-colors"
+                    title="Request to add these sources to the knowledge base"
+                  >
+                    <Lightbulb className="h-3.5 w-3.5" />
+                    <span>Add to Knowledge</span>
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {message.webSearchSources!.map((source, idx) => (
+                  <a
+                    key={idx}
+                    href={source.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-sm hover:bg-muted/50 rounded-md p-2 -mx-2 group transition-colors"
+                  >
+                    <div className="flex items-start gap-2">
+                      <ExternalLink className="h-4 w-4 text-muted-foreground group-hover:text-blue-600 mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-foreground group-hover:text-blue-600">
+                          {source.title || source.url}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
+                          {source.url}
+                        </p>
+                        {source.citedText && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2 italic">
+                            &quot;{source.citedText}&quot;
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* View full prompt action */}
-          <DropdownMenuItem onClick={onViewFullPrompt}>
-            <Eye className="h-4 w-4 mr-2" />
+          <button
+            onClick={onViewFullPrompt}
+            className="w-full px-4 py-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 flex items-center gap-2 transition-colors"
+          >
+            <Eye className="h-4 w-4" />
             View full prompt
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -110,9 +194,11 @@ interface MessageListProps {
   sessionId?: string | null;
   onViewTransparency?: (message: ChatMessage) => void;
   onFeedbackChange?: (messageId: string, feedback: ChatMessage["feedback"]) => void;
+  onRequestAddToKnowledge?: (urls: { url: string; title: string }[]) => void;
+  onRequestKnowledge?: () => void;
 }
 
-export function MessageList({ messages, sessionId, onViewTransparency, onFeedbackChange }: MessageListProps) {
+export function MessageList({ messages, sessionId, onViewTransparency, onFeedbackChange, onRequestAddToKnowledge, onRequestKnowledge }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Scroll to bottom when messages change
@@ -143,6 +229,8 @@ export function MessageList({ messages, sessionId, onViewTransparency, onFeedbac
           sessionId={sessionId}
           onViewTransparency={onViewTransparency}
           onFeedbackChange={onFeedbackChange}
+          onRequestAddToKnowledge={onRequestAddToKnowledge}
+          onRequestKnowledge={onRequestKnowledge}
         />
       ))}
       <div ref={messagesEndRef} />
@@ -155,9 +243,11 @@ interface MessageBubbleProps {
   sessionId?: string | null;
   onViewTransparency?: (message: ChatMessage) => void;
   onFeedbackChange?: (messageId: string, feedback: ChatMessage["feedback"]) => void;
+  onRequestAddToKnowledge?: (urls: { url: string; title: string }[]) => void;
+  onRequestKnowledge?: () => void;
 }
 
-function MessageBubble({ message, sessionId, onViewTransparency, onFeedbackChange }: MessageBubbleProps) {
+function MessageBubble({ message, sessionId, onViewTransparency, onFeedbackChange, onRequestAddToKnowledge, onRequestKnowledge }: MessageBubbleProps) {
   const isUser = message.role === "user";
 
   return (
@@ -197,16 +287,18 @@ function MessageBubble({ message, sessionId, onViewTransparency, onFeedbackChang
           )}
         </div>
 
-        {/* Transparency dropdown for assistant messages */}
+        {/* Transparency section for assistant messages */}
         {!isUser && onViewTransparency && (
-          <MessageTransparencyDropdown
+          <MessageTransparencySection
             message={message}
             onViewFullPrompt={() => onViewTransparency(message)}
+            onRequestAddToKnowledge={onRequestAddToKnowledge}
+            onRequestKnowledge={onRequestKnowledge}
           />
         )}
 
         {/* Knowledge sources used (shown even without transparency metadata) */}
-        {!isUser && !message.confidence && ((message.skillsUsed?.length ?? 0) > 0 || (message.documentsUsed?.length ?? 0) > 0 || (message.urlsUsed?.length ?? 0) > 0) && (
+        {!isUser && !message.confidence && ((message.skillsUsed?.length ?? 0) > 0 || (message.documentsUsed?.length ?? 0) > 0 || (message.urlsUsed?.length ?? 0) > 0 || (message.webSearchSources?.length ?? 0) > 0) && (
           <div className="mt-2 flex flex-wrap gap-1">
             {message.skillsUsed?.map((skill) => (
               <span
@@ -232,6 +324,12 @@ function MessageBubble({ message, sessionId, onViewTransparency, onFeedbackChang
                 {url.title}
               </span>
             ))}
+            {(message.webSearchSources?.length ?? 0) > 0 && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200">
+                <Globe className="h-3 w-3" />
+                Web Search ({message.webSearchSources?.length} source{message.webSearchSources?.length === 1 ? "" : "s"})
+              </span>
+            )}
           </div>
         )}
 
