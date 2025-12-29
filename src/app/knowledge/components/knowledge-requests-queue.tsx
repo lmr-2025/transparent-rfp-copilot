@@ -2,11 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Clock,
-  CheckCircle2,
-  XCircle,
   ExternalLink,
   ChevronDown,
   ChevronUp,
@@ -17,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -45,11 +41,11 @@ interface KnowledgeRequestsQueueProps {
   canManage: boolean;
 }
 
-const statusConfig: Record<RequestStatus, { label: string; color: string; icon: React.ReactNode }> = {
-  PENDING: { label: "Pending", color: "bg-amber-100 text-amber-800", icon: <Clock className="h-3 w-3" /> },
-  APPROVED: { label: "Approved", color: "bg-blue-100 text-blue-800", icon: <CheckCircle2 className="h-3 w-3" /> },
-  REJECTED: { label: "Rejected", color: "bg-red-100 text-red-800", icon: <XCircle className="h-3 w-3" /> },
-  COMPLETED: { label: "Completed", color: "bg-green-100 text-green-800", icon: <Sparkles className="h-3 w-3" /> },
+const statusConfig: Record<RequestStatus, { label: string; color: string }> = {
+  PENDING: { label: "Pending", color: "bg-amber-100 text-amber-800" },
+  APPROVED: { label: "Approved", color: "bg-blue-100 text-blue-800" },
+  REJECTED: { label: "Rejected", color: "bg-red-100 text-red-800" },
+  COMPLETED: { label: "Completed", color: "bg-green-100 text-green-800" },
 };
 
 // Format relative time without date-fns
@@ -72,8 +68,6 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("PENDING");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
-  const queryClient = useQueryClient();
 
   // Fetch requests
   const { data, isLoading, error } = useQuery({
@@ -90,43 +84,6 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
     },
   });
 
-  // Update request mutation
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, status, note }: { id: string; status: RequestStatus; note?: string }) => {
-      const res = await fetch(`/api/knowledge-requests/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, reviewNote: note }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to update request");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["knowledge-requests"] });
-      setExpandedId(null);
-      setReviewNotes({});
-    },
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const handleApprove = (id: string) => {
-    updateMutation.mutate({ id, status: "APPROVED", note: reviewNotes[id] || undefined });
-    toast.success("Request approved");
-  };
-
-  const handleReject = (id: string) => {
-    if (!reviewNotes[id]?.trim()) {
-      toast.error("Please provide a reason for rejection");
-      return;
-    }
-    updateMutation.mutate({ id, status: "REJECTED", note: reviewNotes[id] });
-    toast.success("Request rejected");
-  };
 
   const handleBuildSkill = (request: KnowledgeRequest) => {
     // Store the request data and redirect to skill builder
@@ -218,8 +175,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge className={cn("text-xs", status.color)}>
-                          {status.icon}
-                          <span className="ml-1">{status.label}</span>
+                          {status.label}
                         </Badge>
                         <span className="text-xs text-muted-foreground">
                           {formatRelativeTime(request.createdAt)}
@@ -296,52 +252,8 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                       </div>
                     )}
 
-                    {/* Actions for pending requests */}
+                    {/* Build Skill action */}
                     {canManage && request.status === "PENDING" && (
-                      <div className="space-y-3 pt-2 border-t">
-                        <Textarea
-                          placeholder="Add a note (required for rejection)..."
-                          value={reviewNotes[request.id] || ""}
-                          onChange={(e) => setReviewNotes({ ...reviewNotes, [request.id]: e.target.value })}
-                          rows={2}
-                          className="text-sm"
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() => handleBuildSkill(request)}
-                            className="gap-1.5"
-                          >
-                            <Sparkles className="h-4 w-4" />
-                            Build Skill
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleApprove(request.id)}
-                            disabled={updateMutation.isPending}
-                            className="gap-1.5"
-                          >
-                            <CheckCircle2 className="h-4 w-4" />
-                            Approve
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleReject(request.id)}
-                            disabled={updateMutation.isPending}
-                            className="gap-1.5 text-red-600 hover:text-red-700"
-                          >
-                            <XCircle className="h-4 w-4" />
-                            Reject
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Actions for approved requests */}
-                    {canManage && request.status === "APPROVED" && (
                       <div className="pt-2 border-t">
                         <Button
                           variant="default"
@@ -350,7 +262,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                           className="gap-1.5"
                         >
                           <Sparkles className="h-4 w-4" />
-                          Build Skill from URLs
+                          Build Skill
                         </Button>
                       </div>
                     )}
