@@ -401,6 +401,8 @@ export const knowledgeChatSchema = z.object({
   callMode: z.boolean().optional(),
   // GTM data from Snowflake (Gong, HubSpot, Looker)
   gtmData: gtmDataContextSchema.optional(),
+  // Enable web search for up-to-date information beyond the knowledge base
+  webSearch: z.boolean().optional(),
 });
 
 // Legacy chat message schema (for other uses)

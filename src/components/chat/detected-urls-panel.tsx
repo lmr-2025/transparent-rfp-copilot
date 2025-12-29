@@ -20,7 +20,7 @@ interface DetectedUrlsPanelProps {
   urls: DetectedUrl[];
   focusedCustomerId: string | null;
   focusedCustomerName: string | null;
-  onAddToKnowledge: (urls: string[]) => Promise<void>;
+  onAddToKnowledge: (urls: { url: string; title: string }[]) => Promise<void>;
   onAddToCustomer: (urls: string[], customerId: string) => Promise<void>;
   onRemove: (url: string) => void;
   onClear: () => void;
@@ -69,7 +69,11 @@ export function DetectedUrlsPanel({
     if (selectedUrls.size === 0) return;
     setIsAdding(true);
     try {
-      await onAddToKnowledge(Array.from(selectedUrls));
+      // Build URL objects with titles from the detected URLs
+      const urlsWithTitles = urls
+        .filter(u => selectedUrls.has(u.url))
+        .map(u => ({ url: u.url, title: u.title }));
+      await onAddToKnowledge(urlsWithTitles);
       // Remove added URLs from the list
       selectedUrls.forEach(url => onRemove(url));
       setSelectedUrls(new Set());

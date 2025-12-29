@@ -115,14 +115,23 @@ export async function POST(request: NextRequest) {
     }
 
     const data = validation.data;
-    const url = await prisma.referenceUrl.create({
-      data: {
+    // Use upsert to handle duplicates gracefully - URLs are unique
+    const url = await prisma.referenceUrl.upsert({
+      where: { url: data.url },
+      create: {
         url: data.url,
         title: data.title,
         description: data.description,
-        categories: data.categories,
+        categories: data.categories || [],
         ownerId: auth.session.user.id,
         createdBy: auth.session.user.email || undefined,
+      },
+      update: {
+        // Only update title/description if provided and URL already exists
+        ...(data.title && { title: data.title }),
+        ...(data.description && { description: data.description }),
+        // Don't overwrite categories if not provided
+        ...(data.categories && data.categories.length > 0 && { categories: data.categories }),
       },
     });
 

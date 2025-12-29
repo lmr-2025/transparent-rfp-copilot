@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useEffect, ReactNode } from "react";
-import { Send } from "lucide-react";
+import { Send, Globe } from "lucide-react";
 import { InlineLoader } from "@/components/ui/loading";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,6 +25,8 @@ interface ChatInputProps {
   placeholder?: string;
   quickMode?: boolean;
   onQuickModeChange?: (quickMode: boolean) => void;
+  webSearch?: boolean;
+  onWebSearchChange?: (webSearch: boolean) => void;
   /** Optional content to render on the left side of the bottom row */
   leftContent?: ReactNode;
   /** Optional content to render on the right side of the bottom row */
@@ -41,6 +43,8 @@ export function ChatInput({
   placeholder = "Type your message...",
   quickMode,
   onQuickModeChange,
+  webSearch,
+  onWebSearchChange,
   leftContent,
   rightContent,
   size = "lg",
@@ -95,10 +99,32 @@ export function ChatInput({
         </Button>
       </div>
       {/* Bottom controls row */}
-      {(leftContent || rightContent || (onQuickModeChange && quickMode !== undefined)) && (
+      {(leftContent || rightContent || (onQuickModeChange && quickMode !== undefined) || (onWebSearchChange && webSearch !== undefined)) && (
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-3">
             {leftContent}
+            {/* Web Search Toggle */}
+            {onWebSearchChange && webSearch !== undefined && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onWebSearchChange(!webSearch)}
+                disabled={isLoading}
+                title={webSearch
+                  ? "Web Search enabled - searching the web for current info. Click to disable."
+                  : "Web Search disabled - using knowledge base only. Click to enable for recent updates."
+                }
+                className={cn(
+                  "h-8 px-2 gap-1.5",
+                  webSearch
+                    ? "text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Globe className="h-4 w-4" />
+                <span className="text-xs font-medium">Web Search {webSearch ? "On" : "Off"}</span>
+              </Button>
+            )}
           </div>
           <div className="flex items-center gap-3">
             {rightContent}

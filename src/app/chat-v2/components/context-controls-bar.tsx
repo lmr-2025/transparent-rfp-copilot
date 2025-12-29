@@ -271,7 +271,7 @@ export function ContextControlsBar({
             className={`gap-2 ${callMode ? "bg-orange-500 hover:bg-orange-600 text-white" : ""}`}
           >
             <Phone className="h-4 w-4" />
-            Call Mode
+            Call Mode {callMode ? "On" : "Off"}
           </Button>
 
           {/* Divider */}
