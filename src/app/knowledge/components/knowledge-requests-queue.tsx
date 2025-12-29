@@ -131,21 +131,28 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   const handleBuildSkill = (request: KnowledgeRequest) => {
     // Store the request data and redirect to skill builder
     const urls = request.suggestedUrls;
-    console.debug("[BuildSkill] Button clicked", { requestId: request.id, urlCount: urls.length });
+    console.error("[BuildSkill] 1. Handler called with urls:", urls);
 
-    if (urls.length > 0) {
-      try {
-        sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
-        sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
-        console.debug("[BuildSkill] Session storage set, navigating...");
-        router.push("/knowledge/add");
-      } catch (error) {
-        console.error("[BuildSkill] Error storing data or navigating:", error);
-        toast.error("Failed to navigate to skill builder. Please try again.");
-      }
-    } else {
-      console.warn("[BuildSkill] No URLs available");
+    if (!urls || urls.length === 0) {
+      console.error("[BuildSkill] 2a. ERROR: No URLs available!");
       toast.error("No URLs to process");
+      return;
+    }
+
+    console.error("[BuildSkill] 2b. URLs available, attempting to store...");
+    try {
+      console.error("[BuildSkill] 3. Setting sessionStorage.pendingKnowledgeUrls");
+      sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
+      console.error("[BuildSkill] 4. Setting sessionStorage.pendingKnowledgeRequestId");
+      sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
+      console.error("[BuildSkill] 5. SessionStorage set successfully");
+
+      console.error("[BuildSkill] 6. About to call router.push('/knowledge/add')");
+      router.push("/knowledge/add");
+      console.error("[BuildSkill] 7. router.push called (this may not log if navigation happens immediately)");
+    } catch (error) {
+      console.error("[BuildSkill] ERROR in try block:", error);
+      toast.error("Failed to navigate to skill builder. Please try again.");
     }
   };
 
