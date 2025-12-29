@@ -1,10 +1,14 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { logContractChange, getUserFromSession } from "@/lib/auditLog";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import {
+  detectFileType,
+  extractTextContent,
+  getSupportedFileTypesDescription,
+} from "@/lib/documentExtractor";
 
 export const maxDuration = 60;
 
@@ -112,25 +116,21 @@ export async function POST(request: NextRequest) {
     }
 
     const filename = file.name;
-    const fileType = filename.split(".").pop()?.toLowerCase() || "";
+    const fileType = detectFileType(filename);
 
-    if (!["pdf", "docx", "doc"].includes(fileType)) {
-      return errors.badRequest("Unsupported file type. Please upload PDF or DOCX.");
+    if (!fileType) {
+      return errors.badRequest(`Unsupported file type. Please upload ${getSupportedFileTypesDescription()} files.`);
     }
 
     // Extract text from file
-    let extractedText = "";
     const buffer = Buffer.from(await file.arrayBuffer());
+    let extractedText: string;
 
-    if (fileType === "pdf") {
-      // Dynamic import to avoid ESM/Turbopack issues
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      extractedText = textResult.text;
-    } else if (fileType === "docx" || fileType === "doc") {
-      const result = await mammoth.extractRawText({ buffer });
-      extractedText = result.value;
+    try {
+      extractedText = await extractTextContent(buffer, fileType);
+    } catch (extractError) {
+      logger.error("Text extraction failed", extractError, { route: "/api/contracts", fileType });
+      return errors.badRequest("Could not extract text from file. The file may be empty or corrupted.");
     }
 
     if (!extractedText.trim()) {

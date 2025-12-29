@@ -67,18 +67,13 @@ function formatRelativeTime(dateStr: string): string {
 export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("PENDING");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Fetch requests
+  // Fetch pending requests only
   const { data, isLoading, error } = useQuery({
-    queryKey: ["knowledge-requests", statusFilter],
+    queryKey: ["knowledge-requests", "pending"],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (statusFilter !== "ALL") {
-        params.set("status", statusFilter);
-      }
-      const res = await fetch(`/api/knowledge-requests?${params}`);
+      const res = await fetch(`/api/knowledge-requests?status=PENDING`);
       if (!res.ok) throw new Error("Failed to fetch requests");
       const json = await res.json();
       return json.data as { requests: KnowledgeRequest[]; canManage: boolean };
@@ -89,9 +84,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   const dismissMutation = useMutation({
     mutationFn: async (id: string) => {
       const res = await fetch(`/api/knowledge-requests/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "REJECTED" }),
+        method: "DELETE",
       });
       if (!res.ok) {
         const error = await res.json();
@@ -114,26 +107,11 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   };
 
 
-  const handleBuildSkill = (request: KnowledgeRequest) => {
-    // Store the request data and redirect to skill builder
-    const urls = request.suggestedUrls;
-    if (!urls || urls.length === 0) {
-      toast.error("No URLs to process");
-      return;
-    }
-
-    try {
-      sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
-      sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
-      router.push("/knowledge/add");
-    } catch (error) {
-      console.error("Failed to build skill:", error);
-      toast.error("Failed to navigate to skill builder. Please try again.");
-    }
+  const handleBuildSkill = () => {
+    router.push("/knowledge/add");
   };
 
   const requests = data?.requests || [];
-  const pendingCount = requests.filter(r => r.status === "PENDING").length;
 
   if (isLoading) {
     return (
@@ -163,31 +141,13 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
               : "Your submitted knowledge requests"}
           </p>
         </div>
-        <div className="flex gap-2">
-          {(["ALL", "PENDING", "APPROVED", "REJECTED", "COMPLETED"] as const).map((status) => (
-            <Button
-              key={status}
-              variant={statusFilter === status ? "default" : "outline"}
-              size="sm"
-              onClick={() => setStatusFilter(status)}
-              className="text-xs"
-            >
-              {status === "ALL" ? "All" : statusConfig[status].label}
-              {status === "PENDING" && pendingCount > 0 && (
-                <Badge variant="secondary" className="ml-1.5 h-5 px-1.5">
-                  {pendingCount}
-                </Badge>
-              )}
-            </Button>
-          ))}
-        </div>
       </div>
 
       {/* Request list */}
       {requests.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            No {statusFilter !== "ALL" ? statusFilter.toLowerCase() : ""} requests found.
+            No pending requests found.
           </CardContent>
         </Card>
       ) : (
@@ -287,7 +247,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                         <Button
                           variant="default"
                           size="sm"
-                          onClick={() => handleBuildSkill(request)}
+                          onClick={() => handleBuildSkill()}
                           className="gap-1.5"
                         >
                           <Sparkles className="h-4 w-4" />

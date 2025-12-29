@@ -448,7 +448,7 @@ When suggesting updated content, format it clearly so they can copy it.`;
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt,.pptx"
+              accept=".pdf,.doc,.docx,.txt,.pptx,.xlsx,.xls"
               multiple
               onChange={handleFileUpload}
               style={{ display: "none" }}
@@ -465,7 +465,7 @@ When suggesting updated content, format it clearly so they can copy it.`;
                   Click to upload or drag and drop
                 </div>
                 <div style={{ color: "#94a3b8", fontSize: "13px", marginTop: "4px" }}>
-                  PDF, DOC, DOCX, PPTX, TXT (max 20MB each)
+                  PDF, DOC, DOCX, PPTX, XLSX, TXT (max 20MB each)
                 </div>
               </>
             )}

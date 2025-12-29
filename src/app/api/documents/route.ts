@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import * as mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { logDocumentChange, getUserFromSession } from "@/lib/auditLog";
 import { getAnthropicClient } from "@/lib/apiHelpers";
@@ -8,6 +7,11 @@ import { CLAUDE_MODEL } from "@/lib/config";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
 import { cacheGetOrSet, cacheDeletePattern } from "@/lib/cache";
+import {
+  detectFileType,
+  extractTextContent,
+  getSupportedFileTypesDescription,
+} from "@/lib/documentExtractor";
 
 export const maxDuration = 60;
 
@@ -164,31 +168,26 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine file type
-    const filename = file.name.toLowerCase();
-    let fileType: string;
-    if (filename.endsWith(".pdf")) {
-      fileType = "pdf";
-    } else if (filename.endsWith(".docx")) {
-      fileType = "docx";
-    } else if (filename.endsWith(".doc")) {
-      fileType = "doc";
-    } else if (filename.endsWith(".txt")) {
-      fileType = "txt";
-    } else if (filename.endsWith(".pptx")) {
-      fileType = "pptx";
-    } else {
-      return errors.badRequest("Unsupported file type. Please upload PDF, DOC, DOCX, PPTX, or TXT files.");
+    const fileType = detectFileType(file.name);
+    console.log("[documents API] File:", file.name, "Type:", fileType, "Size:", file.size);
+    if (!fileType) {
+      return errors.badRequest(`Unsupported file type. Please upload ${getSupportedFileTypesDescription()} files.`);
     }
 
     // Read file buffer
     const buffer = Buffer.from(await file.arrayBuffer());
+    console.log("[documents API] Buffer created, length:", buffer.length);
 
     // Extract text content based on file type
+    // Use Claude for PDFs (better quality) since this is the knowledge documents API
     let content: string;
     try {
-      content = await extractTextContent(buffer, fileType);
+      console.log("[documents API] Starting extraction for type:", fileType);
+      content = await extractTextContent(buffer, fileType, { useClaude: fileType === "pdf" });
+      console.log("[documents API] Extraction complete, content length:", content.length);
     } catch (extractError) {
       const errorMessage = extractError instanceof Error ? extractError.message : "Unknown error";
+      console.error("[documents API] Extraction error:", extractError);
       logger.error("Text extraction failed", extractError, { route: "/api/documents", fileType, errorMessage });
       // If saving as template, text extraction is required
       if (saveAsTemplate) {
@@ -260,135 +259,6 @@ export async function POST(request: NextRequest) {
     logger.error("Failed to upload document", error, { route: "/api/documents" });
     return errors.internal("Failed to upload document");
   }
-}
-
-// Extract text from PDF using Claude's native document support
-async function extractPdfWithClaude(buffer: Buffer): Promise<string> {
-  const anthropic = getAnthropicClient();
-
-  const base64Data = buffer.toString("base64");
-
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 16000,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: base64Data,
-            },
-          },
-          {
-            type: "text",
-            text: `Extract ALL text content from this PDF document.
-
-IMPORTANT RULES:
-1. Extract the complete text content, preserving the document structure
-2. Include headers, paragraphs, bullet points, tables, and any other text
-3. Preserve the logical reading order
-4. For tables, format them clearly with columns separated by | characters
-5. Do NOT summarize or interpret - extract the actual text verbatim
-6. Do NOT add any commentary or explanations
-7. If there are multiple pages, extract all pages
-
-Return ONLY the extracted text content, nothing else.`,
-          },
-        ],
-      },
-    ],
-  });
-
-  const textContent = response.content[0];
-  if (textContent.type !== "text") {
-    throw new Error("Unexpected response format from Claude");
-  }
-
-  if (!textContent.text || textContent.text.trim().length === 0) {
-    throw new Error("PDF appears to be image-based or contains no extractable text");
-  }
-
-  return textContent.text;
-}
-
-// Sanitize extracted text to remove problematic characters
-function sanitizeExtractedText(text: string): string {
-  return text
-    // Remove null bytes and other control characters (except newline, tab, carriage return)
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")
-    // Normalize multiple spaces to single space
-    .replace(/[^\S\n]+/g, " ")
-    // Normalize multiple newlines to max 2
-    .replace(/\n{3,}/g, "\n\n")
-    // Trim each line
-    .split("\n")
-    .map((line) => line.trim())
-    .join("\n")
-    .trim();
-}
-
-async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
-  let rawText: string;
-
-  switch (fileType) {
-    case "pdf": {
-      // Use Claude's native PDF support for reliable extraction
-      rawText = await extractPdfWithClaude(buffer);
-      break;
-    }
-    case "docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      rawText = result.value;
-      break;
-    }
-    case "doc": {
-      // mammoth doesn't support old .doc format well
-      // Try it anyway, but it may not work for all files
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        rawText = result.value;
-        break;
-      } catch {
-        throw new Error("Old .doc format not fully supported. Please convert to .docx");
-      }
-    }
-    case "txt": {
-      rawText = buffer.toString("utf-8");
-      break;
-    }
-    case "pptx": {
-      const { writeFile, unlink } = await import("fs/promises");
-      const { tmpdir } = await import("os");
-      const { join } = await import("path");
-      const { randomUUID } = await import("crypto");
-      const PptxParser = (await import("node-pptx-parser")).default;
-
-      // Write buffer to temp file (library requires file path)
-      const tempPath = join(tmpdir(), `pptx-${randomUUID()}.pptx`);
-      await writeFile(tempPath, buffer);
-
-      try {
-        const parser = new PptxParser(tempPath);
-        const slides = await parser.extractText();
-        rawText = slides.map((slide: { id: string; text: string[] }) =>
-          `--- Slide ${slide.id} ---\n${slide.text.join("\n")}`
-        ).join("\n\n");
-        break;
-      } finally {
-        // Clean up temp file
-        await unlink(tempPath).catch(() => {});
-      }
-    }
-    default:
-      throw new Error(`Unsupported file type: ${fileType}`);
-  }
-
-  // Sanitize the extracted text to remove problematic characters
-  return sanitizeExtractedText(rawText);
 }
 
 // Generate a markdown template from document content using LLM

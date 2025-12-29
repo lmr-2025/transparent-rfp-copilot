@@ -1,11 +1,12 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import * as mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
-import { getAnthropicClient } from "@/lib/apiHelpers";
-import { CLAUDE_MODEL } from "@/lib/config";
+import {
+  detectFileType,
+  extractTextContent,
+} from "@/lib/documentExtractor";
 
 export const maxDuration = 120; // 2 minutes for batch processing
 
@@ -94,21 +95,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const shouldProcessContent = processForContent[index] ?? false;
 
         // Determine file type
-        const filename = file.name.toLowerCase();
-        let fileType: string;
-        if (filename.endsWith(".pdf")) {
-          fileType = "pdf";
-        } else if (filename.endsWith(".docx")) {
-          fileType = "docx";
-        } else if (filename.endsWith(".doc")) {
-          fileType = "doc";
-        } else if (filename.endsWith(".txt")) {
-          fileType = "txt";
-        } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
-          fileType = "xlsx";
-        } else if (filename.endsWith(".pptx")) {
-          fileType = "pptx";
-        } else {
+        const fileType = detectFileType(file.name);
+        if (!fileType) {
           throw new Error(`Unsupported file type: ${file.name}`);
         }
 
@@ -116,14 +104,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const arrayBuffer = await file.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Extract text content - use Claude for PDFs if processing for content, otherwise use pdf-parse
+        // Extract text content - use Claude for PDFs if processing for content
         let content: string;
         try {
-          if (shouldProcessContent && fileType === "pdf") {
-            content = await extractPdfWithClaude(buffer);
-          } else {
-            content = await extractTextContent(buffer, fileType);
-          }
+          content = await extractTextContent(buffer, fileType, {
+            useClaude: shouldProcessContent && fileType === "pdf",
+          });
         } catch (extractError) {
           logger.error("Text extraction failed", extractError, {
             route: "/api/customers/[id]/documents/batch",
@@ -186,121 +172,5 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch (error) {
     logger.error("Failed to batch upload documents", error, { route: "/api/customers/[id]/documents/batch" });
     return errors.internal("Failed to batch upload documents");
-  }
-}
-
-// Extract text from PDF using Claude's native document support (for profile content)
-async function extractPdfWithClaude(buffer: Buffer): Promise<string> {
-  const anthropic = getAnthropicClient();
-  const base64Data = buffer.toString("base64");
-
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 16000,
-    messages: [
-      {
-        role: "user",
-        content: [
-          {
-            type: "document",
-            source: {
-              type: "base64",
-              media_type: "application/pdf",
-              data: base64Data,
-            },
-          },
-          {
-            type: "text",
-            text: `Extract ALL text content from this PDF document.
-
-IMPORTANT RULES:
-1. Extract the complete text content, preserving the document structure
-2. Include headers, paragraphs, bullet points, tables, and any other text
-3. Preserve the logical reading order
-4. For tables, format them clearly with columns separated by | characters
-5. Do NOT summarize or interpret - extract the actual text verbatim
-6. Do NOT add any commentary or explanations
-7. If there are multiple pages, extract all pages
-
-Return ONLY the extracted text content, nothing else.`,
-          },
-        ],
-      },
-    ],
-  });
-
-  const textContent = response.content[0];
-  if (textContent.type !== "text") {
-    throw new Error("Unexpected response format from Claude");
-  }
-
-  if (!textContent.text || textContent.text.trim().length === 0) {
-    throw new Error("PDF appears to be image-based or contains no extractable text");
-  }
-
-  return textContent.text;
-}
-
-async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
-  switch (fileType) {
-    case "pdf": {
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      return textResult.text;
-    }
-    case "docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
-    }
-    case "doc": {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value;
-      } catch {
-        throw new Error("Old .doc format not fully supported. Please convert to .docx");
-      }
-    }
-    case "txt": {
-      return buffer.toString("utf-8");
-    }
-    case "xlsx": {
-      const ExcelJS = (await import("exceljs")).default;
-      const workbook = new ExcelJS.Workbook();
-      // TypeScript has issues with Buffer types between Node.js and ExcelJS - use any to bypass
-      await workbook.xlsx.load(buffer as any);
-      const sheets = workbook.worksheets.map((worksheet) => {
-        const csvRows: string[] = [];
-        worksheet.eachRow((row) => {
-          const values = row.values as unknown[];
-          csvRows.push(values.slice(1).map((v) => String(v ?? "")).join(","));
-        });
-        const csv = csvRows.join("\n");
-        return `--- Sheet: ${worksheet.name} ---\n${csv}`;
-      });
-      return sheets.join("\n\n");
-    }
-    case "pptx": {
-      const { writeFile, unlink } = await import("fs/promises");
-      const { tmpdir } = await import("os");
-      const { join } = await import("path");
-      const { randomUUID } = await import("crypto");
-      const PptxParser = (await import("node-pptx-parser")).default;
-
-      const tempPath = join(tmpdir(), `pptx-${randomUUID()}.pptx`);
-      await writeFile(tempPath, buffer);
-
-      try {
-        const parser = new PptxParser(tempPath);
-        const slides = await parser.extractText();
-        return slides.map((slide: { id: string; text: string[] }) =>
-          `--- Slide ${slide.id} ---\n${slide.text.join("\n")}`
-        ).join("\n\n");
-      } finally {
-        await unlink(tempPath).catch(() => {});
-      }
-    }
-    default:
-      throw new Error(`Unsupported file type: ${fileType}`);
   }
 }

@@ -3,8 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
-import * as mammoth from "mammoth";
 import { parsePlaceholders, extractPlaceholderHints } from "@/lib/templateEngine";
+import {
+  detectFileType,
+  extractTextContent,
+} from "@/lib/documentExtractor";
 
 /**
  * POST /api/templates/upload
@@ -24,27 +27,33 @@ export async function POST(request: NextRequest) {
       return errors.badRequest("No file provided");
     }
 
-    // Validate file type
+    // Validate file type - templates support all document types
     const fileName = file.name.toLowerCase();
-    const fileExt = fileName.split(".").pop();
-    const allowedExtensions = ["docx", "md", "txt", "markdown"];
+    const fileType = detectFileType(fileName);
 
-    if (!fileExt || !allowedExtensions.includes(fileExt)) {
+    // Also support markdown files (not in standard detectFileType)
+    const isMarkdown = fileName.endsWith(".md") || fileName.endsWith(".markdown");
+
+    if (!fileType && !isMarkdown) {
       return errors.badRequest(
-        `Unsupported file type. Allowed: ${allowedExtensions.join(", ")}`
+        "Unsupported file type. Allowed: PDF, DOC, DOCX, PPTX, XLSX, TXT, MD"
       );
     }
 
     // Extract content based on file type
-    let content: string;
     const buffer = Buffer.from(await file.arrayBuffer());
+    let content: string;
 
-    if (fileExt === "docx") {
-      const result = await mammoth.extractRawText({ buffer });
-      content = result.value;
-    } else {
-      // MD and TXT are plain text
+    if (isMarkdown) {
+      // MD files are plain text
       content = buffer.toString("utf-8");
+    } else {
+      try {
+        content = await extractTextContent(buffer, fileType!);
+      } catch (extractError) {
+        logger.error("Text extraction failed", extractError, { route: "/api/templates/upload", fileType });
+        return errors.badRequest("Could not extract text from file. The file may be empty or corrupted.");
+      }
     }
 
     if (!content || content.trim().length === 0) {

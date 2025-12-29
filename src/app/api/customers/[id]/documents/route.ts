@@ -1,9 +1,13 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import * as mammoth from "mammoth";
 import { requireAuth } from "@/lib/apiAuth";
 import { apiSuccess, errors } from "@/lib/apiResponse";
 import { logger } from "@/lib/logger";
+import {
+  detectFileType,
+  extractTextContent,
+  getSupportedFileTypesDescription,
+} from "@/lib/documentExtractor";
 
 export const maxDuration = 60;
 
@@ -120,22 +124,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Determine file type
-    const filename = file.name.toLowerCase();
-    let fileType: string;
-    if (filename.endsWith(".pdf")) {
-      fileType = "pdf";
-    } else if (filename.endsWith(".docx")) {
-      fileType = "docx";
-    } else if (filename.endsWith(".doc")) {
-      fileType = "doc";
-    } else if (filename.endsWith(".txt")) {
-      fileType = "txt";
-    } else if (filename.endsWith(".xlsx") || filename.endsWith(".xls")) {
-      fileType = "xlsx";
-    } else if (filename.endsWith(".pptx")) {
-      fileType = "pptx";
-    } else {
-      return errors.badRequest("Unsupported file type. Please upload PDF, DOC, DOCX, XLSX, PPTX, or TXT files.");
+    const fileType = detectFileType(file.name);
+    if (!fileType) {
+      return errors.badRequest(`Unsupported file type. Please upload ${getSupportedFileTypesDescription()} files.`);
     }
 
     // Read file buffer
@@ -183,69 +174,5 @@ export async function POST(request: NextRequest, context: RouteContext) {
   } catch (error) {
     logger.error("Failed to upload customer document", error, { route: "/api/customers/[id]/documents" });
     return errors.internal("Failed to upload customer document");
-  }
-}
-
-async function extractTextContent(buffer: Buffer, fileType: string): Promise<string> {
-  switch (fileType) {
-    case "pdf": {
-      const { PDFParse } = await import("pdf-parse");
-      const parser = new PDFParse({ data: buffer });
-      const textResult = await parser.getText();
-      return textResult.text;
-    }
-    case "docx": {
-      const result = await mammoth.extractRawText({ buffer });
-      return result.value;
-    }
-    case "doc": {
-      try {
-        const result = await mammoth.extractRawText({ buffer });
-        return result.value;
-      } catch {
-        throw new Error("Old .doc format not fully supported. Please convert to .docx");
-      }
-    }
-    case "txt": {
-      return buffer.toString("utf-8");
-    }
-    case "xlsx": {
-      const ExcelJS = (await import("exceljs")).default;
-      const workbook = new ExcelJS.Workbook();
-      // TypeScript has issues with Buffer types between Node.js and ExcelJS - use any to bypass
-      await workbook.xlsx.load(buffer as any);
-      const sheets = workbook.worksheets.map((worksheet) => {
-        const csvRows: string[] = [];
-        worksheet.eachRow((row) => {
-          const values = row.values as unknown[];
-          csvRows.push(values.slice(1).map((v) => String(v ?? "")).join(","));
-        });
-        const csv = csvRows.join("\n");
-        return `--- Sheet: ${worksheet.name} ---\n${csv}`;
-      });
-      return sheets.join("\n\n");
-    }
-    case "pptx": {
-      const { writeFile, unlink } = await import("fs/promises");
-      const { tmpdir } = await import("os");
-      const { join } = await import("path");
-      const { randomUUID } = await import("crypto");
-      const PptxParser = (await import("node-pptx-parser")).default;
-
-      const tempPath = join(tmpdir(), `pptx-${randomUUID()}.pptx`);
-      await writeFile(tempPath, buffer);
-
-      try {
-        const parser = new PptxParser(tempPath);
-        const slides = await parser.extractText();
-        return slides.map((slide: { id: string; text: string[] }) =>
-          `--- Slide ${slide.id} ---\n${slide.text.join("\n")}`
-        ).join("\n\n");
-      } finally {
-        await unlink(tempPath).catch(() => {});
-      }
-    }
-    default:
-      throw new Error(`Unsupported file type: ${fileType}`);
   }
 }
