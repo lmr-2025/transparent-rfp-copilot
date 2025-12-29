@@ -101,7 +101,7 @@ export async function DELETE(
   }
 }
 
-// PATCH - Update document metadata
+// PATCH - Update document metadata and optionally link to skill
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,7 +114,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { title, description, categories, isReferenceOnly } = body;
+    const { title, description, categories, isReferenceOnly, skillId } = body;
 
     // Get existing document for audit log
     const existing = await prisma.knowledgeDocument.findUnique({ where: { id } });
@@ -131,6 +131,26 @@ export async function PATCH(
         ...(isReferenceOnly !== undefined && { isReferenceOnly }),
       },
     });
+
+    // If skillId provided, create SkillSource link (document -> skill relationship)
+    if (skillId) {
+      await prisma.skillSource.upsert({
+        where: {
+          skillId_sourceId_sourceType: {
+            skillId,
+            sourceId: id,
+            sourceType: "document",
+          },
+        },
+        create: {
+          skillId,
+          sourceId: id,
+          sourceType: "document",
+          isPrimary: false,
+        },
+        update: {}, // No-op if link already exists
+      });
+    }
 
     // Compute changes for audit log
     const changes = computeChanges(
