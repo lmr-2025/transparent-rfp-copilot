@@ -70,7 +70,7 @@ function formatRelativeTime(dateStr: string): string {
 export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProps) {
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("PENDING");
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [reviewNote, setReviewNote] = useState("");
+  const [reviewNotes, setReviewNotes] = useState<Record<string, string>>({});
   const queryClient = useQueryClient();
 
   // Fetch requests
@@ -105,7 +105,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["knowledge-requests"] });
       setExpandedId(null);
-      setReviewNote("");
+      setReviewNotes({});
     },
     onError: (error: Error) => {
       toast.error(error.message);
@@ -113,27 +113,36 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
   });
 
   const handleApprove = (id: string) => {
-    updateMutation.mutate({ id, status: "APPROVED", note: reviewNote || undefined });
+    updateMutation.mutate({ id, status: "APPROVED", note: reviewNotes[id] || undefined });
     toast.success("Request approved");
   };
 
   const handleReject = (id: string) => {
-    if (!reviewNote.trim()) {
+    if (!reviewNotes[id]?.trim()) {
       toast.error("Please provide a reason for rejection");
       return;
     }
-    updateMutation.mutate({ id, status: "REJECTED", note: reviewNote });
+    updateMutation.mutate({ id, status: "REJECTED", note: reviewNotes[id] });
     toast.success("Request rejected");
   };
 
   const handleBuildSkill = (request: KnowledgeRequest) => {
     // Store the request data and redirect to skill builder
     const urls = request.suggestedUrls;
+    console.debug("[BuildSkill] Button clicked", { requestId: request.id, urlCount: urls.length });
+
     if (urls.length > 0) {
-      sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
-      sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
-      window.location.href = "/knowledge/add";
+      try {
+        sessionStorage.setItem("pendingKnowledgeUrls", JSON.stringify(urls));
+        sessionStorage.setItem("pendingKnowledgeRequestId", request.id);
+        console.debug("[BuildSkill] Session storage set, navigating...");
+        window.location.href = "/knowledge/add";
+      } catch (error) {
+        console.error("[BuildSkill] Error storing data or navigating:", error);
+        toast.error("Failed to navigate to skill builder. Please try again.");
+      }
     } else {
+      console.warn("[BuildSkill] No URLs available");
       toast.error("No URLs to process");
     }
   };
@@ -292,8 +301,8 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                       <div className="space-y-3 pt-2 border-t">
                         <Textarea
                           placeholder="Add a note (required for rejection)..."
-                          value={reviewNote}
-                          onChange={(e) => setReviewNote(e.target.value)}
+                          value={reviewNotes[request.id] || ""}
+                          onChange={(e) => setReviewNotes({ ...reviewNotes, [request.id]: e.target.value })}
                           rows={2}
                           className="text-sm"
                         />
