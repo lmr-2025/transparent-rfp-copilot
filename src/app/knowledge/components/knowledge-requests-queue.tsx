@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ExternalLink,
   ChevronDown,
@@ -66,6 +66,7 @@ function formatRelativeTime(dateStr: string): string {
 
 export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState<RequestStatus | "ALL">("PENDING");
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -83,6 +84,34 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
       return json.data as { requests: KnowledgeRequest[]; canManage: boolean };
     },
   });
+
+  // Dismiss request mutation
+  const dismissMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/knowledge-requests/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "REJECTED" }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || "Failed to dismiss request");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["knowledge-requests"] });
+      setExpandedId(null);
+    },
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const handleDismiss = (id: string) => {
+    dismissMutation.mutate(id);
+    toast.success("Request dismissed");
+  };
 
 
   const handleBuildSkill = (request: KnowledgeRequest) => {
@@ -254,7 +283,7 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
 
                     {/* Build Skill action */}
                     {canManage && request.status === "PENDING" && (
-                      <div className="pt-2 border-t">
+                      <div className="flex gap-2 pt-2 border-t">
                         <Button
                           variant="default"
                           size="sm"
@@ -263,6 +292,15 @@ export function KnowledgeRequestsQueue({ canManage }: KnowledgeRequestsQueueProp
                         >
                           <Sparkles className="h-4 w-4" />
                           Build Skill
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDismiss(request.id)}
+                          disabled={dismissMutation.isPending}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          Dismiss
                         </Button>
                       </div>
                     )}
